@@ -19,6 +19,9 @@ $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 nv_cooling_2state: $(SRCDIR)/nv_cooling_2state.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
+simple_jaynes_cummings: $(SRCDIR)/simple_jaynes_cummings.o $(OBJ)
+	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+
 # .PHONY: clean
 
 # clean:

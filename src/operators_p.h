@@ -3,6 +3,8 @@
 
 #include <petscmat.h>
 
+
+void check_initialized_A();
 Mat  full_A;
 int  op_finalized;
 long total_levels;

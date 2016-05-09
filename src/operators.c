@@ -5,7 +5,9 @@
 #include <stdio.h>
 
 #define MAX_OP 100  //Consider making this not a define
-
+/* TODO? : Make Kron product (with I) as a function? 
+ * MatSetValue would be within this.
+ */
 
 struct operator {
   int n_before;
@@ -21,7 +23,6 @@ struct operator {
   double *matrix_diag;
   int diagonal_start;
 };
-
 
 static struct operator operator_list[MAX_OP]; //static should keep it in this file
 static int             num_ops;
@@ -39,7 +40,7 @@ static int             petsc_initialized = 0;
 
  */
 
-void create_op(int number_of_levels,int op_create,int op_destroy,int op_number) {
+void create_op(int number_of_levels,int *op_create,int *op_destroy,int *op_number) {
   int i;
   PetscErrorCode ierr;
 
@@ -48,11 +49,12 @@ void create_op(int number_of_levels,int op_create,int op_destroy,int op_number) 
 #if !defined(PETSC_USE_COMPLEX)
     SETERRQ(PETSC_COMM_WORLD,1,"This example requires complex numbers");
 #endif
-    ierr           = MPI_Comm_rank(PETSC_COMM_WORLD,&nid);
-    op_finalized   = 0;
-    total_levels   = 0;
-    num_subsystems = 0;
-    num_ops        = 0;
+    ierr              = MPI_Comm_rank(PETSC_COMM_WORLD,&nid);CHKERRQ(ierr);
+    op_finalized      = 0;
+    total_levels      = 1;
+    num_subsystems    = 0;
+    num_ops           = 0;
+    petsc_initialized = 1;
   }
     
   if (num_ops+3>MAX_OP&&nid==0){
@@ -79,7 +81,7 @@ void create_op(int number_of_levels,int op_create,int op_destroy,int op_number) 
     operator_list[num_ops].matrix_diag[i] = sqrt(i+1);
   }
 
-  op_create = num_ops;
+  *op_create = num_ops;
   /* Increment number of ops, since we've finished adding this */
   num_ops++;
 
@@ -95,7 +97,7 @@ void create_op(int number_of_levels,int op_create,int op_destroy,int op_number) 
     operator_list[num_ops].matrix_diag[i] = sqrt(i+1);
   }
 
-  op_destroy = num_ops;
+  *op_destroy = num_ops;
   /* Increment number of ops, since we've finished adding this */
   num_ops++;
  
@@ -110,7 +112,7 @@ void create_op(int number_of_levels,int op_create,int op_destroy,int op_number) 
     operator_list[num_ops].matrix_diag[i] = i;
   }
  
-  op_number = num_ops;
+  *op_number = num_ops;
   /* Increment number of ops, since we've finished adding this */
   num_ops++;
 
@@ -135,41 +137,11 @@ void create_op(int number_of_levels,int op_create,int op_destroy,int op_number) 
  */
 void add_to_ham(double a,int handle1){
   int            k1,k2,i,j,my_levels,diag_start;
-  long           i_ham,j_ham,i_op,j_op,dim,n_before,n_after;
+  long           i_ham,j_ham,i_op,j_op,n_before,n_after;
   PetscScalar    add_to_mat;
   PetscErrorCode ierr;
-
-  if (!petsc_initialized){
-    printf("ERROR! You need to create operators before you add anything to");
-    printf("       the Hamiltonian!\n");
-    exit(0);
-  }
   
-  if (!op_finalized){
-    op_finalized = 1;
-    /* Allocate space for (dense) Hamiltonian matrix in operator space
-     * (for printing and debugging purposes)
-     */
-    if (nid==0) {
-      printf("Operators created. Total Hilbert space size: %d\n",total_levels);
-      hamiltonian = malloc(total_levels*sizeof(double*));
-      for (i=0;i<total_levels;i++){
-        hamiltonian[i] = malloc(total_levels*sizeof(double));
-        /* Initialize to 0 */
-        for (j=0;j<total_levels;j++){
-          hamiltonian[i][j] = 0.0;
-        }
-      }
-    }
-    dim = total_levels*total_levels;
-    /* Setup petsc matrix */
-    //FIXME - do something better than 5*total_levels!!
-    ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim,
-                        5*total_levels,NULL,5*total_levels,NULL,&full_A);CHKERRQ(ierr);
-    ierr = MatSetFromOptions(full_A);CHKERRQ(ierr);
-    ierr = MatSetUp(full_A);CHKERRQ(ierr);
-  }
-
+  check_initialized_A();
 
   my_levels  = operator_list[handle1].my_levels;
   diag_start = operator_list[handle1].diagonal_start;
@@ -223,8 +195,8 @@ void add_to_ham(double a,int handle1){
            * of identity matrices with some matrix A
            */
           
-          i_ham = i_op*n_after+k2+k1*my_levels*n_after;
-          j_ham = j_op*n_after+k2+k1*my_levels*n_after;
+          i_ham = i_op*n_before+k1+k2*my_levels*n_before;
+          j_ham = j_op*n_before+k1+k2*my_levels*n_before;
           hamiltonian[i_ham][j_ham] = hamiltonian[i_ham][j_ham]
             +a*operator_list[handle1].matrix_diag[i];
         }
@@ -236,7 +208,7 @@ void add_to_ham(double a,int handle1){
   /* 
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
-   * increase n_before by total_levels
+   * multiply n_before by total_levels
    *
    * We want to do this in parallel, so we chunk it up between cores
    * TODO: CHUNK THIS UP
@@ -257,23 +229,13 @@ void add_to_ham(double a,int handle1){
           j_op = i;
         }
 
-
-        /* i_op = i; */
-        /* j_op = i + diag_start; */
-        /* /\* If we have a sub diagonal, we flip the indices *\/ */
-        /* if(j_op < i_op) { */
-        /*   i_op = j_op; */
-        /*   j_op = i; */
-        /* } */
-
-
         /*
          * Now we need to calculate the apropriate location of this
          * within the superoperator Hamiltonian matrix. 
          * See more detailed notes above
          */
-        i_ham      = i_op*n_after+k2+k1*my_levels*n_after;
-        j_ham      = j_op*n_after+k2+k1*my_levels*n_after;
+        i_ham = i_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+        j_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
         add_to_mat = 0.0 - a*operator_list[handle1].matrix_diag[i]*PETSC_i;
         ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
       }
@@ -311,8 +273,8 @@ void add_to_ham(double a,int handle1){
          * within the superoperator Hamiltonian matrix. 
          * See more detailed notes above
          */
-        i_ham = i_op*n_after+k2+k1*my_levels*n_after;
-        j_ham = j_op*n_after+k2+k1*my_levels*n_after;
+        i_ham = i_op*n_before+k1+k2*my_levels*n_before;
+        j_ham = j_op*n_before+k1+k2*my_levels*n_before;
         add_to_mat = 0.0 + a*operator_list[handle1].matrix_diag[i]*PETSC_i;
         ierr = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
       }
@@ -336,44 +298,23 @@ void add_to_ham_comb(double a,int handle1,int handle2){
   int            k1,k2,k3,i,j,levels1,levels2,diag1,diag2,l_handle1,l_handle2;
   int            i1,i2,j1,j2;
   long           i_ham,j_ham,i_comb,j_comb,n_before,n_after,n_between;
-  long           my_levels,n_before1,n_before2,dim;
+  long           my_levels,n_before1,n_before2;
   PetscScalar    add_to_mat;
   PetscErrorCode ierr;
 
-  if (!op_finalized){
-    op_finalized = 1;
-    if (nid==0) {
-      printf("Operators created. Total Hilbert space size: %d\n",total_levels);
-      /* Allocate space for (dense) Hamiltonian matrix in operator space
-       * (for printing and debugging purposes)
-       */
-      hamiltonian = malloc(total_levels*sizeof(double*));
-      for (i=0;i<total_levels;i++){
-        hamiltonian[i] = malloc(total_levels*sizeof(double));
-        /* Initialize to 0 */
-        for (j=0;j<total_levels;j++){
-          hamiltonian[i][j] = 0.0;
-        }
-      }
-    }
-    dim = total_levels*total_levels;
-    /* Setup petsc matrix */
-    //FIXME - do something better than 5*total_levels!!
-    ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim,
-                        5*total_levels,NULL,5*total_levels,NULL,&full_A);CHKERRQ(ierr);
-    ierr = MatSetFromOptions(full_A);CHKERRQ(ierr);
-    ierr = MatSetUp(full_A);CHKERRQ(ierr);
-
-  }
-
+  check_initialized_A();
 
   n_before1   = operator_list[handle1].n_before;
   n_before2   = operator_list[handle2].n_before;
 
   /* 
    * We want n_before2 to be the larger of the two,
-   * because of the way the loops are structured below.
+   * because the kroneckor product only cares about
+   * what order the operators were added. 
+   * I.E a' * b' = b' * a', where a' is the full space
+   * representation of a.
    */
+
   if (n_before2>n_before1){
     levels1   = operator_list[handle1].my_levels;
     diag1     = operator_list[handle1].diagonal_start;
@@ -384,9 +325,10 @@ void add_to_ham_comb(double a,int handle1,int handle2){
     l_handle2 = handle2;
   } else {
     n_before2 = operator_list[handle1].n_before;
-    n_before1 = operator_list[handle2].n_before;
     levels2   = operator_list[handle1].my_levels;
     diag2     = operator_list[handle1].diagonal_start;
+
+    n_before1 = operator_list[handle2].n_before;
     levels1   = operator_list[handle2].my_levels;
     diag1     = operator_list[handle2].diagonal_start;
     /* Local handles, since we may need to reverse them */
@@ -417,6 +359,7 @@ void add_to_ham_comb(double a,int handle1,int handle2){
   n_before   = n_before1;
   my_levels  = levels1*levels2*n_between;
   n_after    = total_levels/(my_levels*n_before);
+
 
   /* Construct the dense Hamiltonian only on the master node */
   if (nid==0) {
@@ -457,8 +400,8 @@ void add_to_ham_comb(double a,int handle1,int handle2){
                 j2 = j;
               }
               /* Update i2,j2 with the kroneckor product value */
-              i2 = i2 + k3*levels2;
-              j2 = j2 + k3*levels2;
+              i2 = i2*n_between + k3;
+              j2 = j2*n_between + k3;
               /* 
                * Using the standard Kronecker product formula for 
                * A and I cross B, we calculate
@@ -482,9 +425,9 @@ void add_to_ham_comb(double a,int handle1,int handle2){
                * the tensor products - they are general for kronecker products
                * of identity matrices with some matrix A
                */
-
-              i_ham = i_comb*n_after+k2+k1*my_levels*n_after;
-              j_ham = j_comb*n_after+k2+k1*my_levels*n_after;
+              
+              i_ham = i_comb*n_before+k1+k2*my_levels*n_before;
+              j_ham = j_comb*n_before+k1+k2*my_levels*n_before;
               hamiltonian[i_ham][j_ham] = hamiltonian[i_ham][j_ham]
                 +a*operator_list[l_handle1].matrix_diag[i]
                 *operator_list[l_handle2].matrix_diag[j];
@@ -499,7 +442,7 @@ void add_to_ham_comb(double a,int handle1,int handle2){
   /* 
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
-   * increase n_before by total_levels
+   * multiply n_before by total_levels
    *
    * We want to do this in parallel, so we chunk it up between cores
    * TODO: CHUNK THIS UP
@@ -561,9 +504,9 @@ void add_to_ham_comb(double a,int handle1,int handle2){
              * the tensor products - they are general for kronecker products
              * of identity matrices with some matrix A
              */
+            i_ham = i_comb*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+            j_ham = j_comb*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
 
-            i_ham      = i_comb*n_after+k2+k1*my_levels*n_after;
-            j_ham      = j_comb*n_after+k2+k1*my_levels*n_after;
             add_to_mat = 0.0 - a*operator_list[l_handle1].matrix_diag[i]
               *operator_list[l_handle2].matrix_diag[j]*PETSC_i;
             ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
@@ -640,9 +583,9 @@ void add_to_ham_comb(double a,int handle1,int handle2){
              * the tensor products - they are general for kronecker products
              * of identity matrices with some matrix A
              */
+            i_ham = i_comb*n_before+k1+k2*my_levels*n_before;
+            j_ham = j_comb*n_before+k1+k2*my_levels*n_before;
 
-            i_ham      = i_comb*n_after+k2+k1*my_levels*n_after;
-            j_ham      = j_comb*n_after+k2+k1*my_levels*n_after;
             add_to_mat = 0.0 + a*operator_list[l_handle1].matrix_diag[i]
               *operator_list[l_handle2].matrix_diag[j]*PETSC_i;
             ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
@@ -655,21 +598,271 @@ void add_to_ham_comb(double a,int handle1,int handle2){
   return;
 }
 
+/*
+ * add_lin adds a Lindblad L(C) term to the system of equations, where
+ * L(C)p = C p C^t - 1/2 (C^t C p + p C^t C)
+ * Or, in superoperator space
+ * Lp    = C cross C - 1/2(C^t C cross I + I cross C^t C) p 
+ *
+ * Inputs:
+ *        double a:    scalar to multiply L term (note: Full term, not sqrt())
+p *        int handle1: handle of operator to add
+ * Outputs:
+ *        none
+ */
+
+void add_lin(double a,int handle){
+  int            k1,k2,k3,i,j,my_levels,diag_start,i1,j1,i2,j2;
+  long           i_ham,j_ham,j_op,n_before,n_after,i_comb,j_comb;
+  PetscScalar    add_to_mat;
+  PetscErrorCode ierr;
+
+  check_initialized_A();
+
+  my_levels  = operator_list[handle].my_levels;
+  diag_start = operator_list[handle].diagonal_start;
+  n_before   = operator_list[handle].n_before;
+  n_after    = total_levels/(n_before*my_levels);
+
+
+  /* 
+   * Add (I cross C^t C) to the superoperator matrix, A
+   * Which is (I_total cross I_before cross C^t C cross I_after)
+   * Since this is an additional I_total before, we simply
+   * multiply n_before by total_levels
+   *
+   * We want to do this in parallel, so we chunk it up between cores
+   * TODO: CHUNK THIS UP
+   */
+
+  for (k1=0;k1<n_before*total_levels;k1++){
+    for (k2=0;k2<n_after;k2++){
+      for (i=0;i<my_levels-abs(diag_start);i++){
+        /* 
+         * For this term, we have to calculate Ct C.
+         * We know, a priori, that all operators are (sub or super) diagonal.
+         * Any matrix such as this will be (true) diagonal after doing Ct C.
+         * Ct C is simple to calculate with these diagonal matrices:
+         * for all elements of C[k], where C is the stored diagonal,
+         * location in Ct C = j,j of the
+         * original element C[k], and the value is C[k]*C[k]
+         * Since we store our matrix as a diagonal, we need to
+         * calculate the actual i,j location for our operator.
+         */
+
+        if (diag_start>=0) {
+          j_op  = i+diag_start;
+        } else {
+          j_op = i;
+        }
+
+        /*
+         * Now we need to calculate the apropriate location of this
+         * within the superoperator Hamiltonian matrix. 
+         * See more detailed notes above
+         * note j_op, j_op because Ct C
+         */
+        i_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+        j_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+        add_to_mat = a*operator_list[handle].matrix_diag[i]
+          *operator_list[handle].matrix_diag[i] + 0.0*PETSC_i;
+        ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
+      }
+    }
+  }
+  
+
+  /* 
+   * Add (C^t C cross I) to the superoperator matrix, A
+   * Which is (I_before cross C^t C cross I_after cross I_total)
+   * Since this is an additional I_total after, we simply
+   * multiply n_after by total_levels
+   *
+   * We want to do this in parallel, so we chunk it up between cores
+   * TODO: CHUNK THIS UP
+   */
+  for (k2=0;k2<n_after*total_levels;k2++){
+    for (k1=0;k1<n_before;k1++){
+      for (i=0;i<my_levels-abs(diag_start);i++){
+        /* 
+         * For this term, we have to calculate Ct C.
+         * We know, a priori, that all operators are (sub or super) diagonal.
+         * Any matrix such as this will be (true) diagonal after doing Ct C.
+         * Ct C is simple to calculate with these diagonal matrices:
+         * for all elements of C[k], where C is the stored diagonal,
+         * location in Ct C = j,j of the
+         * original element C[k], and the value is C[k]*C[k]
+         * Since we store our matrix as a diagonal, we need to
+         * calculate the actual i,j location for our operator.
+         */
+
+        if (diag_start>=0) {
+          j_op  = i+diag_start;
+        } else {
+          j_op = i;
+        }
+
+        /*
+         * Now we need to calculate the apropriate location of this
+         * within the superoperator Hamiltonian matrix. 
+         * See more detailed notes above
+         * note j_op, j_op because Ct C
+         */
+        i_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+        j_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+        add_to_mat = a*operator_list[handle].matrix_diag[i]
+          *operator_list[handle].matrix_diag[i] + 0.0*PETSC_i;
+        ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
+      }
+    }
+  }
+
+
+  /* 
+   * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
+   * representation of C. Let I_b = I_before and I_a = I_after
+   * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
+   * or (I_b cross C cross I_total cross C cross I_a)
+   * This is just like add_to_ham_comb, with n_between = total_levels
+   *
+   * We want to do this in parallel, so we chunk it up between cores
+   * We move the k3 loop to the top level to assist in parallelization
+   * TODO: CHUNK THIS UP
+   */
+
+  for (k3=0;k3<total_levels;k3++){
+    for (k1=0;k1<n_before;k1++){
+      for (k2=0;k2<n_after;k2++){
+        for (i=0;i<my_levels-abs(diag_start);i++){
+        /* 
+         * Since we store our matrix as a diagonal, we need to
+         * calculate the actual i,j location for our first operator.
+         */
+
+          if (diag_start>=0) {
+            i1  = i;
+            j1  = i+diag_start;
+          } else {
+            i1 = i-diag_start;
+            j1 = i;
+          }
+          /* 
+           * Since we are taking a cross I cross b, we do 
+           * I_n_between cross b below 
+           */
+
+          for (j=0;j<my_levels-abs(diag_start);j++){
+
+            /* Get the i,j for operator 2 */
+            if (diag_start>=0) {
+              i2  = j;
+              j2  = j+diag_start;
+            } else {
+              i2 = j-diag_start;
+              j2 = j;
+            }
+            /* Update i2,j2 with the I cross b value */
+            i2 = i2 + k3*my_levels;
+            j2 = j2 + k3*my_levels;
+            /* 
+             * Using the standard Kronecker product formula for 
+             * A and I cross B, we calculate
+             * the i,j pair for handle1 cross I cross handle2.
+             * Through we do not use it here, we note that the new
+             * matrix is also diagonal, with offset = levels2*diag1 + diag2;
+             */
+            i_comb = my_levels*i1 + i2;
+            j_comb = my_levels*j1 + j2;
+            /*
+             * Now we need to calculate the apropriate location of this
+             * within the Hamiltonian matrix. We need to expand the operator
+             * from its small Hilbert space to the total Hilbert space.
+             * This expansion depends on the order in which the operators
+             *
+             * For an arbitrary operator, we only care about
+             * the Hilbert space size before and the Hilbert space size
+             * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
+             *
+             * The calculation of i_ham and j_ham exploit the structure of 
+             * the tensor products - they are general for kronecker products
+             * of identity matrices with some matrix A
+             */
+            i_ham = i_comb*n_before+k1+k2*my_levels*n_before*total_levels;
+            j_ham = j_comb*n_before+k1+k2*my_levels*n_before*total_levels;
+
+            add_to_mat = a*operator_list[handle].matrix_diag[i]
+              *operator_list[handle].matrix_diag[j] + PETSC_i*0;
+            ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
+          }
+        }
+      }
+    }
+  }
+
+
+  return;
+}
+
+
+void check_initialized_A(){
+  int            i,j;
+  long           dim;
+  PetscErrorCode ierr;
+  if (!petsc_initialized){
+    if (nid==0){
+      printf("ERROR! You need to create operators before you add anything to\n");
+      printf("       the Hamiltonian or Lindblad!\n");
+      exit(0);
+    }
+  }
+  
+  if (!op_finalized){
+    op_finalized = 1;
+    /* Allocate space for (dense) Hamiltonian matrix in operator space
+     * (for printing and debugging purposes)
+     */
+    if (nid==0) {
+      printf("Operators created. Total Hilbert space size: %d\n",total_levels);
+      hamiltonian = malloc(total_levels*sizeof(double*));
+      for (i=0;i<total_levels;i++){
+        hamiltonian[i] = malloc(total_levels*sizeof(double));
+        /* Initialize to 0 */
+        for (j=0;j<total_levels;j++){
+          hamiltonian[i][j] = 0.0;
+        }
+      }
+    }
+    dim = total_levels*total_levels;
+    /* Setup petsc matrix */
+    //FIXME - do something better than 5*total_levels!!
+    ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim,
+                        5*total_levels,NULL,5*total_levels,NULL,&full_A);CHKERRQ(ierr);
+    ierr = MatSetFromOptions(full_A);CHKERRQ(ierr);
+    ierr = MatSetUp(full_A);CHKERRQ(ierr);
+  }
+
+  return;
+
+}
 
 /*
  * print_ham prints the dense hamiltonian
  */
 void print_ham(){
   int i,j;
+  FILE *fp_ham;
+
+  fp_ham = fopen("ham","w");
 
   if (nid==0){
     for (i=0;i<total_levels;i++){
       for (j=0;j<total_levels;j++){
-        printf("%f ",hamiltonian[i][j]);
+        fprintf(fp_ham,"%e ",hamiltonian[i][j]);
       }
-      printf("\n");
+      fprintf(fp_ham,"\n");
     }
   }
+  fclose(fp_ham);
   return;
 }
 

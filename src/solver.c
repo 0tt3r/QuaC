@@ -11,7 +11,7 @@ void steady_state(){
   Vec            x,b;
   KSP            ksp; /* linear solver context */
   int            row,col,its;
-  long           i,Istart,Iend;
+  PetscInt       i,Istart,Iend;
   PetscScalar    mat_tmp;
   long           dim;
 
@@ -40,9 +40,9 @@ void steady_state(){
    * this fixes a 'matrix in wrong state' message that PETSc
    * gives if the diagonal was never initialized.
    */
-  for(i=Istart;i<Iend;i++){
-      mat_tmp = 0 + 0.*PETSC_i;
-      ierr = MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+  for (i=Istart;i<Iend;i++){
+    mat_tmp = 0 + 0.*PETSC_i;
+    ierr = MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);CHKERRQ(ierr);
   }
 
   
@@ -125,7 +125,7 @@ void steady_state(){
 
 void get_populations(Vec x) {
   int         j;
-  long        x_low,x_high,i;
+  PetscInt    x_low,x_high,i;
   PetscScalar *xa;
   PetscReal   tmp_real;
   double      *populations;
