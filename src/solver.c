@@ -4,10 +4,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-static int stab_added = 0;
+static PetscReal default_rtol    = 1e-11;
+static PetscInt  default_restart = 100;
+static int       stab_added      = 0;
 
 void steady_state(){
   PetscErrorCode ierr;
+  PC             pc;
   Vec            x,b;
   KSP            ksp; /* linear solver context */
   int            row,col,its;
@@ -70,7 +73,7 @@ void steady_state(){
   ierr = VecSet(x,0.0);
   
   if(nid==0) {
-    row = 1;
+    row = 0;
     mat_tmp = 1.0 + 0.0*PETSC_i;
     VecSetValue(x,row,mat_tmp,INSERT_VALUES);
     VecSetValue(b,row,mat_tmp,INSERT_VALUES);
@@ -97,8 +100,21 @@ void steady_state(){
    * also serves as the preconditioning matrix.
    */
   ierr = KSPSetOperators(ksp,full_A,full_A);CHKERRQ(ierr);
-
+  
   /*
+   * Set good default options for solver
+   */
+  /* relative tolerance */
+  ierr = KSPSetTolerances(ksp,default_rtol,PETSC_DEFAULT,PETSC_DEFAULT,PETSC_DEFAULT);CHKERRQ(ierr);
+
+  /* bjacobi preconditioner */
+  ierr = KSPGetPC(ksp,&pc);CHKERRQ(ierr);
+  ierr = PCSetType(pc,PCJACOBI);CHKERRQ(ierr);
+
+  /* gmres solver with 100 restart*/
+  ierr = KSPSetType(ksp,KSPGMRES);CHKERRQ(ierr);
+  ierr = KSPGMRESSetRestart(ksp,default_restart);
+  /* 
    * Set runtime options, e.g.,
    *     -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
    */
@@ -133,6 +149,8 @@ void get_populations(Vec x) {
   ierr = VecGetOwnershipRange(x,&x_low,&x_high);
   ierr = VecGetArray(x,&xa);CHKERRQ(ierr); 
 
+
+
   /* Initialize population arrays */
   populations = malloc(num_subsystems*sizeof(double));
   for(i=0;i<num_subsystems;i++){
@@ -144,6 +162,7 @@ void get_populations(Vec x) {
     if((i*total_levels+i)>=x_low&&(i*total_levels+i)<x_high) {
       /* Get the diagonal entry of rho */
       tmp_real = (double)PetscRealPart(xa[i*(total_levels)+i-x_low]);
+      printf("%f \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
       for(j=0;j<num_subsystems;j++){
         //TODO FIXME !!! Calculate populations correctly! Need cur_state
         populations[j] += tmp_real;//cur_state[i][j]*tmp_real;

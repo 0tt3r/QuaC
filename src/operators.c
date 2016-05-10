@@ -150,8 +150,8 @@ void add_to_ham(double a,int handle1){
 
   /* Construct the dense Hamiltonian only on the master node */
   if (nid==0) {
-    for (k1=0;k1<n_before;k1++){
-      for (k2=0;k2<n_after;k2++){
+    for (k1=0;k1<n_after;k1++){
+      for (k2=0;k2<n_before;k2++){
         for (i=0;i<my_levels-abs(diag_start);i++){
           /* 
            * Since we store our matrix as a diagonal, we need to
@@ -195,8 +195,8 @@ void add_to_ham(double a,int handle1){
            * of identity matrices with some matrix A
            */
           
-          i_ham = i_op*n_before+k1+k2*my_levels*n_before;
-          j_ham = j_op*n_before+k1+k2*my_levels*n_before;
+          i_ham = i_op*n_after+k1+k2*my_levels*n_after;
+          j_ham = j_op*n_after+k1+k2*my_levels*n_after;
           hamiltonian[i_ham][j_ham] = hamiltonian[i_ham][j_ham]
             +a*operator_list[handle1].matrix_diag[i];
         }
@@ -213,8 +213,8 @@ void add_to_ham(double a,int handle1){
    * We want to do this in parallel, so we chunk it up between cores
    * TODO: CHUNK THIS UP
    */
-  for (k1=0;k1<n_before*total_levels;k1++){
-    for (k2=0;k2<n_after;k2++){
+  for (k1=0;k1<n_after;k1++){
+    for (k2=0;k2<n_before*total_levels;k2++){
       for (i=0;i<my_levels-abs(diag_start);i++){
         /* 
          * Since we store our matrix as a diagonal, we need to
@@ -234,8 +234,8 @@ void add_to_ham(double a,int handle1){
          * within the superoperator Hamiltonian matrix. 
          * See more detailed notes above
          */
-        i_ham = i_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
-        j_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+        i_ham = i_op*n_after+k1+k2*my_levels*n_after;
+        j_ham = j_op*n_after+k1+k2*my_levels*n_after;
         add_to_mat = 0.0 - a*operator_list[handle1].matrix_diag[i]*PETSC_i;
         ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
       }
@@ -246,14 +246,14 @@ void add_to_ham(double a,int handle1){
   /* 
    * Add i * (H cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
-   * multiplt n_after by total_levels
+   * multiply n_after by total_levels
    *
    * We want to do this in parallel, so we chunk it up between cores
    * TODO: CHUNK THIS UP
    * Note: Switched k1 and k2 loops to aid in parallelization
    */
-  for (k2=0;k2<n_after*total_levels;k2++){
-    for (k1=0;k1<n_before;k1++){
+  for (k2=0;k2<n_before;k2++){
+    for (k1=0;k1<n_after*total_levels;k1++){
       for (i=0;i<my_levels-abs(diag_start);i++){
         /* 
          * Since we store our matrix as a diagonal, we need to
@@ -273,8 +273,8 @@ void add_to_ham(double a,int handle1){
          * within the superoperator Hamiltonian matrix. 
          * See more detailed notes above
          */
-        i_ham = i_op*n_before+k1+k2*my_levels*n_before;
-        j_ham = j_op*n_before+k1+k2*my_levels*n_before;
+        i_ham = i_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
+        j_ham = j_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
         add_to_mat = 0.0 + a*operator_list[handle1].matrix_diag[i]*PETSC_i;
         ierr = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
       }
@@ -327,7 +327,6 @@ void add_to_ham_comb(double a,int handle1,int handle2){
     n_before2 = operator_list[handle1].n_before;
     levels2   = operator_list[handle1].my_levels;
     diag2     = operator_list[handle1].diagonal_start;
-
     n_before1 = operator_list[handle2].n_before;
     levels1   = operator_list[handle2].my_levels;
     diag1     = operator_list[handle2].diagonal_start;
@@ -351,7 +350,7 @@ void add_to_ham_comb(double a,int handle1,int handle2){
    *
    */
   n_between = n_before2/(n_before1*levels1);
-  
+
   /* 
    * n_before and n_after refer to before and after a cross I_c cross b
    * and my_levels is the size of a cross I_c cross b
@@ -360,11 +359,10 @@ void add_to_ham_comb(double a,int handle1,int handle2){
   my_levels  = levels1*levels2*n_between;
   n_after    = total_levels/(my_levels*n_before);
 
-
   /* Construct the dense Hamiltonian only on the master node */
   if (nid==0) {
-    for (k1=0;k1<n_before;k1++){
-      for (k2=0;k2<n_after;k2++){
+    for (k1=0;k1<n_after;k1++){
+      for (k2=0;k2<n_before;k2++){
         for (i=0;i<levels1-abs(diag1);i++){
           /* 
            * Since we store our matrix as a diagonal, we need to
@@ -400,21 +398,24 @@ void add_to_ham_comb(double a,int handle1,int handle2){
                 j2 = j;
               }
               /* Update i2,j2 with the kroneckor product value */
-              i2 = i2*n_between + k3;
-              j2 = j2*n_between + k3;
+              i2 = i2 + k3*levels2;
+              j2 = j2 + k3*levels2;
               /* 
                * Using the standard Kronecker product formula for 
                * A and I cross B, we calculate
                * the i,j pair for handle1 cross I cross handle2.
                * Through we do not use it here, we note that the new
-               * matrix is also diagonal, with offset = levels2*diag1 + diag2;
+               * matrix is also diagonal, with offset = levels2*n_between*diag1 + diag2;
+               * We need levels2*n_between because we are taking
+               * a cross (I cross b), so the the size of the second operator
+               * is n_between*levels2
                */
-              i_comb = levels2*i1 + i2;
-              j_comb = levels2*j1 + j2;
+              i_comb = levels2*n_between*i1 + i2;
+              j_comb = levels2*n_between*j1 + j2;
               /*
                * Now we need to calculate the apropriate location of this
                * within the Hamiltonian matrix. We need to expand the operator
-               * from its small Hilbert space to the total Hilbert space.
+               * from its small Hilbert space to the total Hilbert space.xp
                * This expansion depends on the order in which the operators
                *
                * For an arbitrary operator, we only care about
@@ -426,8 +427,8 @@ void add_to_ham_comb(double a,int handle1,int handle2){
                * of identity matrices with some matrix A
                */
               
-              i_ham = i_comb*n_before+k1+k2*my_levels*n_before;
-              j_ham = j_comb*n_before+k1+k2*my_levels*n_before;
+              i_ham = i_comb*n_after+k1+k2*my_levels*n_after;
+              j_ham = j_comb*n_after+k1+k2*my_levels*n_after;
               hamiltonian[i_ham][j_ham] = hamiltonian[i_ham][j_ham]
                 +a*operator_list[l_handle1].matrix_diag[i]
                 *operator_list[l_handle2].matrix_diag[j];
@@ -448,8 +449,8 @@ void add_to_ham_comb(double a,int handle1,int handle2){
    * TODO: CHUNK THIS UP
    */
 
-  for (k1=0;k1<n_before*total_levels;k1++){
-    for (k2=0;k2<n_after;k2++){
+  for (k2=0;k2<n_before*total_levels;k2++){
+    for (k1=0;k1<n_after;k1++){
       for (i=0;i<levels1-abs(diag1);i++){
         /* 
          * Since we store our matrix as a diagonal, we need to
@@ -486,10 +487,13 @@ void add_to_ham_comb(double a,int handle1,int handle2){
              * A and I cross B, we calculate
              * the i,j pair for handle1 cross I cross handle2.
              * Through we do not use it here, we note that the new
-             * matrix is also diagonal, with offset = levels2*diag1 + diag2;
+             * matrix is also diagonal, with offset = levels2*n_between*diag1 + diag2;
+             * We need levels2*n_between because we are taking
+             * a cross (I cross b), so the the size of the second operator
+             * is n_between*levels2
              */
-            i_comb = levels2*i1 + i2;
-            j_comb = levels2*j1 + j2;
+            i_comb = levels2*n_between*i1 + i2;
+            j_comb = levels2*n_between*j1 + j2;
             /*
              * Now we need to calculate the apropriate location of this
              * within the Hamiltonian matrix. We need to expand the operator
@@ -504,8 +508,8 @@ void add_to_ham_comb(double a,int handle1,int handle2){
              * the tensor products - they are general for kronecker products
              * of identity matrices with some matrix A
              */
-            i_ham = i_comb*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
-            j_ham = j_comb*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
+            i_ham = i_comb*n_after+k1+k2*my_levels*n_after;
+            j_ham = j_comb*n_after+k1+k2*my_levels*n_after;
 
             add_to_mat = 0.0 - a*operator_list[l_handle1].matrix_diag[i]
               *operator_list[l_handle2].matrix_diag[j]*PETSC_i;
@@ -527,8 +531,8 @@ void add_to_ham_comb(double a,int handle1,int handle2){
    * Note: Switched k1 and k2 loops to aid in parallelization
    */
 
-  for (k2=0;k2<n_after*total_levels;k2++){
-    for (k1=0;k1<n_before;k1++){
+  for (k1=0;k1<n_after*total_levels;k1++){
+    for (k2=0;k2<n_before;k2++){
       for (i=0;i<levels1-abs(diag1);i++){
         /* 
          * Since we store our matrix as a diagonal, we need to
@@ -565,10 +569,13 @@ void add_to_ham_comb(double a,int handle1,int handle2){
              * A and I cross B, we calculate
              * the i,j pair for handle1 cross I cross handle2.
              * Through we do not use it here, we note that the new
-             * matrix is also diagonal, with offset = levels2*diag1 + diag2;
+             * matrix is also diagonal, with offset = levels2*n_between*diag1 + diag2;
+             * We need levels2*n_between because we are taking
+             * a cross (I cross b), so the the size of the second operator
+             * is n_between*levels2
              */
-            i_comb = levels2*i1 + i2;
-            j_comb = levels2*j1 + j2;
+            i_comb = levels2*n_between*i1 + i2;
+            j_comb = levels2*n_between*j1 + j2;
             /*
              * Now we need to calculate the apropriate location of this
              * within the Hamiltonian matrix. We need to expand the operator
@@ -583,8 +590,8 @@ void add_to_ham_comb(double a,int handle1,int handle2){
              * the tensor products - they are general for kronecker products
              * of identity matrices with some matrix A
              */
-            i_ham = i_comb*n_before+k1+k2*my_levels*n_before;
-            j_ham = j_comb*n_before+k1+k2*my_levels*n_before;
+            i_ham = i_comb*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
+            j_ham = j_comb*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
 
             add_to_mat = 0.0 + a*operator_list[l_handle1].matrix_diag[i]
               *operator_list[l_handle2].matrix_diag[j]*PETSC_i;
@@ -612,7 +619,7 @@ p *        int handle1: handle of operator to add
  */
 
 void add_lin(double a,int handle){
-  int            k1,k2,k3,i,j,my_levels,diag_start,i1,j1,i2,j2;
+  int            k1,k2,k3,i,j,my_levels,diag_start,i1,j1,i2,j2,comb_levels;
   long           i_ham,j_ham,j_op,n_before,n_after,i_comb,j_comb;
   PetscScalar    add_to_mat;
   PetscErrorCode ierr;
@@ -634,9 +641,8 @@ void add_lin(double a,int handle){
    * We want to do this in parallel, so we chunk it up between cores
    * TODO: CHUNK THIS UP
    */
-
-  for (k1=0;k1<n_before*total_levels;k1++){
-    for (k2=0;k2<n_after;k2++){
+  for (k2=0;k2<n_before*total_levels;k2++){
+    for (k1=0;k1<n_after;k1++){
       for (i=0;i<my_levels-abs(diag_start);i++){
         /* 
          * For this term, we have to calculate Ct C.
@@ -662,9 +668,9 @@ void add_lin(double a,int handle){
          * See more detailed notes above
          * note j_op, j_op because Ct C
          */
-        i_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
-        j_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
-        add_to_mat = a*operator_list[handle].matrix_diag[i]
+        i_ham = j_op*n_after+k1+k2*my_levels*n_after;
+        j_ham = j_op*n_after+k1+k2*my_levels*n_after;
+        add_to_mat = -0.5*a*operator_list[handle].matrix_diag[i]
           *operator_list[handle].matrix_diag[i] + 0.0*PETSC_i;
         ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
       }
@@ -681,8 +687,9 @@ void add_lin(double a,int handle){
    * We want to do this in parallel, so we chunk it up between cores
    * TODO: CHUNK THIS UP
    */
-  for (k2=0;k2<n_after*total_levels;k2++){
-    for (k1=0;k1<n_before;k1++){
+
+  for (k1=0;k1<n_after*total_levels;k1++){
+    for (k2=0;k2<n_before;k2++){
       for (i=0;i<my_levels-abs(diag_start);i++){
         /* 
          * For this term, we have to calculate Ct C.
@@ -708,9 +715,9 @@ void add_lin(double a,int handle){
          * See more detailed notes above
          * note j_op, j_op because Ct C
          */
-        i_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
-        j_ham = j_op*n_before*total_levels+k1+k2*my_levels*n_before*total_levels;
-        add_to_mat = a*operator_list[handle].matrix_diag[i]
+        i_ham = j_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
+        j_ham = j_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
+        add_to_mat = -0.5*a*operator_list[handle].matrix_diag[i]
           *operator_list[handle].matrix_diag[i] + 0.0*PETSC_i;
         ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
       }
@@ -722,17 +729,19 @@ void add_lin(double a,int handle){
    * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
    * representation of C. Let I_b = I_before and I_a = I_after
    * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
-   * or (I_b cross C cross I_total cross C cross I_a)
-   * This is just like add_to_ham_comb, with n_between = total_levels
+   * or (I_b cross C cross I_ab cross C cross I_a)
+   * This is just like add_to_ham_comb, with n_between = n_after*n_before
    *
    * We want to do this in parallel, so we chunk it up between cores
    * We move the k3 loop to the top level to assist in parallelization
    * TODO: CHUNK THIS UP
    */
 
-  for (k3=0;k3<total_levels;k3++){
-    for (k1=0;k1<n_before;k1++){
-      for (k2=0;k2<n_after;k2++){
+  comb_levels = my_levels*my_levels*n_before*n_after;
+
+  for (k3=0;k3<n_before*n_after;k3++){
+    for (k1=0;k1<n_after;k1++){
+      for (k2=0;k2<n_before;k2++){
         for (i=0;i<my_levels-abs(diag_start);i++){
         /* 
          * Since we store our matrix as a diagonal, we need to
@@ -746,11 +755,12 @@ void add_lin(double a,int handle){
             i1 = i-diag_start;
             j1 = i;
           }
-          /* 
-           * Since we are taking a cross I cross b, we do 
-           * I_n_between cross b below 
-           */
 
+          /* 
+           * Since we are taking c cross I cross c, we do 
+           * I_ab cross c below - the k3 loop is moved to the 
+           * top
+           */
           for (j=0;j<my_levels-abs(diag_start);j++){
 
             /* Get the i,j for operator 2 */
@@ -769,10 +779,14 @@ void add_lin(double a,int handle){
              * A and I cross B, we calculate
              * the i,j pair for handle1 cross I cross handle2.
              * Through we do not use it here, we note that the new
-             * matrix is also diagonal, with offset = levels2*diag1 + diag2;
+             * matrix is also diagonal.
+             * We need my_levels*n_before*n_after because we are taking
+             * C cross (Ia cross Ib cross C), so the the size of the second operator
+             * is my_levels*n_before*n_after
              */
-            i_comb = my_levels*i1 + i2;
-            j_comb = my_levels*j1 + j2;
+            i_comb = my_levels*n_before*n_after*i1 + i2;
+            j_comb = my_levels*n_before*n_after*j1 + j2;
+
             /*
              * Now we need to calculate the apropriate location of this
              * within the Hamiltonian matrix. We need to expand the operator
@@ -787,8 +801,8 @@ void add_lin(double a,int handle){
              * the tensor products - they are general for kronecker products
              * of identity matrices with some matrix A
              */
-            i_ham = i_comb*n_before+k1+k2*my_levels*n_before*total_levels;
-            j_ham = j_comb*n_before+k1+k2*my_levels*n_before*total_levels;
+            i_ham = i_comb*n_after+k1+k2*comb_levels*n_after;
+            j_ham = j_comb*n_after+k1+k2*comb_levels*n_after;
 
             add_to_mat = a*operator_list[handle].matrix_diag[i]
               *operator_list[handle].matrix_diag[j] + PETSC_i*0;

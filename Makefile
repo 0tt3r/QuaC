@@ -16,10 +16,10 @@ OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB}
 
-nv_cooling_2state: $(SRCDIR)/nv_cooling_2state.o $(OBJ)
+nv_cooling_2state: $(ODIR)/nv_cooling_2state.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
-simple_jaynes_cummings: $(SRCDIR)/simple_jaynes_cummings.o $(OBJ)
+simple_jc_test: $(ODIR)/simple_jc_test.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
 # .PHONY: clean
