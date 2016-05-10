@@ -1,33 +1,41 @@
-#include "operators_p.h"
+#include "kron_p.h"
 #include "operators.h"
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-#define MAX_OP 100  //Consider making this not a define
-/* TODO? : Make Kron product (with I) as a function? 
- * MatSetValue would be within this.
+#define MAX_SUB 100  //Consider making this not a define
+/* TODO? : 
+ * - Make Kron product (with I) as a function? MatSetValue would be within this.
+ * - QuaC_initialize (wrapper for PETScInitialize)
+ * - QuaC_finalize   (free Ham, free subsystems, PETScFinalize)
+ * - variable number of arguments to add_to_ham and add_to_lin
  */
 
-struct operator {
+
+struct subsystem {
   int n_before;
   int my_levels;
+  
   /* 
-   * All of our operators are guaranteed to be a diagonal of some type
+   * All of our normal operators are guaranteed to be a diagonal of some type
    * (likely a super diagonal or sub diagonal, but a diagonal nonetheless)
    * As such, we only store said diagonal, as well as the starting
    * row / column.
    * diagonal_start is the offset from the true diagonal
    * positive means super diagonal, negative means sub diagnal
    */
-  double *matrix_diag;
+  double **matrix_diag;
   int diagonal_start;
+  /*
+   * For our vec operators, we only need to know the location in the list,
+   * but that information is stored in the vec_op struct
+   */
+
 };
 
-static struct operator operator_list[MAX_OP]; //static should keep it in this file
-static int             num_ops;
-static double**        hamiltonian;
-static int             petsc_initialized = 0;
+static struct subsystem subsystem_list[MAX_SUB]; //static should keep it in this file
+static int              petsc_initialized = 0;
 /*
   create_op creates a basic set of operators, namely the creation, annihilation, and
   number operator. 
@@ -40,7 +48,7 @@ static int             petsc_initialized = 0;
 
  */
 
-void create_op(int number_of_levels,int *op_create,int *op_destroy,int *op_number) {
+void create_op(int number_of_levels,operator new_op) {
   int i;
   PetscErrorCode ierr;
 
@@ -52,69 +60,39 @@ void create_op(int number_of_levels,int *op_create,int *op_destroy,int *op_numbe
     ierr              = MPI_Comm_rank(PETSC_COMM_WORLD,&nid);CHKERRQ(ierr);
     op_finalized      = 0;
     total_levels      = 1;
-    num_subsystems    = 0;
-    num_ops           = 0;
     petsc_initialized = 1;
   }
     
-  if (num_ops+3>MAX_OP&&nid==0){
-    printf("ERROR! Too many ops for this MAX_OP\n");
+  if (num_sub+1>MAX_SUB&&nid==0){
+    printf("ERROR! Too many systems for this MAX_SUB\n");
     exit(0);
   }
 
   if (op_finalized){
     printf("ERROR! You cannot add more operators after\n");
-    printf("       calling add_to_ham!\n");
+    printf("       calling add_to_ham or add_to_lin!\n");
     exit(0);
   }
 
+  /* First make the annihilation operator */
+  new_op           = malloc(sizeof(struct operator));
+  new_op->n_before = total_levels;
+  new_op->my_levels = number_of_levels;
+  new_op->my_op_type = DESTROY;
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  new_op->positions = -1;
 
-  /* First, make the creation operator */
-  operator_list[num_ops].n_before       = total_levels;
-  operator_list[num_ops].my_levels      = number_of_levels;
-  operator_list[num_ops].diagonal_start = -1;
-  /* Allocate the diagonal */
-  /* number_of_levels-1 because subdiagonal by 1 */
-  operator_list[num_ops].matrix_diag    = malloc((number_of_levels-1)*sizeof(double)); 
-  /* Set the values */
-  for(i=0;i<number_of_levels-1;i++){
-    operator_list[num_ops].matrix_diag[i] = sqrt(i+1);
-  }
+  new_op->dag           = malloc(sizeof(struct operator));
+  /* Now, make the creation operator */
+  new_op->dag->n_before = total_levels;
+  new_op->dag->my_levels = number_of_levels;
+  new_op->dag->my_op_type = CREATE;
 
-  *op_create = num_ops;
-  /* Increment number of ops, since we've finished adding this */
-  num_ops++;
-
-  /* Next, make the annihilation operator */
-  operator_list[num_ops].n_before       = total_levels;
-  operator_list[num_ops].my_levels      = number_of_levels;
-  operator_list[num_ops].diagonal_start = 1;
-  /* Allocate the diagonal */
-  /* number_of_levels-1 because superdiagonal by 1 */
-  operator_list[num_ops].matrix_diag    = malloc((number_of_levels-1)*sizeof(double)); 
-  /* Set the values */
-  for (i=0;i<number_of_levels-1;i++){
-    operator_list[num_ops].matrix_diag[i] = sqrt(i+1);
-  }
-
-  *op_destroy = num_ops;
-  /* Increment number of ops, since we've finished adding this */
-  num_ops++;
- 
-  /* Finally, make the number operator */
-  operator_list[num_ops].n_before       = total_levels;
-  operator_list[num_ops].my_levels      = number_of_levels;
-  operator_list[num_ops].diagonal_start = 0;
-  /* Allocate the diagonal */
-  operator_list[num_ops].matrix_diag    = malloc(number_of_levels*sizeof(double));
-  /* Set the values */
-  for (i=0;i<number_of_levels;i++){
-    operator_list[num_ops].matrix_diag[i] = i;
-  }
- 
-  *op_number = num_ops;
-  /* Increment number of ops, since we've finished adding this */
-  num_ops++;
+  new_op->n           = malloc(sizeof(struct operator));
+  /* Now, make the number operator */
+  new_op->n->n_before = total_levels;
+  new_op->n->my_levels = number_of_levels;
+  new_op->n->my_op_type = NUMBER;
 
   /* Increase total_levels */
   if (total_levels==0){
@@ -135,152 +113,50 @@ void create_op(int number_of_levels,int *op_create,int *op_destroy,int *op_numbe
  * Outputs:
  *        none
  */
-void add_to_ham(double a,int handle1){
-  int            k1,k2,i,j,my_levels,diag_start;
+void add_to_ham(double a,operator op){
+  int            k1,k2,i,j,my_levels,diag_start,loop_limit;
   long           i_ham,j_ham,i_op,j_op,n_before,n_after;
-  PetscScalar    add_to_mat;
+  op_type        my_op_type;
+  double         val;
+  PetscScalar    mat_scalar;
   PetscErrorCode ierr;
   
   check_initialized_A();
 
-  my_levels  = operator_list[handle1].my_levels;
-  diag_start = operator_list[handle1].diagonal_start;
-  n_before   = operator_list[handle1].n_before;
-  n_after    = total_levels/(n_before*my_levels);
+  n_after    = total_levels/(op->n_before*op->my_levels);
 
-  /* Construct the dense Hamiltonian only on the master node */
+  /* 
+   * Construct the dense Hamiltonian only on the master node 
+   * extra_before and extra_after are 1, letting the code know to
+   * do the dense, operator space H.
+   */
   if (nid==0) {
-    for (k1=0;k1<n_after;k1++){
-      for (k2=0;k2<n_before;k2++){
-        for (i=0;i<my_levels-abs(diag_start);i++){
-          /* 
-           * Since we store our matrix as a diagonal, we need to
-           * calculate the actual i,j location for our operator.
-           *
-           * If it is a superdiagonal (diag_start > 0),
-           * our data index (i) describes the i_op value
-           * 
-           * If is is a subdiagonal (diag_start < 0), 
-           * it is reversed.
-           */
-
-          if (diag_start>=0) {
-            i_op  = i;
-            j_op  = i+diag_start;
-          } else {
-            i_op = i-diag_start;
-            j_op = i;
-          }
-           
-          /*
-           * Now we need to calculate the apropriate location of this
-           * within the Hamiltonian matrix. We need to expand the operator
-           * from its small Hilbert space to the total Hilbert space.
-           * This expansion depends on the order in which the operators
-           * were added. For example, if we added 3 operators:
-           * A, B, and C (with sizes n_a, n_b, n_c, respectively), we would
-           * have (where the ' denotes in the full space and I_(n) means
-           * the identity matrix of size n):
-           *
-           * A' = A cross I_(n_b) cross I_(n_c)
-           * B' = I_(n_a) cross B cross I_(n_c)
-           * C' = I_(n_a) cross I_(n_b) cross C
-           * 
-           * For an arbitrary operator, we only care about
-           * the Hilbert space size before and the Hilbert space size
-           * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
-           *
-           * The calculation of i_ham and j_ham exploit the structure of 
-           * the tensor products - they are general for kronecker products
-           * of identity matrices with some matrix A
-           */
-          
-          i_ham = i_op*n_after+k1+k2*my_levels*n_after;
-          j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-          hamiltonian[i_ham][j_ham] = hamiltonian[i_ham][j_ham]
-            +a*operator_list[handle1].matrix_diag[i];
-        }
-      }
-    }
+    mat_scalar = a;
+    _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,1,1);
   }
-
 
   /* 
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
-   * multiply n_before by total_levels
-   *
-   * We want to do this in parallel, so we chunk it up between cores
-   * TODO: CHUNK THIS UP
+   * pass total_levels as extra_before
+   * We pass the -a*PETSC_i to get the sign and imaginary part correct.
    */
-  for (k1=0;k1<n_after;k1++){
-    for (k2=0;k2<n_before*total_levels;k2++){
-      for (i=0;i<my_levels-abs(diag_start);i++){
-        /* 
-         * Since we store our matrix as a diagonal, we need to
-         * calculate the actual i,j location for our operator.
-         */
 
-        if (diag_start>=0) {
-          i_op  = i;
-          j_op  = i+diag_start;
-        } else {
-          i_op = i-diag_start;
-          j_op = i;
-        }
 
-        /*
-         * Now we need to calculate the apropriate location of this
-         * within the superoperator Hamiltonian matrix. 
-         * See more detailed notes above
-         */
-        i_ham = i_op*n_after+k1+k2*my_levels*n_after;
-        j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-        add_to_mat = 0.0 - a*operator_list[handle1].matrix_diag[i]*PETSC_i;
-        ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
-      }
-    }
-  }
-
+  mat_scalar = -a*PETSC_i;
+  _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,
+                     op->my_op_type,op->position,total_levels,1);
 
   /* 
    * Add i * (H cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
-   * multiply n_after by total_levels
-   *
-   * We want to do this in parallel, so we chunk it up between cores
-   * TODO: CHUNK THIS UP
-   * Note: Switched k1 and k2 loops to aid in parallelization
+   * pass total_levels as extra_after.
+   * We pass a*PETSC_i to get the imaginary part correct.
    */
-  for (k2=0;k2<n_before;k2++){
-    for (k1=0;k1<n_after*total_levels;k1++){
-      for (i=0;i<my_levels-abs(diag_start);i++){
-        /* 
-         * Since we store our matrix as a diagonal, we need to
-         * calculate the actual i,j location for our operator.
-         */
 
-        if (diag_start>=0) {
-          i_op  = i;
-          j_op  = i+diag_start;
-        } else {
-          i_op = i-diag_start;
-          j_op = i;
-        }
-           
-        /*
-         * Now we need to calculate the apropriate location of this
-         * within the superoperator Hamiltonian matrix. 
-         * See more detailed notes above
-         */
-        i_ham = i_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
-        j_ham = j_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
-        add_to_mat = 0.0 + a*operator_list[handle1].matrix_diag[i]*PETSC_i;
-        ierr = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
-      }
-    }
-  }
-
+  mat_scalar = a*PETSC_i;
+  _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,
+                     op->my_op_type,op->position,1,total_levels);
   return;
 }
 
@@ -294,313 +170,54 @@ void add_to_ham(double a,int handle1){
  * Outputs:
  *        none
  */
-void add_to_ham_comb(double a,int handle1,int handle2){
+void add_to_ham_comb(double a,operator op1,operator op2){
   int            k1,k2,k3,i,j,levels1,levels2,diag1,diag2,l_handle1,l_handle2;
   int            i1,i2,j1,j2;
   long           i_ham,j_ham,i_comb,j_comb,n_before,n_after,n_between;
   long           my_levels,n_before1,n_before2;
-  PetscScalar    add_to_mat;
+  PetscScalar    mat_scalar;
   PetscErrorCode ierr;
 
   check_initialized_A();
 
-  n_before1   = operator_list[handle1].n_before;
-  n_before2   = operator_list[handle2].n_before;
+  n_before1   = op1->n_before;
+  n_before2   = op1->n_before;
 
   /* 
-   * We want n_before2 to be the larger of the two,
-   * because the kroneckor product only cares about
-   * what order the operators were added. 
-   * I.E a' * b' = b' * a', where a' is the full space
-   * representation of a.
+   * Construct the dense Hamiltonian only on the master node 
+   * extra_before and extra_after are 1, letting the code know to
+   * do the dense, operator space H.
    */
-
-  if (n_before2>n_before1){
-    levels1   = operator_list[handle1].my_levels;
-    diag1     = operator_list[handle1].diagonal_start;
-    levels2   = operator_list[handle2].my_levels;
-    diag2     = operator_list[handle2].diagonal_start;
-    /* Local handles, since we may need to reverse them */
-    l_handle1 = handle1;
-    l_handle2 = handle2;
-  } else {
-    n_before2 = operator_list[handle1].n_before;
-    levels2   = operator_list[handle1].my_levels;
-    diag2     = operator_list[handle1].diagonal_start;
-    n_before1 = operator_list[handle2].n_before;
-    levels1   = operator_list[handle2].my_levels;
-    diag1     = operator_list[handle2].diagonal_start;
-    /* Local handles, since we may need to reverse them */
-    l_handle1 = handle2;
-    l_handle2 = handle1;
-  }
-
-  /* 
-   * We need to calculate n_between, since, in general,
-   * A=op(1) and B=op(2) may not be next to each other (in kroneckor terms)
-   * We may have:
-   * A = a cross I_c cross I_b
-   * B = I_a cross I_c cross b
-   * So, A*B = a cross I_c cross b, where I_c is the Hilbert space size
-   * of all operators between.
-   * n_between is the hilbert space size between the operators. 
-   * We take the larger n_before (say n2), then divide out all operators 
-   * before the other operator (say n1), and divide out the other operator's
-   * hilbert space (l1), giving n_between = n2/(n1*l1)
-   *
-   */
-  n_between = n_before2/(n_before1*levels1);
-
-  /* 
-   * n_before and n_after refer to before and after a cross I_c cross b
-   * and my_levels is the size of a cross I_c cross b
-   */
-  n_before   = n_before1;
-  my_levels  = levels1*levels2*n_between;
-  n_after    = total_levels/(my_levels*n_before);
-
-  /* Construct the dense Hamiltonian only on the master node */
   if (nid==0) {
-    for (k1=0;k1<n_after;k1++){
-      for (k2=0;k2<n_before;k2++){
-        for (i=0;i<levels1-abs(diag1);i++){
-          /* 
-           * Since we store our matrix as a diagonal, we need to
-           * calculate the actual i,j location for our operator.
-           *
-           * If it is a superdiagonal (diag_start > 0),
-           * our data index (i) describes the i_op value
-           * 
-           * If is is a subdiagonal (diag_start < 0), 
-           * it is reversed.
-           */
-
-          if (diag1>=0) {
-            i1  = i;
-            j1  = i+diag1;
-          } else {
-            i1 = i-diag1;
-            j1 = i;
-          }
-          /* 
-           * Since we are taking a cross I cross b, we do 
-           * I_n_between cross b below 
-           */
-          for (k3=0;k3<n_between;k3++){
-            for (j=0;j<levels2-abs(diag2);j++){
-
-              /* Get the i,j for operator 2 */
-              if (diag2>=0) {
-                i2  = j;
-                j2  = j+diag2;
-              } else {
-                i2 = j-diag2;
-                j2 = j;
-              }
-              /* Update i2,j2 with the kroneckor product value */
-              i2 = i2 + k3*levels2;
-              j2 = j2 + k3*levels2;
-              /* 
-               * Using the standard Kronecker product formula for 
-               * A and I cross B, we calculate
-               * the i,j pair for handle1 cross I cross handle2.
-               * Through we do not use it here, we note that the new
-               * matrix is also diagonal, with offset = levels2*n_between*diag1 + diag2;
-               * We need levels2*n_between because we are taking
-               * a cross (I cross b), so the the size of the second operator
-               * is n_between*levels2
-               */
-              i_comb = levels2*n_between*i1 + i2;
-              j_comb = levels2*n_between*j1 + j2;
-              /*
-               * Now we need to calculate the apropriate location of this
-               * within the Hamiltonian matrix. We need to expand the operator
-               * from its small Hilbert space to the total Hilbert space.xp
-               * This expansion depends on the order in which the operators
-               *
-               * For an arbitrary operator, we only care about
-               * the Hilbert space size before and the Hilbert space size
-               * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
-               *
-               * The calculation of i_ham and j_ham exploit the structure of 
-               * the tensor products - they are general for kronecker products
-               * of identity matrices with some matrix A
-               */
-              
-              i_ham = i_comb*n_after+k1+k2*my_levels*n_after;
-              j_ham = j_comb*n_after+k1+k2*my_levels*n_after;
-              hamiltonian[i_ham][j_ham] = hamiltonian[i_ham][j_ham]
-                +a*operator_list[l_handle1].matrix_diag[i]
-                *operator_list[l_handle2].matrix_diag[j];
-            }
-          }
-        }
-      }
-    }
+    mat_scalar = a;
+    _add_to_PETSc_kron_comb(mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                            op2->n_before,op2->my_levels,op2->my_op_type,op2->position,1,1,1);
   }
-
 
   /* 
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
-   * multiply n_before by total_levels
-   *
-   * We want to do this in parallel, so we chunk it up between cores
-   * TODO: CHUNK THIS UP
+   * pass total_levels as extra_before
+   * We pass the -a*PETSC_i to get the sign and imaginary part correct.
    */
 
-  for (k2=0;k2<n_before*total_levels;k2++){
-    for (k1=0;k1<n_after;k1++){
-      for (i=0;i<levels1-abs(diag1);i++){
-        /* 
-         * Since we store our matrix as a diagonal, we need to
-         * calculate the actual i,j location for our first operator.
-         */
-
-        if (diag1>=0) {
-          i1  = i;
-          j1  = i+diag1;
-        } else {
-          i1 = i-diag1;
-          j1 = i;
-        }
-        /* 
-         * Since we are taking a cross I cross b, we do 
-         * I_n_between cross b below 
-         */
-        for (k3=0;k3<n_between;k3++){
-          for (j=0;j<levels2-abs(diag2);j++){
-
-            /* Get the i,j for operator 2 */
-            if (diag2>=0) {
-              i2  = j;
-              j2  = j+diag2;
-            } else {
-              i2 = j-diag2;
-              j2 = j;
-            }
-            /* Update i2,j2 with the I cross b value */
-            i2 = i2 + k3*levels2;
-            j2 = j2 + k3*levels2;
-            /* 
-             * Using the standard Kronecker product formula for 
-             * A and I cross B, we calculate
-             * the i,j pair for handle1 cross I cross handle2.
-             * Through we do not use it here, we note that the new
-             * matrix is also diagonal, with offset = levels2*n_between*diag1 + diag2;
-             * We need levels2*n_between because we are taking
-             * a cross (I cross b), so the the size of the second operator
-             * is n_between*levels2
-             */
-            i_comb = levels2*n_between*i1 + i2;
-            j_comb = levels2*n_between*j1 + j2;
-            /*
-             * Now we need to calculate the apropriate location of this
-             * within the Hamiltonian matrix. We need to expand the operator
-             * from its small Hilbert space to the total Hilbert space.
-             * This expansion depends on the order in which the operators
-             *
-             * For an arbitrary operator, we only care about
-             * the Hilbert space size before and the Hilbert space size
-             * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
-             *
-             * The calculation of i_ham and j_ham exploit the structure of 
-             * the tensor products - they are general for kronecker products
-             * of identity matrices with some matrix A
-             */
-            i_ham = i_comb*n_after+k1+k2*my_levels*n_after;
-            j_ham = j_comb*n_after+k1+k2*my_levels*n_after;
-
-            add_to_mat = 0.0 - a*operator_list[l_handle1].matrix_diag[i]
-              *operator_list[l_handle2].matrix_diag[j]*PETSC_i;
-            ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
-          }
-        }
-      }
-    }
-  }
-
+  mat_scalar = -a*PETSC_i;
+  _add_to_PETSc_kron_comb(mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position;
+                          op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
+                          total_levels,1,1);
 
   /* 
    * Add i * (H cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
-   * multiplt n_after by total_levels
-   *
-   * We want to do this in parallel, so we chunk it up between cores
-   * TODO: CHUNK THIS UP
-   * Note: Switched k1 and k2 loops to aid in parallelization
+   * pass total_levels as extra_after.
+   * We pass a*PETSC_i to get the imaginary part correct.
    */
 
-  for (k1=0;k1<n_after*total_levels;k1++){
-    for (k2=0;k2<n_before;k2++){
-      for (i=0;i<levels1-abs(diag1);i++){
-        /* 
-         * Since we store our matrix as a diagonal, we need to
-         * calculate the actual i,j location for our first operator.
-         */
+  mat_scalar = a*PETSC_i;
+  _add_to_PETSc_kron_comb(mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                          op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
+                          1,1,total_levels);
 
-        if (diag1>=0) {
-          i1  = i;
-          j1  = i+diag1;
-        } else {
-          i1 = i-diag1;
-          j1 = i;
-        }
-        /* 
-         * Since we are taking a cross I cross b, we do 
-         * I_n_between cross b below 
-         */
-        for (k3=0;k3<n_between;k3++){
-          for (j=0;j<levels2-abs(diag2);j++){
-
-            /* Get the i,j for operator 2 */
-            if (diag2>=0) {
-              i2  = j;
-              j2  = j+diag2;
-            } else {
-              i2 = j-diag2;
-              j2 = j;
-            }
-            /* Update i2,j2 with the I cross b value */
-            i2 = i2 + k3*levels2;
-            j2 = j2 + k3*levels2;
-            /* 
-             * Using the standard Kronecker product formula for 
-             * A and I cross B, we calculate
-             * the i,j pair for handle1 cross I cross handle2.
-             * Through we do not use it here, we note that the new
-             * matrix is also diagonal, with offset = levels2*n_between*diag1 + diag2;
-             * We need levels2*n_between because we are taking
-             * a cross (I cross b), so the the size of the second operator
-             * is n_between*levels2
-             */
-            i_comb = levels2*n_between*i1 + i2;
-            j_comb = levels2*n_between*j1 + j2;
-            /*
-             * Now we need to calculate the apropriate location of this
-             * within the Hamiltonian matrix. We need to expand the operator
-             * from its small Hilbert space to the total Hilbert space.
-             * This expansion depends on the order in which the operators
-             *
-             * For an arbitrary operator, we only care about
-             * the Hilbert space size before and the Hilbert space size
-             * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
-             *
-             * The calculation of i_ham and j_ham exploit the structure of 
-             * the tensor products - they are general for kronecker products
-             * of identity matrices with some matrix A
-             */
-            i_ham = i_comb*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
-            j_ham = j_comb*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
-
-            add_to_mat = 0.0 + a*operator_list[l_handle1].matrix_diag[i]
-              *operator_list[l_handle2].matrix_diag[j]*PETSC_i;
-            ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
-          }
-        }
-      }
-    }
-  }
 
   return;
 }
@@ -618,112 +235,29 @@ p *        int handle1: handle of operator to add
  *        none
  */
 
-void add_lin(double a,int handle){
-  int            k1,k2,k3,i,j,my_levels,diag_start,i1,j1,i2,j2,comb_levels;
-  long           i_ham,j_ham,j_op,n_before,n_after,i_comb,j_comb;
-  PetscScalar    add_to_mat;
+void add_lin(double a,operator op){
+  PetscScalar    mat_scalar;
   PetscErrorCode ierr;
 
   check_initialized_A();
-
-  my_levels  = operator_list[handle].my_levels;
-  diag_start = operator_list[handle].diagonal_start;
-  n_before   = operator_list[handle].n_before;
-  n_after    = total_levels/(n_before*my_levels);
-
 
   /* 
    * Add (I cross C^t C) to the superoperator matrix, A
    * Which is (I_total cross I_before cross C^t C cross I_after)
    * Since this is an additional I_total before, we simply
-   * multiply n_before by total_levels
-   *
-   * We want to do this in parallel, so we chunk it up between cores
-   * TODO: CHUNK THIS UP
+   * set extra_before to total_levels
    */
-  for (k2=0;k2<n_before*total_levels;k2++){
-    for (k1=0;k1<n_after;k1++){
-      for (i=0;i<my_levels-abs(diag_start);i++){
-        /* 
-         * For this term, we have to calculate Ct C.
-         * We know, a priori, that all operators are (sub or super) diagonal.
-         * Any matrix such as this will be (true) diagonal after doing Ct C.
-         * Ct C is simple to calculate with these diagonal matrices:
-         * for all elements of C[k], where C is the stored diagonal,
-         * location in Ct C = j,j of the
-         * original element C[k], and the value is C[k]*C[k]
-         * Since we store our matrix as a diagonal, we need to
-         * calculate the actual i,j location for our operator.
-         */
-
-        if (diag_start>=0) {
-          j_op  = i+diag_start;
-        } else {
-          j_op = i;
-        }
-
-        /*
-         * Now we need to calculate the apropriate location of this
-         * within the superoperator Hamiltonian matrix. 
-         * See more detailed notes above
-         * note j_op, j_op because Ct C
-         */
-        i_ham = j_op*n_after+k1+k2*my_levels*n_after;
-        j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-        add_to_mat = -0.5*a*operator_list[handle].matrix_diag[i]
-          *operator_list[handle].matrix_diag[i] + 0.0*PETSC_i;
-        ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
-      }
-    }
-  }
-  
-
+  mat_scalar = a;
+  _add_to_PETSc_kron_lin(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+                         op->position,total_levels,1);
   /* 
    * Add (C^t C cross I) to the superoperator matrix, A
    * Which is (I_before cross C^t C cross I_after cross I_total)
    * Since this is an additional I_total after, we simply
-   * multiply n_after by total_levels
-   *
-   * We want to do this in parallel, so we chunk it up between cores
-   * TODO: CHUNK THIS UP
+   * set extra_after to total_levels
    */
-
-  for (k1=0;k1<n_after*total_levels;k1++){
-    for (k2=0;k2<n_before;k2++){
-      for (i=0;i<my_levels-abs(diag_start);i++){
-        /* 
-         * For this term, we have to calculate Ct C.
-         * We know, a priori, that all operators are (sub or super) diagonal.
-         * Any matrix such as this will be (true) diagonal after doing Ct C.
-         * Ct C is simple to calculate with these diagonal matrices:
-         * for all elements of C[k], where C is the stored diagonal,
-         * location in Ct C = j,j of the
-         * original element C[k], and the value is C[k]*C[k]
-         * Since we store our matrix as a diagonal, we need to
-         * calculate the actual i,j location for our operator.
-         */
-
-        if (diag_start>=0) {
-          j_op  = i+diag_start;
-        } else {
-          j_op = i;
-        }
-
-        /*
-         * Now we need to calculate the apropriate location of this
-         * within the superoperator Hamiltonian matrix. 
-         * See more detailed notes above
-         * note j_op, j_op because Ct C
-         */
-        i_ham = j_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
-        j_ham = j_op*n_after*total_levels+k1+k2*my_levels*n_after*total_levels;
-        add_to_mat = -0.5*a*operator_list[handle].matrix_diag[i]
-          *operator_list[handle].matrix_diag[i] + 0.0*PETSC_i;
-        ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
-      }
-    }
-  }
-
+  _add_to_PETSc_kron_lin(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+                         op->position,1,total_levels);
 
   /* 
    * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
@@ -731,88 +265,10 @@ void add_lin(double a,int handle){
    * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
    * or (I_b cross C cross I_ab cross C cross I_a)
    * This is just like add_to_ham_comb, with n_between = n_after*n_before
-   *
-   * We want to do this in parallel, so we chunk it up between cores
-   * We move the k3 loop to the top level to assist in parallelization
-   * TODO: CHUNK THIS UP
    */
-
-  comb_levels = my_levels*my_levels*n_before*n_after;
-
-  for (k3=0;k3<n_before*n_after;k3++){
-    for (k1=0;k1<n_after;k1++){
-      for (k2=0;k2<n_before;k2++){
-        for (i=0;i<my_levels-abs(diag_start);i++){
-        /* 
-         * Since we store our matrix as a diagonal, we need to
-         * calculate the actual i,j location for our first operator.
-         */
-
-          if (diag_start>=0) {
-            i1  = i;
-            j1  = i+diag_start;
-          } else {
-            i1 = i-diag_start;
-            j1 = i;
-          }
-
-          /* 
-           * Since we are taking c cross I cross c, we do 
-           * I_ab cross c below - the k3 loop is moved to the 
-           * top
-           */
-          for (j=0;j<my_levels-abs(diag_start);j++){
-
-            /* Get the i,j for operator 2 */
-            if (diag_start>=0) {
-              i2  = j;
-              j2  = j+diag_start;
-            } else {
-              i2 = j-diag_start;
-              j2 = j;
-            }
-            /* Update i2,j2 with the I cross b value */
-            i2 = i2 + k3*my_levels;
-            j2 = j2 + k3*my_levels;
-            /* 
-             * Using the standard Kronecker product formula for 
-             * A and I cross B, we calculate
-             * the i,j pair for handle1 cross I cross handle2.
-             * Through we do not use it here, we note that the new
-             * matrix is also diagonal.
-             * We need my_levels*n_before*n_after because we are taking
-             * C cross (Ia cross Ib cross C), so the the size of the second operator
-             * is my_levels*n_before*n_after
-             */
-            i_comb = my_levels*n_before*n_after*i1 + i2;
-            j_comb = my_levels*n_before*n_after*j1 + j2;
-
-            /*
-             * Now we need to calculate the apropriate location of this
-             * within the Hamiltonian matrix. We need to expand the operator
-             * from its small Hilbert space to the total Hilbert space.
-             * This expansion depends on the order in which the operators
-             *
-             * For an arbitrary operator, we only care about
-             * the Hilbert space size before and the Hilbert space size
-             * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
-             *
-             * The calculation of i_ham and j_ham exploit the structure of 
-             * the tensor products - they are general for kronecker products
-             * of identity matrices with some matrix A
-             */
-            i_ham = i_comb*n_after+k1+k2*comb_levels*n_after;
-            j_ham = j_comb*n_after+k1+k2*comb_levels*n_after;
-
-            add_to_mat = a*operator_list[handle].matrix_diag[i]
-              *operator_list[handle].matrix_diag[j] + PETSC_i*0;
-            ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
-          }
-        }
-      }
-    }
-  }
-
+  n_between = n_before*n_after;
+  _add_to_PETSc_kron_lin_comb(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+                              op->position);
 
   return;
 }
@@ -837,12 +293,12 @@ void check_initialized_A(){
      */
     if (nid==0) {
       printf("Operators created. Total Hilbert space size: %d\n",total_levels);
-      hamiltonian = malloc(total_levels*sizeof(double*));
+      _hamiltonian = malloc(total_levels*sizeof(double*));
       for (i=0;i<total_levels;i++){
-        hamiltonian[i] = malloc(total_levels*sizeof(double));
+        _hamiltonian[i] = malloc(total_levels*sizeof(double));
         /* Initialize to 0 */
         for (j=0;j<total_levels;j++){
-          hamiltonian[i][j] = 0.0;
+          _hamiltonian[i][j] = 0.0;
         }
       }
     }
