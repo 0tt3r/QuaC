@@ -177,10 +177,10 @@ void get_populations(Vec x) {
          *
          * NOTE: DOESN'T WORK FOR VEC OPS!
          */
-        my_levels = subsystem_list[j]->my_levels;
-        n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-        cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-
+        /* my_levels = subsystem_list[j]->my_levels; */
+        /* n_after   = total_levels/(my_levels*subsystem_list[j]->n_before); */
+        /* cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels; */
+        cur_state    = 1;
         populations[j] += tmp_real*cur_state;
       }
     }

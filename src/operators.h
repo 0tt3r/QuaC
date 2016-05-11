@@ -22,8 +22,12 @@ typedef operator *vec_op;
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
 void add_to_ham(double,operator);
-void add_to_ham_comb(double,operator,operator);
+void add_to_ham_mult2(double,operator,operator);
+void add_to_ham_mult3(double,operator,operator,operator);
+int  _check_op_type2(operator,operator);
+int  _check_op_type3(operator,operator,operator);
 void add_lin(double,operator);
+void add_lin_vec(double,operator,operator);
 void print_ham();
 extern int nid;
 #define MAX_SUB 100  //Consider making this not a define

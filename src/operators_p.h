@@ -12,8 +12,8 @@ typedef enum {
 
 
 
-void check_initialized_A();
-void check_initialized_op();
+void _check_initialized_A();
+void _check_initialized_op();
 extern Mat  full_A;
 extern int  op_finalized;
 extern long total_levels;

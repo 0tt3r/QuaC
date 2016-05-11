@@ -22,6 +22,9 @@ nv_cooling_2state: $(ODIR)/nv_cooling_2state.o $(OBJ)
 simple_jc_test: $(ODIR)/simple_jc_test.o $(OBJ) $(DEPS)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES}
 
+simple_jc_test_vec: $(ODIR)/simple_jc_test_vec.o $(OBJ) $(DEPS)
+	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES}
+
 .PHONY: clean
 
 clean:
