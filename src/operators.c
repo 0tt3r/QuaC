@@ -1,4 +1,5 @@
-#include "kron_p.h"
+#include "kron_p.h" //Includes petscmat.h and operators_p.h
+#include "quac_p.h" 
 #include "operators.h"
 #include <math.h>
 #include <stdlib.h>
@@ -6,36 +7,21 @@
 
 #define MAX_SUB 100  //Consider making this not a define
 /* TODO? : 
- * - Make Kron product (with I) as a function? MatSetValue would be within this.
- * - QuaC_initialize (wrapper for PETScInitialize)
- * - QuaC_finalize   (free Ham, free subsystems, PETScFinalize)
+ * - QuaC_finalize   (free subsystems)
+ * - put wrappers into quac.h
  * - variable number of arguments to add_to_ham and add_to_lin
  */
 
 
-struct subsystem {
-  int n_before;
-  int my_levels;
-  
-  /* 
-   * All of our normal operators are guaranteed to be a diagonal of some type
-   * (likely a super diagonal or sub diagonal, but a diagonal nonetheless)
-   * As such, we only store said diagonal, as well as the starting
-   * row / column.
-   * diagonal_start is the offset from the true diagonal
-   * positive means super diagonal, negative means sub diagnal
-   */
-  double **matrix_diag;
-  int diagonal_start;
-  /*
-   * For our vec operators, we only need to know the location in the list,
-   * but that information is stored in the vec_op struct
-   */
+static int              op_initialized = 0;
+/* Declare private, library variables. Externed in operators_p.h */
+int op_finalized;
+Mat full_A;
+long total_levels;
+int num_subsystems;
+double** _hamiltonian;
 
-};
 
-static struct subsystem subsystem_list[MAX_SUB]; //static should keep it in this file
-static int              petsc_initialized = 0;
 /*
   create_op creates a basic set of operators, namely the creation, annihilation, and
   number operator. 
@@ -48,52 +34,79 @@ static int              petsc_initialized = 0;
 
  */
 
-void create_op(int number_of_levels,operator new_op) {
-  int i;
-  PetscErrorCode ierr;
+void create_op(int number_of_levels,operator *new_op) {
+  operator temp = NULL;
+  operator temp2 = NULL;
+  operator temp3 = NULL;
+  /* Check to make sure petsc was initialize */
+  if (!petsc_initialized){ 
+    if (nid==0){
+      printf("ERROR! You need to call QuaC_initialize before creating\n");
+      printf("       any operators!");
+      exit(0);
+    }
+  }
 
-  /* Set up petsc and get nid on first call */
-  if (!petsc_initialized){
-#if !defined(PETSC_USE_COMPLEX)
-    SETERRQ(PETSC_COMM_WORLD,1,"This example requires complex numbers");
-#endif
-    ierr              = MPI_Comm_rank(PETSC_COMM_WORLD,&nid);CHKERRQ(ierr);
-    op_finalized      = 0;
-    total_levels      = 1;
-    petsc_initialized = 1;
+  /* Set up counters on first call */
+  if (!op_initialized){
+    op_finalized   = 0;
+    total_levels   = 1;
+    op_initialized = 1;
   }
     
-  if (num_sub+1>MAX_SUB&&nid==0){
-    printf("ERROR! Too many systems for this MAX_SUB\n");
-    exit(0);
+  if (num_subsystems+1>MAX_SUB&&nid==0){
+    if (nid==0){
+      printf("ERROR! Too many systems for this MAX_SUB\n");
+      exit(0);
+    }
   }
 
   if (op_finalized){
-    printf("ERROR! You cannot add more operators after\n");
-    printf("       calling add_to_ham or add_to_lin!\n");
-    exit(0);
+    if (nid==0){
+      printf("ERROR! You cannot add more operators after\n");
+      printf("       calling add_to_ham or add_to_lin!\n");
+      exit(0);
+    }
   }
 
   /* First make the annihilation operator */
-  new_op           = malloc(sizeof(struct operator));
-  new_op->n_before = total_levels;
-  new_op->my_levels = number_of_levels;
-  new_op->my_op_type = DESTROY;
+  temp           = malloc(sizeof(struct operator));
+  temp->n_before = total_levels;
+  temp->my_levels = number_of_levels;
+  temp->my_op_type = LOWER;
   /* Since this is a basic operator, not a vec, set positions to -1 */
-  new_op->positions = -1;
+  temp->position = -1;
+  *new_op = temp;
 
-  new_op->dag           = malloc(sizeof(struct operator));
-  /* Now, make the creation operator */
-  new_op->dag->n_before = total_levels;
-  new_op->dag->my_levels = number_of_levels;
-  new_op->dag->my_op_type = CREATE;
+  temp2           = malloc(sizeof(struct operator));
+  temp2->n_before = total_levels;
+  temp2->my_levels = number_of_levels;
+  temp2->my_op_type = RAISE;
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  temp2->position = -1;
+  (*new_op)->dag = temp2;
 
-  new_op->n           = malloc(sizeof(struct operator));
-  /* Now, make the number operator */
-  new_op->n->n_before = total_levels;
-  new_op->n->my_levels = number_of_levels;
-  new_op->n->my_op_type = NUMBER;
+  temp3           = malloc(sizeof(struct operator));
+  temp3->n_before = total_levels;
+  temp3->my_levels = number_of_levels;
+  temp3->my_op_type = NUMBER;
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  temp3->position = -1;
 
+  (*new_op)->n = temp3;
+
+  /* (*new_op)->dag           = malloc(sizeof(struct operator)); */
+  /* /\* Now, make the creation operator *\/ */
+  /* (*new_op)->dag->n_before = total_levels; */
+  /* (*new_op)->dag->my_levels = number_of_levels; */
+  /* (*new_op)->dag->my_op_type = RAISE; */
+  /* (*new_op)->dag->position = -1; */
+  /* (*new_op)->n           = malloc(sizeof(struct operator)); */
+  /* /\* Now, make the number operator *\/ */
+  /* (*new_op)->n->n_before = total_levels; */
+  /* (*new_op)->n->my_levels = number_of_levels; */
+  /* (*new_op)->n->my_op_type = NUMBER; */
+  /* (*new_op)->n->position = -1; */
   /* Increase total_levels */
   if (total_levels==0){
     total_levels = number_of_levels;
@@ -114,28 +127,22 @@ void create_op(int number_of_levels,operator new_op) {
  *        none
  */
 void add_to_ham(double a,operator op){
-  int            k1,k2,i,j,my_levels,diag_start,loop_limit;
-  long           i_ham,j_ham,i_op,j_op,n_before,n_after;
-  op_type        my_op_type;
-  double         val;
   PetscScalar    mat_scalar;
-  PetscErrorCode ierr;
+
   
   check_initialized_A();
 
-  n_after    = total_levels/(op->n_before*op->my_levels);
-
-  /* 
-   * Construct the dense Hamiltonian only on the master node 
+  /*
+   * Construct the dense Hamiltonian only on the master node
    * extra_before and extra_after are 1, letting the code know to
    * do the dense, operator space H.
    */
   if (nid==0) {
     mat_scalar = a;
-    _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,1,1);
+    _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,op->position,1,1);
   }
 
-  /* 
+  /*
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
    * pass total_levels as extra_before
@@ -147,7 +154,7 @@ void add_to_ham(double a,operator op){
   _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,
                      op->my_op_type,op->position,total_levels,1);
 
-  /* 
+  /*
    * Add i * (H cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
    * pass total_levels as extra_after.
@@ -171,20 +178,12 @@ void add_to_ham(double a,operator op){
  *        none
  */
 void add_to_ham_comb(double a,operator op1,operator op2){
-  int            k1,k2,k3,i,j,levels1,levels2,diag1,diag2,l_handle1,l_handle2;
-  int            i1,i2,j1,j2;
-  long           i_ham,j_ham,i_comb,j_comb,n_before,n_after,n_between;
-  long           my_levels,n_before1,n_before2;
   PetscScalar    mat_scalar;
-  PetscErrorCode ierr;
 
   check_initialized_A();
 
-  n_before1   = op1->n_before;
-  n_before2   = op1->n_before;
-
-  /* 
-   * Construct the dense Hamiltonian only on the master node 
+  /*
+   * Construct the dense Hamiltonian only on the master node
    * extra_before and extra_after are 1, letting the code know to
    * do the dense, operator space H.
    */
@@ -194,7 +193,7 @@ void add_to_ham_comb(double a,operator op1,operator op2){
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,1,1,1);
   }
 
-  /* 
+  /*
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
    * pass total_levels as extra_before
@@ -202,11 +201,11 @@ void add_to_ham_comb(double a,operator op1,operator op2){
    */
 
   mat_scalar = -a*PETSC_i;
-  _add_to_PETSc_kron_comb(mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position;
+  _add_to_PETSc_kron_comb(mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                           op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                           total_levels,1,1);
 
-  /* 
+  /*
    * Add i * (H cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
    * pass total_levels as extra_after.
@@ -226,7 +225,7 @@ void add_to_ham_comb(double a,operator op1,operator op2){
  * add_lin adds a Lindblad L(C) term to the system of equations, where
  * L(C)p = C p C^t - 1/2 (C^t C p + p C^t C)
  * Or, in superoperator space
- * Lp    = C cross C - 1/2(C^t C cross I + I cross C^t C) p 
+ * Lp    = C cross C - 1/2(C^t C cross I + I cross C^t C) p
  *
  * Inputs:
  *        double a:    scalar to multiply L term (note: Full term, not sqrt())
@@ -237,20 +236,19 @@ p *        int handle1: handle of operator to add
 
 void add_lin(double a,operator op){
   PetscScalar    mat_scalar;
-  PetscErrorCode ierr;
 
   check_initialized_A();
 
-  /* 
+  /*
    * Add (I cross C^t C) to the superoperator matrix, A
    * Which is (I_total cross I_before cross C^t C cross I_after)
    * Since this is an additional I_total before, we simply
    * set extra_before to total_levels
    */
-  mat_scalar = a;
+  mat_scalar = -0.5*a;
   _add_to_PETSc_kron_lin(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
                          op->position,total_levels,1);
-  /* 
+  /*
    * Add (C^t C cross I) to the superoperator matrix, A
    * Which is (I_before cross C^t C cross I_after cross I_total)
    * Since this is an additional I_total after, we simply
@@ -259,14 +257,14 @@ void add_lin(double a,operator op){
   _add_to_PETSc_kron_lin(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
                          op->position,1,total_levels);
 
-  /* 
+  /*
    * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
    * representation of C. Let I_b = I_before and I_a = I_after
    * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
    * or (I_b cross C cross I_ab cross C cross I_a)
    * This is just like add_to_ham_comb, with n_between = n_after*n_before
    */
-  n_between = n_before*n_after;
+  mat_scalar = a;
   _add_to_PETSc_kron_lin_comb(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
                               op->position);
 
@@ -278,7 +276,17 @@ void check_initialized_A(){
   int            i,j;
   long           dim;
   PetscErrorCode ierr;
-  if (!petsc_initialized){
+
+  /* Check to make sure petsc was initialize */
+  if (!petsc_initialized){ 
+    if (nid==0){
+      printf("ERROR! You need to call QuaC_initialize before creating\n");
+      printf("       any operators!");
+      exit(0);
+    }
+  }
+  /* Check to make sure some operators were created */
+  if (!op_initialized){
     if (nid==0){
       printf("ERROR! You need to create operators before you add anything to\n");
       printf("       the Hamiltonian or Lindblad!\n");
@@ -327,7 +335,7 @@ void print_ham(){
   if (nid==0){
     for (i=0;i<total_levels;i++){
       for (j=0;j<total_levels;j++){
-        fprintf(fp_ham,"%e ",hamiltonian[i][j]);
+        fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
       }
       fprintf(fp_ham,"\n");
     }

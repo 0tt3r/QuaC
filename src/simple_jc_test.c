@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdlib.h>
+#include "quac.h"
 #include "operators.h"
 #include "solver.h"
 #include "petsc.h"
@@ -17,12 +18,9 @@
 int main(int argc,char **args){
   double wc,wa,g,kappa,gamma,rate;
   int num_cavity,N_th;
-  int at,a,an,sm,smt,smn;
-  int sm2,sm2t,sm2n;
-  int a2t,a2,a2n;
-  /* Initialize Petsc */
-  PetscInitialize(&argc,&args,(char*)0,NULL);
+  operator a,sm,sm2,a2;
 
+  
   wc         = 1.0*2*M_PI;
   wa         = 1.0*2*M_PI;
   g          = 0.05*2*M_PI;
@@ -31,24 +29,30 @@ int main(int argc,char **args){
   num_cavity = 5;
   N_th       = 1;
 
-  create_op(num_cavity,&at,&a,&an);
-  create_op(2,&smt,&sm,&smn);  
-  create_op(2,&sm2t,&sm2,&sm2n);
-  create_op(2,&a2t,&a2,&a2n);
+  QuaC_initialize(argc,args);
 
+  create_op(num_cavity,&a);
+  create_op(2,&sm);
+  create_op(2,&sm2);
+  create_op(2,&a2);
+
+  //  printf("n_before: %d\n",a.n->n_before);
   /* Setup simple JC Hamiltonian */
-  add_to_ham(wc,an); //wc * (at*a)
-  add_to_ham(wa,smn); //wa * (smt*sm)
+  add_to_ham(wc,a->n); //wc * (at*a)
+  add_to_ham(wa,sm->n); //wa * (smt*sm)
 
-  add_to_ham_comb(g,at,sm); //g * (at*sm)
-  add_to_ham_comb(g,a,smt); //g * (a*smt)
-  add_to_ham_comb(2*g,at,sm2);
-  add_to_ham_comb(2*g,a,sm2t);
-  add_to_ham_comb(3*g,smt,sm2);
-  add_to_ham_comb(3*g,sm,sm2t);
+  add_to_ham_comb(g,a->dag,sm); //g * (at*sm)
+  add_to_ham_comb(g,a,sm->dag); //g * (a*smt)
+
+
+  add_to_ham_comb(2*g,a->dag,sm2);
+  add_to_ham_comb(2*g,a,sm2->dag);
+  add_to_ham_comb(3*g,sm->dag,sm2);
+  add_to_ham_comb(3*g,sm,sm2->dag);
   
-  add_to_ham_comb(5*g,a2t,sm2);
-  add_to_ham_comb(5*g,a2,sm2t);
+  add_to_ham_comb(5*g,a2->dag,sm2);
+  add_to_ham_comb(5*g,a2,sm2->dag);
+
 
   /* Setup Lindblad operators */
 
@@ -57,19 +61,21 @@ int main(int argc,char **args){
   add_lin(rate,a);
 
   rate = kappa*N_th;
-  add_lin(rate,at);
+  add_lin(rate,a->dag);
 
   rate = kappa*(1+N_th);
   add_lin(rate,a2);
 
   rate = kappa*(N_th);
-  add_lin(rate,a2t);
+  add_lin(rate,a2->dag);
 
   /* Atom decay */
   add_lin(gamma,sm);
-  add_lin(gamma,sm2t);
+  add_lin(gamma,sm2->dag);
 
   print_ham();
   steady_state();
 
+  QuaC_finalize();
+  return 0;
 }

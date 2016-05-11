@@ -130,8 +130,8 @@ void steady_state(){
   ierr = KSPGetIterationNumber(ksp,&its);CHKERRQ(ierr);
 
   ierr = PetscPrintf(PETSC_COMM_WORLD,"Iterations %D\n",its);CHKERRQ(ierr);
-  /* Free work space */
 
+  /* Free work space */
   ierr = KSPDestroy(&ksp);CHKERRQ(ierr);
   ierr = VecDestroy(&x);CHKERRQ(ierr);
   ierr = VecDestroy(&b);CHKERRQ(ierr);
@@ -190,7 +190,6 @@ void get_populations(Vec x) {
 
   /* Put the array back in Petsc's hands */
   ierr = VecRestoreArray(x,&xa);CHKERRQ(ierr);
-
   /* Free memory */
   free(populations);
   return;

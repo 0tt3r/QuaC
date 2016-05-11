@@ -1,13 +1,21 @@
 #ifndef OPERATORS_P_H_
 #define OPERATORS_P_H_
 
+#include <petscmat.h>
+
+typedef enum {
+    RAISE  = -1,
+    NUMBER = 0,
+    LOWER  = 1,
+    VEC    = 2
+  } op_type;
+
+
 void check_initialized_A();
-Mat  full_A;
-int  op_finalized;
-long total_levels;
-int  num_subsysems;
-double** _hamiltonian;
-
-
+extern Mat  full_A;
+extern int  op_finalized;
+extern long total_levels;
+extern int  num_subsystems;
+extern double** _hamiltonian;
 
 #endif
