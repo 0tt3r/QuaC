@@ -2,6 +2,7 @@
 #include "quac_p.h"
 #include "quac.h"
 #include "operators_p.h"
+#include "operators.h"
 #include <petsc.h>
 
 int petsc_initialized = 0;
@@ -33,4 +34,11 @@ void QuaC_finalize(){
     free(_hamiltonian[i]);
   }
   free(_hamiltonian);
+  /* Free all subsystems */
+  for (i=0;i<num_subsystems;i++){
+    free(subsystem_list[i]->dag);
+    free(subsystem_list[i]->n);
+    free(subsystem_list[i]);
+  }
+  
 }

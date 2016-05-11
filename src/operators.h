@@ -25,5 +25,7 @@ void add_to_ham_comb(double,operator,operator);
 void add_lin(double,operator);
 void print_ham();
 extern int nid;
+#define MAX_SUB 100  //Consider making this not a define
+extern operator subsystem_list[MAX_SUB];
 
 #endif

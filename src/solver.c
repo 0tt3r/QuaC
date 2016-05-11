@@ -140,7 +140,7 @@ void steady_state(){
 }
 
 void get_populations(Vec x) {
-  int         j;
+  int         j,my_levels,n_after,cur_state;
   PetscInt    x_low,x_high,i;
   PetscScalar *xa;
   PetscReal   tmp_real;
@@ -164,8 +164,24 @@ void get_populations(Vec x) {
       tmp_real = (double)PetscRealPart(xa[i*(total_levels)+i-x_low]);
       printf("%f \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
       for(j=0;j<num_subsystems;j++){
+        /*
+         * We want to calculate the populations. To do that, we need 
+         * to know what the state of the number operator for a specific
+         * subsystem is for a given i. To accomplish this, we make use
+         * of the fact that we can take the diagonal index i from the
+         * full space and get which diagonal index it is in the subspace
+         * by calculating:
+         * i_subspace = mod(mod(floor(i/n_a),l*n_a),l)
+         * because these are number operators, and we count from 0,
+         * i_subspace = cur_state
+         *
+         * NOTE: DOESN'T WORK FOR VEC OPS!
+         */
+        my_levels = subsystem_list[j]->my_levels;
+        n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
+        cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
         //TODO FIXME !!! Calculate populations correctly! Need cur_state
-        populations[j] += tmp_real;//cur_state[i][j]*tmp_real;
+        populations[j] += tmp_real*cur_state;
       }
     }
   } 

@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define MAX_SUB 100  //Consider making this not a define
 /* TODO? : 
  * - QuaC_finalize   (free subsystems)
  * - put wrappers into quac.h
@@ -20,7 +19,7 @@ Mat full_A;
 long total_levels;
 int num_subsystems;
 double** _hamiltonian;
-
+operator subsystem_list[MAX_SUB];
 
 /*
   create_op creates a basic set of operators, namely the creation, annihilation, and
@@ -114,6 +113,7 @@ void create_op(int number_of_levels,operator *new_op) {
     total_levels = total_levels * number_of_levels;
   }
 
+  subsystem_list[num_subsystems] = (*new_op);
   num_subsystems++;
   return;
 }
