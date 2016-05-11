@@ -140,7 +140,8 @@ void steady_state(){
 }
 
 void get_populations(Vec x) {
-  int         j,my_levels,n_after,cur_state;
+  int         j,my_levels,n_after,cur_state,num_pop;
+  int         *i_sub_to_i_pop;
   PetscInt    x_low,x_high,i;
   PetscScalar *xa;
   PetscReal   tmp_real;
@@ -149,17 +150,32 @@ void get_populations(Vec x) {
   ierr = VecGetOwnershipRange(x,&x_low,&x_high);
   ierr = VecGetArray(x,&xa);CHKERRQ(ierr); 
 
-
+  /*
+   * Loop through operators to see how many populations we need to 
+   * calculate, because VEC need a population for each level.
+   * We also set an array that translates i_subsystem to i_pop for normal ops.
+   */
+  i_sub_to_i_pop = malloc(num_subsystems*sizeof(int));
+  num_pop = 0;
+  for (i=0;i<num_subsystems;i++){
+    if (subsystem_list[i]->my_op_type==VEC){
+      i_sub_to_i_pop[i] = num_pop;
+      num_pop += subsystem_list[i]->my_levels;
+    } else {
+      i_sub_to_i_pop[i] = num_pop;
+      num_pop += 1;      
+    }
+  }
 
   /* Initialize population arrays */
-  populations = malloc(num_subsystems*sizeof(double));
-  for(i=0;i<num_subsystems;i++){
+  populations = malloc(num_pop*sizeof(double));
+  for (i=0;i<num_pop;i++){
     populations[i] = 0.0;
   }
 
 
-  for(i=0;i<total_levels;i++){
-    if((i*total_levels+i)>=x_low&&(i*total_levels+i)<x_high) {
+  for (i=0;i<total_levels;i++){
+    if ((i*total_levels+i)>=x_low&&(i*total_levels+i)<x_high) {
       /* Get the diagonal entry of rho */
       tmp_real = (double)PetscRealPart(xa[i*(total_levels)+i-x_low]);
       printf("%f \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
@@ -172,16 +188,23 @@ void get_populations(Vec x) {
          * full space and get which diagonal index it is in the subspace
          * by calculating:
          * i_subspace = mod(mod(floor(i/n_a),l*n_a),l)
-         * because these are number operators, and we count from 0,
-         * i_subspace = cur_state
+         * For regular operators, these are just number operators, and we count from 0,
+         * so, cur_state = i_subspace
          *
-         * NOTE: DOESN'T WORK FOR VEC OPS!
+         * For VEC ops, we can use the same technique. Once we get cur_state (i_subspace),
+         * we use that to go the appropriate location in the population array.
          */
-        /* my_levels = subsystem_list[j]->my_levels; */
-        /* n_after   = total_levels/(my_levels*subsystem_list[j]->n_before); */
-        /* cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels; */
-        cur_state    = 1;
-        populations[j] += tmp_real*cur_state;
+        if (subsystem_list[j]->my_op_type==VEC){
+          my_levels = subsystem_list[j]->my_levels;
+          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
+          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
+          populations[i_sub_to_i_pop[j]+cur_state] += tmp_real;
+        } else {
+          my_levels = subsystem_list[j]->my_levels;
+          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
+          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
+          populations[i_sub_to_i_pop[j]] += tmp_real*cur_state;
+        }
       }
     }
   } 
@@ -198,7 +221,7 @@ void get_populations(Vec x) {
   /* Print results */
   if(nid==0) {
     printf("Populations: ");
-    for(i=0;i<num_subsystems;i++){
+    for(i=0;i<num_pop;i++){
       printf(" %f ",populations[i]);
     }
     printf("\n");
@@ -207,6 +230,7 @@ void get_populations(Vec x) {
   /* Put the array back in Petsc's hands */
   ierr = VecRestoreArray(x,&xa);CHKERRQ(ierr);
   /* Free memory */
+  free(i_sub_to_i_pop);
   free(populations);
   return;
 }

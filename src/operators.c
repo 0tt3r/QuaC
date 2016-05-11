@@ -6,7 +6,6 @@
 #include <stdio.h>
 
 /* TODO? : 
- * - QuaC_finalize   (free subsystems)
  * - put wrappers into quac.h
  * - variable number of arguments to add_to_ham and add_to_lin
  * - add_to_ham_mult4 for coupling between two vec subsystems
@@ -19,7 +18,6 @@ int op_finalized;
 Mat full_A;
 long total_levels;
 int num_subsystems;
-double** _hamiltonian;
 operator subsystem_list[MAX_SUB];
 
 /*
@@ -99,7 +97,11 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
   /* Increase total_levels */
   total_levels = total_levels * number_of_levels;
 
-  subsystem_list[num_subsystems] = (*new_vec);
+  /* 
+   * We store just the first VEC in the subsystem list, since it has
+   * enough information to define all others
+   */
+  subsystem_list[num_subsystems] = (*new_vec)[0];
   num_subsystems++;
   return;
 
@@ -634,14 +636,6 @@ void _check_initialized_A(){
      */
     if (nid==0) {
       printf("Operators created. Total Hilbert space size: %d\n",total_levels);
-      _hamiltonian = malloc(total_levels*sizeof(double*));
-      for (i=0;i<total_levels;i++){
-        _hamiltonian[i] = malloc(total_levels*sizeof(double));
-        /* Initialize to 0 */
-        for (j=0;j<total_levels;j++){
-          _hamiltonian[i][j] = 0.0;
-        }
-      }
     }
     dim = total_levels*total_levels;
     /* Setup petsc matrix */
@@ -653,84 +647,4 @@ void _check_initialized_A(){
   }
 
   return;
-
 }
-
-/*
- * print_ham prints the dense hamiltonian
- */
-void print_ham(){
-  int i,j;
-  FILE *fp_ham;
-
-  fp_ham = fopen("ham","w");
-
-  if (nid==0){
-    for (i=0;i<total_levels;i++){
-      for (j=0;j<total_levels;j++){
-        fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
-      }
-      fprintf(fp_ham,"\n");
-    }
-  }
-  fclose(fp_ham);
-  return;
-}
-
-
-
-
-
-/*
-  NOTE: Don't allow addition of operators? Addition handled only in add_to_ham?
-        Simplifies storage of operators - ALL will be defined by a single diagonal
-  combine_op calculates a*op(handle1) * b*op(handle2)
-  Inputs:
-         double a:    scalar to multiply op(handle1)
-         int handle1: handle of first operator to combine
-         double b:    scalar to multiply op(handle2)
-         int handle2: handle of second operator to combine
-  Outputs:
-         int handle3: handle of combined operator
-
-
-         NOTE: PROBABLY WON'T USE! add_to_ham_comb instead
- */
-/* void combine_op(double a,int handle1,double b,int handle2,int handle3){ */
-/*   int i; */
-/*   int diag1,diag2,levels1,levels2,new_levels,new_diag; */
-
-/*   diag1 = operator_list[handle1].diagonal_start; */
-/*   diag2 = operator_list[handle2].diagonal_start; */
-  
-/*   operator_list[num_ops].n_before = 1; */
-/*   new_levels                       = levels1*levels2; */
-/*   operator_list[num_ops].my_levels = new_levels; */
-  
-/*   /\* */
-/*     The new diagonal offset is n_a * k_a + k_b, */
-/*     where k_i = diagonal offset of i */
-/*   *\/ */
-/*   new_diag                              = levels1*diag1+diag2; */
-/*   operator_list[num_ops].diagonal_start = new_diag; */
-
-  
-/*   if (abs(new_diag)>new_levels&&nid==0) { */
-/*     printf("ERROR! new_diag is greater than new_levels!\n"); */
-/*     printf("       The new operator will be 0 everywhere!\n"); */
-/*     printf("       This should not happen!\n"); */
-/*     exit(0); */
-/*   } */
-  
-/*   operator_list[num_ops].matrix_diag    = malloc(new_levels-abs(new_diag)*sizeof(double)); */
-
-/*   /\* Set the values of the new operator - first initialize to 0 *\/ */
-/*   for (i=0;i<new_levels-abs(new_diag);i++){ */
-/*     operator_list[num_ops].matrix_diag[i] = 0.0; */
-/*   } */
-
-  
-/*   /\* Increment number of ops, since we've finished adding this *\/ */
-/*   num_ops++; */
-/*   return; */
-/* } */

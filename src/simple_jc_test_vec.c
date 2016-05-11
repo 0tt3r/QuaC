@@ -60,8 +60,10 @@ int main(int argc,char **args){
   add_lin_vec(gamma,sm[0],sm[1]);
   add_lin_vec(sqrt(2)*gamma,sm[1],sm[2]);
 
-  //  print_ham();
   steady_state();
+
+  destroy_vec(&sm);
+  destroy_op(&a);
 
   QuaC_finalize();
   return 0;

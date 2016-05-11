@@ -18,7 +18,5 @@ extern Mat  full_A;
 extern int  op_finalized;
 extern long total_levels;
 extern int  num_subsystems;
-extern double** _hamiltonian;
-
 
 #endif
