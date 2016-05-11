@@ -22,107 +22,93 @@ double** _hamiltonian;
 operator subsystem_list[MAX_SUB];
 
 /*
-  create_op creates a basic set of operators, namely the creation, annihilation, and
-  number operator. 
-  Inputs:
-         int number_of_levels: number of levels for this basic set
-  Outputs:
-         int op_create:  handle of creation operator
-         int op_destroy: handle of annilitation operator
-         int op_number:  handle of number operator
-
+ * create_op creates a basic set of operators, namely the creation, annihilation, and
+ * number operator. 
+ * Inputs:
+ *        int number_of_levels: number of levels for this basic set
+ * Outputs:
+ *       operator *new_op: lowering op (op), raising op (op->dag), and number op (op->n)
  */
 
 void create_op(int number_of_levels,operator *new_op) {
   operator temp = NULL;
-  operator temp2 = NULL;
-  operator temp3 = NULL;
-  /* Check to make sure petsc was initialize */
-  if (!petsc_initialized){ 
-    if (nid==0){
-      printf("ERROR! You need to call QuaC_initialize before creating\n");
-      printf("       any operators!");
-      exit(0);
-    }
-  }
 
-  /* Set up counters on first call */
-  if (!op_initialized){
-    op_finalized   = 0;
-    total_levels   = 1;
-    op_initialized = 1;
-  }
-    
-  if (num_subsystems+1>MAX_SUB&&nid==0){
-    if (nid==0){
-      printf("ERROR! Too many systems for this MAX_SUB\n");
-      exit(0);
-    }
-  }
-
-  if (op_finalized){
-    if (nid==0){
-      printf("ERROR! You cannot add more operators after\n");
-      printf("       calling add_to_ham or add_to_lin!\n");
-      exit(0);
-    }
-  }
+  check_initialized_op();
 
   /* First make the annihilation operator */
-  temp           = malloc(sizeof(struct operator));
-  temp->n_before = total_levels;
-  temp->my_levels = number_of_levels;
+  temp             = malloc(sizeof(struct operator));
+  temp->n_before   = total_levels;
+  temp->my_levels  = number_of_levels;
   temp->my_op_type = LOWER;
   /* Since this is a basic operator, not a vec, set positions to -1 */
-  temp->position = -1;
-  *new_op = temp;
+  temp->position   = -1;
+  *new_op          = temp;
 
-  temp2           = malloc(sizeof(struct operator));
-  temp2->n_before = total_levels;
-  temp2->my_levels = number_of_levels;
-  temp2->my_op_type = RAISE;
+  temp             = malloc(sizeof(struct operator));
+  temp->n_before   = total_levels;
+  temp->my_levels  = number_of_levels;
+  temp->my_op_type = RAISE;
   /* Since this is a basic operator, not a vec, set positions to -1 */
-  temp2->position = -1;
-  (*new_op)->dag = temp2;
+  temp->position   = -1;
+  (*new_op)->dag   = temp;
 
-  temp3           = malloc(sizeof(struct operator));
-  temp3->n_before = total_levels;
-  temp3->my_levels = number_of_levels;
-  temp3->my_op_type = NUMBER;
+  temp             = malloc(sizeof(struct operator));
+  temp->n_before   = total_levels;
+  temp->my_levels  = number_of_levels;
+  temp->my_op_type = NUMBER;
   /* Since this is a basic operator, not a vec, set positions to -1 */
-  temp3->position = -1;
+  temp->position   = -1;
 
-  (*new_op)->n = temp3;
+  (*new_op)->n     = temp;
 
-  /* (*new_op)->dag           = malloc(sizeof(struct operator)); */
-  /* /\* Now, make the creation operator *\/ */
-  /* (*new_op)->dag->n_before = total_levels; */
-  /* (*new_op)->dag->my_levels = number_of_levels; */
-  /* (*new_op)->dag->my_op_type = RAISE; */
-  /* (*new_op)->dag->position = -1; */
-  /* (*new_op)->n           = malloc(sizeof(struct operator)); */
-  /* /\* Now, make the number operator *\/ */
-  /* (*new_op)->n->n_before = total_levels; */
-  /* (*new_op)->n->my_levels = number_of_levels; */
-  /* (*new_op)->n->my_op_type = NUMBER; */
-  /* (*new_op)->n->position = -1; */
   /* Increase total_levels */
-  if (total_levels==0){
-    total_levels = number_of_levels;
-  } else {
-    total_levels = total_levels * number_of_levels;
-  }
+  total_levels = total_levels * number_of_levels;
 
+  /* Add to list */
   subsystem_list[num_subsystems] = (*new_op);
   num_subsystems++;
   return;
 }
 
 /*
+ * create_op creates a basic set of operators, namely the creation, annihilation, and
+ * number operator. 
+ * Inputs:
+ *        int number_of_levels: number of levels for this basic set
+ * Outputs:
+ *       operator *new_op: lowering op (op), raising op (op->dag), and number op (op->n)
+ */
+
+void create_vec(int number_of_levels,vec_op *new_vec) {
+  operator temp = NULL;
+  int i;
+  check_initialized_op();
+
+  (*new_vec) = malloc(number_of_levels*(sizeof(struct operator*)));
+  for (i=0;i<number_of_levels;i++){
+    temp             = malloc(sizeof(struct operator));
+    temp->n_before   = total_levels;
+    temp->my_levels  = number_of_levels;
+    temp->my_op_type = VEC;
+    /* This is a VEC operator; set its position */
+    temp->position   = i;
+    (*new_vec)[i]       = temp;
+  }
+
+  /* Increase total_levels */
+  total_levels = total_levels * number_of_levels;
+
+  subsystem_list[num_subsystems] = (*new_vec);
+  num_subsystems++;
+  return;
+
+}
+
+/*
  * add_to_ham adds a*op(handle1) to the hamiltonian
  * Inputs:
  *        double a:    scalar to multiply op(handle1)
- *        int handle1: handle of first operator to combine
+ *        operator op: operator to add
  * Outputs:
  *        none
  */
@@ -171,9 +157,9 @@ void add_to_ham(double a,operator op){
 /*
  * add_to_ham_comb adds a*op(handle1)*op(handle2) to the hamiltonian
  * Inputs:
- *        double a:    scalar to multiply op(handle1)
- *        int handle1: handle of first operator to combine
- *        int handle2: handle of second operator to combine
+ *        double a:     scalar to multiply op(handle1)
+ *        operator op1: the first operator
+ *        operator op2: the second operator
  * Outputs:
  *        none
  */
@@ -271,6 +257,53 @@ void add_lin(double a,operator op){
   return;
 }
 
+/*
+ * check_initialized_op checks if petsc was initialized and sets up variables
+ * for op creation. It also errors if there are too many subsystems or
+ * if add_to_ham or add_to_lin was called.
+ */
+
+void check_initialized_op(){
+  /* Check to make sure petsc was initialize */
+  if (!petsc_initialized){ 
+    if (nid==0){
+      printf("ERROR! You need to call QuaC_initialize before creating\n");
+      printf("       any operators!");
+      exit(0);
+    }
+  }
+
+  /* Set up counters on first call */
+  if (!op_initialized){
+    op_finalized   = 0;
+    total_levels   = 1;
+    op_initialized = 1;
+  }
+    
+  if (num_subsystems+1>MAX_SUB&&nid==0){
+    if (nid==0){
+      printf("ERROR! Too many systems for this MAX_SUB\n");
+      exit(0);
+    }
+  }
+
+  if (op_finalized){
+    if (nid==0){
+      printf("ERROR! You cannot add more operators after\n");
+      printf("       calling add_to_ham or add_to_lin!\n");
+      exit(0);
+    }
+  }
+
+}
+
+
+
+/*
+ * check_initialized_A checks to make sure petsc was initialized,
+ * some ops were created, and, on first call, sets up the 
+ * data structures for the matrices.
+ */
 
 void check_initialized_A(){
   int            i,j;

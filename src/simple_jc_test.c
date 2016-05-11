@@ -17,9 +17,9 @@
 
 int main(int argc,char **args){
   double wc,wa,g,kappa,gamma,rate;
-  int num_cavity,N_th;
+  int num_cavity,N_th,i;
   operator a,sm,sm2,a2;
-
+  vec_op   nv;
   
   wc         = 1.0*2*M_PI;
   wa         = 1.0*2*M_PI;
@@ -32,46 +32,47 @@ int main(int argc,char **args){
   QuaC_initialize(argc,args);
 
   create_op(num_cavity,&a);
-  create_op(2,&sm);
-  create_op(2,&sm2);
-  create_op(2,&a2);
-
+  //  create_op(2,&sm);
+  /* create_op(2,&sm2); */
+  /* create_op(2,&a2); */
+  create_vec(2,&nv);
   //  printf("n_before: %d\n",a.n->n_before);
   /* Setup simple JC Hamiltonian */
   add_to_ham(wc,a->n); //wc * (at*a)
-  add_to_ham(wa,sm->n); //wa * (smt*sm)
+  add_to_ham(wa,nv[1]);
+  /* add_to_ham(wa,sm->n); //wa * (smt*sm) */
 
-  add_to_ham_comb(g,a->dag,sm); //g * (at*sm)
-  add_to_ham_comb(g,a,sm->dag); //g * (a*smt)
+  /* add_to_ham_comb(g,a->dag,sm); //g * (at*sm) */
+  /* add_to_ham_comb(g,a,sm->dag); //g * (a*smt) */
 
 
-  add_to_ham_comb(2*g,a->dag,sm2);
-  add_to_ham_comb(2*g,a,sm2->dag);
-  add_to_ham_comb(3*g,sm->dag,sm2);
-  add_to_ham_comb(3*g,sm,sm2->dag);
+  /* add_to_ham_comb(2*g,a->dag,sm2); */
+  /* add_to_ham_comb(2*g,a,sm2->dag); */
+  /* add_to_ham_comb(3*g,sm->dag,sm2); */
+  /* add_to_ham_comb(3*g,sm,sm2->dag); */
   
-  add_to_ham_comb(5*g,a2->dag,sm2);
-  add_to_ham_comb(5*g,a2,sm2->dag);
+  /* add_to_ham_comb(5*g,a2->dag,sm2); */
+  /* add_to_ham_comb(5*g,a2,sm2->dag); */
 
 
-  /* Setup Lindblad operators */
+  /* /\* Setup Lindblad operators *\/ */
 
-  /* Cavity thermal term */
-  rate = kappa*(1+N_th);
-  add_lin(rate,a);
+  /* /\* Cavity thermal term *\/ */
+  /* rate = kappa*(1+N_th); */
+  /* add_lin(rate,a); */
 
-  rate = kappa*N_th;
-  add_lin(rate,a->dag);
+  /* rate = kappa*N_th; */
+  /* add_lin(rate,a->dag); */
 
-  rate = kappa*(1+N_th);
-  add_lin(rate,a2);
+  /* rate = kappa*(1+N_th); */
+  /* add_lin(rate,a2); */
 
-  rate = kappa*(N_th);
-  add_lin(rate,a2->dag);
+  /* rate = kappa*(N_th); */
+  /* add_lin(rate,a2->dag); */
 
-  /* Atom decay */
-  add_lin(gamma,sm);
-  add_lin(gamma,sm2->dag);
+  /* /\* Atom decay *\/ */
+  /* add_lin(gamma,sm); */
+  /* add_lin(gamma,sm2->dag); */
 
   print_ham();
   steady_state();

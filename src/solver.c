@@ -180,7 +180,7 @@ void get_populations(Vec x) {
         my_levels = subsystem_list[j]->my_levels;
         n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
         cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-        //TODO FIXME !!! Calculate populations correctly! Need cur_state
+
         populations[j] += tmp_real*cur_state;
       }
     }
