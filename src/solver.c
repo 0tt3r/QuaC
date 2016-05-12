@@ -13,7 +13,7 @@ void steady_state(){
   PC             pc;
   Vec            x,b;
   KSP            ksp; /* linear solver context */
-  int            row,col,its;
+  int            row,col,its,j;
   PetscInt       i,Istart,Iend;
   PetscScalar    mat_tmp;
   long           dim;
@@ -26,12 +26,29 @@ void steady_state(){
      * I have no idea why this works, I am copying it from qutip
      * We add 1.0 in the 0th spot and every n+1 after
      */
-    if(nid==0) {
+    if (nid==0) {
       row = 0;
-      for(i=0;i<total_levels;i++){
+      for (i=0;i<total_levels;i++){
         col = i*(total_levels+1);
         mat_tmp = 1.0 + 0.*PETSC_i;
         ierr = MatSetValue(full_A,row,col,mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+      }
+
+      /* Print dense ham, if it was asked for */
+      if (_print_dense_ham){
+        FILE *fp_ham;
+
+        fp_ham = fopen("ham","w");
+
+        if (nid==0){
+          for (i=0;i<total_levels;i++){
+            for (j=0;j<total_levels;j++){
+              fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
+            }
+            fprintf(fp_ham,"\n");
+          }
+        }
+        fclose(fp_ham);
       }
     }
   }
@@ -178,7 +195,7 @@ void get_populations(Vec x) {
     if ((i*total_levels+i)>=x_low&&(i*total_levels+i)<x_high) {
       /* Get the diagonal entry of rho */
       tmp_real = (double)PetscRealPart(xa[i*(total_levels)+i-x_low]);
-      printf("%f \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
+      //      printf("%e \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
       for(j=0;j<num_subsystems;j++){
         /*
          * We want to calculate the populations. To do that, we need 
@@ -213,16 +230,16 @@ void get_populations(Vec x) {
 
   /* Reduce results across cores */
   if(nid==0) {
-    MPI_Reduce(MPI_IN_PLACE,populations,num_subsystems,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE,populations,num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
   } else {
-    MPI_Reduce(populations,populations,num_subsystems,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+    MPI_Reduce(populations,populations,num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
   }
 
   /* Print results */
   if(nid==0) {
     printf("Populations: ");
     for(i=0;i<num_pop;i++){
-      printf(" %f ",populations[i]);
+      printf(" %e ",populations[i]);
     }
     printf("\n");
   }

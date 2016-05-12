@@ -9,6 +9,7 @@
  * - put wrappers into quac.h
  * - variable number of arguments to add_to_ham and add_to_lin
  * - add_to_ham_mult4 for coupling between two vec subsystems
+ * - add PetscLog for getting setup time
  */
 
 
@@ -19,6 +20,15 @@ Mat full_A;
 long total_levels;
 int num_subsystems;
 operator subsystem_list[MAX_SUB];
+int _print_dense_ham = 0;
+double **_hamiltonian;
+
+/*
+ * print_dense_ham tells the program to print the dense hamiltonian when it is constructed.
+ */
+void print_dense_ham(){
+  _print_dense_ham = 1;
+}
 
 /*
  * create_op creates a basic set of operators, namely the creation, annihilation, and
@@ -123,13 +133,11 @@ void add_to_ham(double a,operator op){
 
   /*
    * Construct the dense Hamiltonian only on the master node
-   * extra_before and extra_after are 1, letting the code know to
-   * do the dense, operator space H.
    */
-  /* if (nid==0) { */
-  /*   mat_scalar = a; */
-  /*   _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,op->position,1,1); */
-  /* } */
+  if (nid==0&&_print_dense_ham) {
+    mat_scalar = a;
+    _add_to_dense_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,op->position);
+  }
 
   /*
    * Add -i * (I cross H) to the superoperator matrix, A
@@ -173,6 +181,24 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
   _check_initialized_A();
   multiply_vec = _check_op_type2(op1,op2);
   
+
+  if (nid==0&&_print_dense_ham){
+    /* Add the terms to the dense Hamiltonian */
+    if (multiply_vec){
+      /* 
+       * We are multiplying two vec ops. This will only be one value (of 1.0) in the 
+       * subspace, at location op1->position, op2->position.
+       */
+      n_after    = total_levels/(op1->my_levels*op1->n_before);
+      _add_to_dense_kron_ij(a,op1->position,op2->position,op1->n_before,
+                          n_after,op1->my_levels);
+    } else {
+      /* We are multiplying two normal ops and have to do a little more work. */
+      _add_to_dense_kron_comb(a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                              op2->n_before,op2->my_levels,op2->my_op_type,op2->position);
+    }
+  }
+  
   /*
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
@@ -195,6 +221,7 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                             total_levels,1,1);
   }
+
   /*
    * Add i * (H cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
@@ -239,6 +266,24 @@ void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
   int         first_pair;
   _check_initialized_A();
   first_pair = _check_op_type3(op1,op2,op3);
+
+
+  /* Add to the dense hamiltonian */
+  if (nid==0&&_print_dense_ham){
+    if (first_pair) {
+      /* The first pair is the vec pair and op3 is the normal op*/  
+      _add_to_dense_kron_comb_vec(a,op3->n_before,op3->my_levels,
+                                  op3->my_op_type,op1->n_before,op1->my_levels,
+                                  op1->position,op2->position);
+      
+    } else {
+      /* The last pair is the vec pair and op1 is the normal op*/  
+      _add_to_dense_kron_comb_vec(a,op1->n_before,op1->my_levels,
+                                  op1->my_op_type,op2->n_before,op2->my_levels,
+                                  op2->position,op3->position);
+      
+    }
+  }
 
   /*
    * Add -i * (I cross H) to the superoperator matrix, A
@@ -334,9 +379,15 @@ void add_lin(double a,operator op){
   return;
 }
 
-
 /*
- * add_lin_vec adds a Lindblad L(C=|op1><op2|) term to the system of equations, where
+ * add_lin_mult2 adds a Lindblad term to the L.
+ *
+ * For two normal ops, C1 and C2
+ * L(C1*C2)p = C1*C2 p (C1*C2)^t - 1/2 ((C1*C2)^t (C1*C2) p + p (C1*C2)^t (C1*C2))
+ * Or, in superoperator space, where C = C1*C2
+ * Lp    = C cross C - 1/2(C^t C cross I + I cross C^t C) p
+ *
+ * For two vecs, we add L(C=|op1><op2|) term to the system of equations, where
  * L(|1><2|)p = |1><2| p |2><1| - 1/2 (|2><2| p + p |2><2|)
  * Or, in superoperator space
  * Lp    = |1><2| cross |1><2| - 1/2(|2><2| cross I + I cross |2><2|) p
@@ -350,7 +401,7 @@ void add_lin(double a,operator op){
  *        none
  */
 
-void add_lin_vec(double a,operator op1,operator op2){
+void add_lin_mult2(double a,operator op1,operator op2){
   PetscScalar mat_scalar;
   int         k3,i1,j1,i2,j2,i_comb,j_comb,comb_levels;
   int         multiply_vec,n_after;   
@@ -358,73 +409,110 @@ void add_lin_vec(double a,operator op1,operator op2){
   _check_initialized_A();
   multiply_vec =  _check_op_type2(op1,op2);
 
-  if (!multiply_vec){
-    if (nid==0) {
-      printf("ERROR! Lindblad of two basic ops not supported.");
-      exit(0);
-    }
-  }
-
-  /*
-   * Add (I cross C^t C)  = (I cross |2><2| ) to the superoperator matrix, A
-   * Which is (I_total cross I_before cross C^t C cross I_after)
-   * Since this is an additional I_total before, we simply
-   * set extra_before to total_levels
-   *
-   * Since this is an outer product of VEC ops, its i,j is just op2->position,op2->position,
-   * and its val is 1.0
-   */
-  n_after    = total_levels/(op1->my_levels*op1->n_before);
-  mat_scalar = -0.5*a;
-
-  _add_to_PETSc_kron_ij(mat_scalar,op2->position,op2->position,op2->n_before*total_levels,
-                        n_after,op2->my_levels);
-  /*
-   * Add (C^t C cross I) = (|2><2| cross I) to the superoperator matrix, A
-   * Which is (I_before cross C^t C cross I_after cross I_total)
-   * Since this is an additional I_total after, we simply
-   * set extra_after to total_levels
-   */
-  _add_to_PETSc_kron_ij(mat_scalar,op2->position,op2->position,op2->n_before,
-                        n_after*total_levels,op2->my_levels);
-
-  /*
-   * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
-   * representation of C. Let I_b = I_before and I_a = I_after
-   * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
-   * or (I_b cross C cross I_ab cross C cross I_a)
-   * This is just like add_to_ham_comb, with n_between = n_after*n_before
-   */
-  comb_levels = op1->my_levels*op1->my_levels*op1->n_before*n_after;
-  mat_scalar = a;
-  for (k3=0;k3<op2->n_before*n_after;k3++){
+  if (multiply_vec){
     /*
-     * Since this is an outer product of VEC ops, there is only 
-     * one entry in C (and it is 1.0); we need not loop over anything.
+     * Add (I cross C^t C)  = (I cross |2><2| ) to the superoperator matrix, A
+     * Which is (I_total cross I_before cross C^t C cross I_after)
+     * Since this is an additional I_total before, we simply
+     * set extra_before to total_levels
+     *
+     * Since this is an outer product of VEC ops, its i,j is just op2->position,op2->position,
+     * and its val is 1.0
      */
-    i1   = op1->position;
-    j1   = op2->position;
-    i2   = i1 + k3*op1->my_levels;
-    j2   = j1 + k3*op1->my_levels;
+    n_after    = total_levels/(op1->my_levels*op1->n_before);
+    mat_scalar = -0.5*a;
 
-    /* 
-     * Using the standard Kronecker product formula for 
-     * A and I cross B, we calculate
-     * the i,j pair for handle1 cross I cross handle2.
-     * Through we do not use it here, we note that the new
-     * matrix is also diagonal.
-     * We need my_levels*n_before*n_after because we are taking
-     * C cross (Ia cross Ib cross C), so the the size of the second operator
-     * is my_levels*n_before*n_after
+    _add_to_PETSc_kron_ij(mat_scalar,op2->position,op2->position,op2->n_before*total_levels,
+                          n_after,op2->my_levels);
+    /*
+     * Add (C^t C cross I) = (|2><2| cross I) to the superoperator matrix, A
+     * Which is (I_before cross C^t C cross I_after cross I_total)
+     * Since this is an additional I_total after, we simply
+     * set extra_after to total_levels
      */
-    i_comb = op1->my_levels*op1->n_before*n_after*i1 + i2;
-    j_comb = op1->my_levels*op1->n_before*n_after*j1 + j2;
+    _add_to_PETSc_kron_ij(mat_scalar,op2->position,op2->position,op2->n_before,
+                          n_after*total_levels,op2->my_levels);
+
+    /*
+     * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
+     * representation of C. Let I_b = I_before and I_a = I_after
+     * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
+     * or (I_b cross C cross I_ab cross C cross I_a)
+     * This is just like add_to_ham_comb, with n_between = n_after*n_before
+     */
+    comb_levels = op1->my_levels*op1->my_levels*op1->n_before*n_after;
+    mat_scalar = a;
+    for (k3=0;k3<op2->n_before*n_after;k3++){
+      /*
+       * Since this is an outer product of VEC ops, there is only 
+       * one entry in C (and it is 1.0); we need not loop over anything.
+       */
+      i1   = op1->position;
+      j1   = op2->position;
+      i2   = i1 + k3*op1->my_levels;
+      j2   = j1 + k3*op1->my_levels;
+
+      /* 
+       * Using the standard Kronecker product formula for 
+       * A and I cross B, we calculate
+       * the i,j pair for handle1 cross I cross handle2.
+       * Through we do not use it here, we note that the new
+       * matrix is also diagonal.
+       * We need my_levels*n_before*n_after because we are taking
+       * C cross (Ia cross Ib cross C), so the the size of the second operator
+       * is my_levels*n_before*n_after
+       */
+      i_comb = op1->my_levels*op1->n_before*n_after*i1 + i2;
+      j_comb = op1->my_levels*op1->n_before*n_after*j1 + j2;
     
 
-    _add_to_PETSc_kron_ij(mat_scalar,i_comb,j_comb,op1->n_before,
-                          n_after,comb_levels);
+      _add_to_PETSc_kron_ij(mat_scalar,i_comb,j_comb,op1->n_before,
+                            n_after,comb_levels);
     
+    }
+  } else {
+    /* Multiply two normal ops */
+    /* Only allow a a^\dagger terms from the same subspace - check that this is true*/
+    if (op1->n_before!=op2->n_before){
+      if (nid==0){
+        printf("ERROR! Operators must be from the same subspace to be multiplied\n");
+        printf("       in a Lindblad term!\n");
+        exit(0);
+      }
+    }
+    if (op1->my_op_type==RAISE&&op2->my_op_type==LOWER){
+      if (nid==0){
+        printf("ERROR! Please use provided a->n type terms to add the \n");
+        printf("       number operator to a Lindblad term!\n");
+        exit(0);
+      }
+    }
+    if (op1->my_op_type!=LOWER&&op2->my_op_type!=RAISE){
+      if (nid==0){
+        printf("ERROR! Only terms of the type a a^\\dagger are currently\n");
+        printf("       supported for multiplied Lindblad terms.\n");
+        exit(0);
+      }
+    }
+    /*
+     * Add (I cross C^t C) to the superoperator matrix, A
+     */
+    mat_scalar = -0.5*a;
+    _add_to_PETSc_kron_lin2(mat_scalar,op1->n_before,op1->my_levels,total_levels,1);
+    
+    /*
+     * Add (C^t C cross I) to the superoperator matrix, A
+     */
+    mat_scalar = -0.5*a;
+    _add_to_PETSc_kron_lin2(mat_scalar,op1->n_before,op1->my_levels,1,total_levels);
+    /*
+     * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
+     */
+    mat_scalar = a;
+    _add_to_PETSc_kron_lin2_comb(mat_scalar,op1->n_before,op1->my_levels);
+
   }
+
   return;
 }
 
@@ -608,7 +696,7 @@ int _check_op_type3(operator op1,operator op2,operator op3){
  */
 
 void _check_initialized_A(){
-  int            i,j;
+  int            i;
   long           dim;
   PetscErrorCode ierr;
 
@@ -636,7 +724,14 @@ void _check_initialized_A(){
      */
     if (nid==0) {
       printf("Operators created. Total Hilbert space size: %d\n",total_levels);
+      if (_print_dense_ham){
+        _hamiltonian = malloc(total_levels*sizeof(double*));
+        for (i=0;i<total_levels;i++){
+          _hamiltonian[i] = malloc(total_levels*sizeof(double));
+        }
+      }
     }
+
     dim = total_levels*total_levels;
     /* Setup petsc matrix */
     //FIXME - do something better than 5*total_levels!!

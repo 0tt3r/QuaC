@@ -7,6 +7,7 @@
 
 int petsc_initialized = 0;
 int nid;
+int np;
 
 /* 
  * QuaC_initialize initializes petsc, gets each core's nid, and lets the
@@ -23,6 +24,9 @@ void QuaC_initialize(int argc,char **args){
 #endif
   /* Get core's id */
   ierr              = MPI_Comm_rank(PETSC_COMM_WORLD,&nid);CHKERRQ(ierr);
+  /* Get number of processors */
+  ierr              = MPI_Comm_size(PETSC_COMM_WORLD,&np);CHKERRQ(ierr);
+
   petsc_initialized = 1;
 }
 

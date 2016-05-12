@@ -57,8 +57,8 @@ int main(int argc,char **args){
   add_lin(rate,a->dag);
 
   /* Atom decay */
-  add_lin_vec(gamma,sm[0],sm[1]);
-  add_lin_vec(sqrt(2)*gamma,sm[1],sm[2]);
+  add_lin_mult2(gamma,sm[0],sm[1]);
+  add_lin_mult2(sqrt(2)*gamma,sm[1],sm[2]);
 
   steady_state();
 

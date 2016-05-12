@@ -73,7 +73,6 @@ int main(int argc,char **args){
   add_lin(gamma,sm);
   add_lin(gamma,sm2->dag);
 
-  //  print_ham();
   steady_state();
 
   destroy_op(&a);
