@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "quac.h"
 #include "operators.h"
 #include "solver.h"
@@ -9,11 +10,12 @@
 void add_nv_terms(vec_op,operator,double);
 
 int main(int argc,char **args){
-  int N_th,num_phonon,num_nv,i;
-  double w_m,lambda_s;
-  double Q,kHz,MHz,GHz,rate;
+  int      N_th,num_phonon,num_nv,i;
+  double   w_m,lambda_s;
+  double   Q,kHz,MHz,GHz,rate;
   operator a;
   vec_op   *nv;
+  FILE     *fp;
   /* enumerate state names so we don't to remember them */
   enum STATE {gp=0,g0,gm,ep,e0,em,s};
 
@@ -26,11 +28,16 @@ int main(int argc,char **args){
   MHz = GHz*1e-3;
   kHz = MHz*1e-3;
 
-
-  /* Set important parameters here */
   N_th       = 10;
-  num_phonon = 8;
-  num_nv     = 2;
+  num_phonon = 152;
+  num_nv     = 1;
+
+  /* Read in important parameters */
+  fp         = fopen("parameters","r");
+  fscanf(fp, "%*[^\n]\n", NULL); //Skip first line
+  fscanf(fp,"%d %d %d",&num_phonon,&N_th,&num_nv);
+  fclose(fp);
+
   lambda_s   = 100*1.06*kHz*2*M_PI;
 
   nv = malloc(num_nv*sizeof(vec_op));
