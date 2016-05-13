@@ -37,7 +37,7 @@ int main(int argc,char **args){
   fscanf(fp, "%*[^\n]\n", NULL); //Skip first line
   fscanf(fp,"%d %d %d",&num_phonon,&N_th,&num_nv);
   fclose(fp);
-
+  if (nid==0) printf("Num_phonon: %d N_th %d num_nv: %d\n",num_phonon,N_th,num_nv);
   lambda_s   = 100*1.06*kHz*2*M_PI;
 
   nv = malloc(num_nv*sizeof(vec_op));

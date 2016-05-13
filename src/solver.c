@@ -18,6 +18,7 @@ void steady_state(){
   PetscScalar    mat_tmp;
   long           dim;
 
+  if (nid==0) printf("Solving for steady state...\n");
   dim = total_levels*total_levels;
 
   if (!stab_added){

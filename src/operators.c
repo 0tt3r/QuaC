@@ -698,6 +698,7 @@ int _check_op_type3(operator op1,operator op2,operator op3){
 void _check_initialized_A(){
   int            i;
   long           dim;
+  PetscInt       num_nnz_per_row;
   PetscErrorCode ierr;
 
   /* Check to make sure petsc was initialize */
@@ -733,10 +734,11 @@ void _check_initialized_A(){
     }
 
     dim = total_levels*total_levels;
+    num_nnz_per_row = 30*total_levels;
     /* Setup petsc matrix */
     //FIXME - do something better than 5*total_levels!!
     ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim,
-                        5*total_levels,NULL,5*total_levels,NULL,&full_A);CHKERRQ(ierr);
+                        num_nnz_per_row,NULL,num_nnz_per_row,NULL,&full_A);CHKERRQ(ierr);
     ierr = MatSetFromOptions(full_A);CHKERRQ(ierr);
     ierr = MatSetUp(full_A);CHKERRQ(ierr);
   }
