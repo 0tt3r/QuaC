@@ -32,7 +32,7 @@ void steady_state(){
       for (i=0;i<total_levels;i++){
         col = i*(total_levels+1);
         mat_tmp = 1.0 + 0.*PETSC_i;
-        ierr = MatSetValue(full_A,row,col,mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+        MatSetValue(full_A,row,col,mat_tmp,ADD_VALUES);
       }
 
       /* Print dense ham, if it was asked for */
@@ -55,7 +55,7 @@ void steady_state(){
   }
 
   
-  ierr = MatGetOwnershipRange(full_A,&Istart,&Iend);CHKERRQ(ierr);
+  MatGetOwnershipRange(full_A,&Istart,&Iend);
   /*
    * Explicitly add 0.0 to all diagonal elements;
    * this fixes a 'matrix in wrong state' message that PETSc

@@ -12,6 +12,7 @@
  * - add PetscLog for getting setup time
  */
 
+#define MAX_NNZ_PER_ROW 10
 
 static int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -698,8 +699,9 @@ int _check_op_type3(operator op1,operator op2,operator op3){
 void _check_initialized_A(){
   int            i;
   long           dim;
-  PetscInt       num_nnz_per_row;
+  PetscInt       *d_nz,*o_nz,Istart,Iend;
   PetscErrorCode ierr;
+  
 
   /* Check to make sure petsc was initialize */
   if (!petsc_initialized){ 
@@ -734,13 +736,48 @@ void _check_initialized_A(){
     }
 
     dim = total_levels*total_levels;
-    num_nnz_per_row = 30*total_levels;
     /* Setup petsc matrix */
-    //FIXME - do something better than 5*total_levels!!
-    ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim,
-                        num_nnz_per_row,NULL,num_nnz_per_row,NULL,&full_A);CHKERRQ(ierr);
-    ierr = MatSetFromOptions(full_A);CHKERRQ(ierr);
-    ierr = MatSetUp(full_A);CHKERRQ(ierr);
+    MatCreate(PETSC_COMM_WORLD,&full_A);
+    //    MatSetType(full_A,MATMPIAIJ);
+    MatSetSizes(full_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+    MatSetFromOptions(full_A);
+    
+    if (nid==0){
+      /*
+       * Only the first row has extra nonzeros, from the stabilization.
+       * We want to allocate extra memory for that row, but not for any others.
+       * Since we put total_levels extra elements (spread evenly), we
+       * add a fraction to the diagonal part and the remaining to the
+       * off diagonal part. We assume that core 0 owns roughly dim/np
+       * rows.
+       */
+      PetscMalloc1(ceil(dim/np),&d_nz); /* malloc array of nnz diagonal elements*/
+      PetscMalloc1(ceil(dim/np),&o_nz); /* malloc array of nnz off diagonal elements*/
+
+      d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels);
+      o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels));
+
+      for (i=1;i<ceil(dim/np);i++){
+        d_nz[i] = MAX_NNZ_PER_ROW;
+        o_nz[i] = MAX_NNZ_PER_ROW;
+      }
+      MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
+      PetscFree(d_nz);
+      PetscFree(o_nz);
+      printf("Iend-Istart: %d %d\n",Iend,Istart);
+    } else {
+      MatMPIAIJSetPreallocation(full_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
+    }
+
+    /* if (nid==0){ */
+    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
+    /*                       ,NULL,,NULL,&full_A);CHKERRQ(ierr); */
+    /* } else { */
+    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
+    /*                       10,NULL,10,NULL,&full_A);CHKERRQ(ierr); */
+    /* } */
+
+    ierr = MatSetUp(full_A);
   }
 
   return;
