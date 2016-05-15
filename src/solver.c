@@ -10,6 +10,7 @@ static int       stab_added      = 0;
 
 void steady_state(){
   PetscErrorCode ierr;
+  PetscViewer    mat_view;
   PC             pc;
   Vec            x,b;
   KSP            ksp; /* linear solver context */
@@ -18,10 +19,11 @@ void steady_state(){
   PetscScalar    mat_tmp;
   long           dim;
 
-  if (nid==0) printf("Solving for steady state...\n");
+
   dim = total_levels*total_levels;
 
   if (!stab_added){
+    if (nid==0) printf("Adding stabilization...\n");
     /*
      * Add elements to the matrix to make the normalization work
      * I have no idea why this works, I am copying it from qutip
@@ -61,16 +63,19 @@ void steady_state(){
    * this fixes a 'matrix in wrong state' message that PETSc
    * gives if the diagonal was never initialized.
    */
+  if (nid==0) printf("Adding 0 to diagonal elements...\n");
   for (i=Istart;i<Iend;i++){
     mat_tmp = 0 + 0.*PETSC_i;
-    ierr = MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+    MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
   }
 
   
   /* Tell PETSc to assemble the matrix */
-  ierr = MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  ierr = MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-
+  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  if (nid==0) printf("Matrix Assembled.\n");
+  PetscViewerSetFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  MatView(full_A,mat_view);
   /*
    * Create parallel vectors.
    * - When using VecCreate(), VecSetSizes() and VecSetFromOptions(),
@@ -78,10 +83,10 @@ void steady_state(){
    * dimension; the parallel partitioning is determined at runtime.
    * - Note: We form 1 vector from scratch and then duplicate as needed.
    */
-  ierr = VecCreate(PETSC_COMM_WORLD,&b);CHKERRQ(ierr);
-  ierr = VecSetSizes(b,PETSC_DECIDE,dim);CHKERRQ(ierr);
-  ierr = VecSetFromOptions(b);CHKERRQ(ierr);
-  ierr = VecDuplicate(b,&x);CHKERRQ(ierr);
+  VecCreate(PETSC_COMM_WORLD,&b);
+  VecSetSizes(b,PETSC_DECIDE,dim);
+  VecSetFromOptions(b);
+  VecDuplicate(b,&x);
 
   /*
    * Set rhs, b, and solution, x to 1.0 in the first
@@ -111,48 +116,48 @@ void steady_state(){
   /*
    * Create linear solver context
    */
-  ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
+  KSPCreate(PETSC_COMM_WORLD,&ksp);
 
   /*
    * Set operators. Here the matrix that defines the linear system
    * also serves as the preconditioning matrix.
    */
-  ierr = KSPSetOperators(ksp,full_A,full_A);CHKERRQ(ierr);
+  KSPSetOperators(ksp,full_A,full_A);
   
   /*
    * Set good default options for solver
    */
   /* relative tolerance */
-  ierr = KSPSetTolerances(ksp,default_rtol,PETSC_DEFAULT,PETSC_DEFAULT,PETSC_DEFAULT);CHKERRQ(ierr);
+  KSPSetTolerances(ksp,default_rtol,PETSC_DEFAULT,PETSC_DEFAULT,PETSC_DEFAULT);
 
   /* bjacobi preconditioner */
-  ierr = KSPGetPC(ksp,&pc);CHKERRQ(ierr);
-  ierr = PCSetType(pc,PCJACOBI);CHKERRQ(ierr);
+  KSPGetPC(ksp,&pc);
+  PCSetType(pc,PCJACOBI);
 
   /* gmres solver with 100 restart*/
-  ierr = KSPSetType(ksp,KSPGMRES);CHKERRQ(ierr);
-  ierr = KSPGMRESSetRestart(ksp,default_restart);
+  KSPSetType(ksp,KSPGMRES);
+  KSPGMRESSetRestart(ksp,default_restart);
   /* 
    * Set runtime options, e.g.,
    *     -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
    */
-  ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
+  KSPSetFromOptions(ksp);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                       Solve the linear system
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-  
-  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
+  if (nid==0) printf("KSP set. Solving for steady state...\n");
+  KSPSolve(ksp,b,x);
   get_populations(x);
 
-  ierr = KSPGetIterationNumber(ksp,&its);CHKERRQ(ierr);
+  KSPGetIterationNumber(ksp,&its);
 
-  ierr = PetscPrintf(PETSC_COMM_WORLD,"Iterations %D\n",its);CHKERRQ(ierr);
+  PetscPrintf(PETSC_COMM_WORLD,"Iterations %D\n",its);
 
   /* Free work space */
-  ierr = KSPDestroy(&ksp);CHKERRQ(ierr);
-  ierr = VecDestroy(&x);CHKERRQ(ierr);
-  ierr = VecDestroy(&b);CHKERRQ(ierr);
+  KSPDestroy(&ksp);
+  VecDestroy(&x);
+  VecDestroy(&b);
 
   return;
 }
@@ -164,9 +169,8 @@ void get_populations(Vec x) {
   PetscScalar *xa;
   PetscReal   tmp_real;
   double      *populations;
-  PetscErrorCode ierr;
-  ierr = VecGetOwnershipRange(x,&x_low,&x_high);
-  ierr = VecGetArray(x,&xa);CHKERRQ(ierr); 
+  VecGetOwnershipRange(x,&x_low,&x_high);
+  VecGetArray(x,&xa); 
 
   /*
    * Loop through operators to see how many populations we need to 
@@ -246,7 +250,7 @@ void get_populations(Vec x) {
   }
 
   /* Put the array back in Petsc's hands */
-  ierr = VecRestoreArray(x,&xa);CHKERRQ(ierr);
+  VecRestoreArray(x,&xa);
   /* Free memory */
   free(i_sub_to_i_pop);
   free(populations);

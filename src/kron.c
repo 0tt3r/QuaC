@@ -120,7 +120,6 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
                            int n_before,int n_after,int my_levels){
   long k1,k2,i_ham,j_ham;
   int  my_start_af,my_end_af,my_start_bef,my_end_bef;
-  PetscErrorCode ierr;
 
   /* 
    * We want to parallelize on the largest of n_after or n_before,
@@ -165,7 +164,7 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
          */
         i_ham = i_op*n_after+k1+k2*my_levels*n_after;
         j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-        ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
+        MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);
       }
     }
 
@@ -206,10 +205,13 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
          */
         i_ham = i_op*n_after+k1+k2*my_levels*n_after;
         j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-        ierr       = MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);CHKERRQ(ierr);
+	MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);
       }
     }
   }
+  /* Flush the matrix assembly, so we don't create huge communication buffers */
+/*   MatAssemblyBegin(full_A,MAT_FLUSH_ASSEMBLY); */
+/*   MatAssemblyEnd(full_A,MAT_FLUSH_ASSEMBLY); */
 }
 
 /*

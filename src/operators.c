@@ -12,7 +12,7 @@
  * - add PetscLog for getting setup time
  */
 
-#define MAX_NNZ_PER_ROW 10
+#define MAX_NNZ_PER_ROW 15
 
 static int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -751,20 +751,21 @@ void _check_initialized_A(){
        * off diagonal part. We assume that core 0 owns roughly dim/np
        * rows.
        */
-      PetscMalloc1(ceil(dim/np),&d_nz); /* malloc array of nnz diagonal elements*/
-      PetscMalloc1(ceil(dim/np),&o_nz); /* malloc array of nnz off diagonal elements*/
+      
+      PetscMalloc1((dim/np)*5,&d_nz); /* malloc array of nnz diagonal elements*/
+      PetscMalloc1((dim/np)*5,&o_nz); /* malloc array of nnz off diagonal elements*/
 
-      d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels);
-      o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels));
+      d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
+      o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
 
-      for (i=1;i<ceil(dim/np);i++){
+      for (i=1;i<(dim/np)*5;i++){
         d_nz[i] = MAX_NNZ_PER_ROW;
         o_nz[i] = MAX_NNZ_PER_ROW;
       }
       MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
       PetscFree(d_nz);
       PetscFree(o_nz);
-      printf("Iend-Istart: %d %d\n",Iend,Istart);
+
     } else {
       MatMPIAIJSetPreallocation(full_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
     }
