@@ -120,98 +120,131 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
                            int n_before,int n_after,int my_levels){
   long k1,k2,i_ham,j_ham;
   int  my_start_af,my_end_af,my_start_bef,my_end_bef;
+  PetscInt Istart,Iend;
+  
+  MatGetOwnershipRange(full_A,&Istart,&Iend); //FIXME: Make these library global?
 
-  /* 
-   * We want to parallelize on the largest of n_after or n_before,
-   * because n_after and n_before will be 1 in some cases, so we
-   * would have no parallelization of that loop. As such, we
-   * check here which is bigger and split based on that.
-   */
-  if (n_after>n_before){
-    /* Parallelize the n_after loop */
-    my_start_af      = (n_after/np)*nid;
-    if (n_after%np>nid){
-      my_start_af   += nid;
-      my_end_af      = my_start_af+(n_after/np)+1;
-    } else {
-      my_start_af   += n_after % np;
-      my_end_af      = my_start_af+(n_after/np);
-    }
-    
-    for (k1=my_start_af;k1<my_end_af;k1++){ /* n_after loop */
-      for (k2=0;k2<n_before;k2++){ /* n_before loop */
-        /*
-         * Now we need to calculate the apropriate location of this
-         * within the full Hamiltonian matrix. We need to expand the operator
-         * from its small Hilbert space to the total Hilbert space.
-         * This expansion depends on the order in which the operators
-         * were added. For example, if we added 3 operators:
-         * A, B, and C (with sizes n_a, n_b, n_c, respectively), we would
-         * have (where the ' denotes in the full space and I_(n) means
-         * the identity matrix of size n):
-         *
-         * A' = A cross I_(n_b) cross I_(n_c)
-         * B' = I_(n_a) cross B cross I_(n_c)
-         * C' = I_(n_a) cross I_(n_b) cross C
-         * 
-         * For an arbitrary operator, we only care about
-         * the Hilbert space size before and the Hilbert space size
-         * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
-         *
-         * The calculation of i_ham and j_ham exploit the structure of 
-         * the tensor products - they are general for kronecker products
-         * of identity matrices with some matrix A
-         */
-        i_ham = i_op*n_after+k1+k2*my_levels*n_after;
-        j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-        MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);
-      }
-    }
 
-  } else {
-    /* Parallelize the n_before loop */
-    my_start_bef     = (n_before/np)*nid;
-    if (n_before%np>nid){
-      my_start_bef  += nid;
-      my_end_bef     = my_start_bef+(n_before/np)+1;
-    } else {
-      my_start_bef  += n_before % np;
-      my_end_bef     = my_start_bef+(n_before/np);
-    }
-
-    for (k1=0;k1<n_after;k1++){ /* n_after loop */
-      for (k2=my_start_bef;k2<my_end_bef;k2++){ /* n_before loop */
-        /*
-         * Now we need to calculate the apropriate location of this
-         * within the full Hamiltonian matrix. We need to expand the operator
-         * from its small Hilbert space to the total Hilbert space.
-         * This expansion depends on the order in which the operators
-         * were added. For example, if we added 3 operators:
-         * A, B, and C (with sizes n_a, n_b, n_c, respectively), we would
-         * have (where the ' denotes in the full space and I_(n) means
-         * the identity matrix of size n):
-         *
-         * A' = A cross I_(n_b) cross I_(n_c)
-         * B' = I_(n_a) cross B cross I_(n_c)
-         * C' = I_(n_a) cross I_(n_b) cross C
-         * 
-         * For an arbitrary operator, we only care about
-         * the Hilbert space size before and the Hilbert space size
-         * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
-         *
-         * The calculation of i_ham and j_ham exploit the structure of 
-         * the tensor products - they are general for kronecker products
-         * of identity matrices with some matrix A
-         */
-        i_ham = i_op*n_after+k1+k2*my_levels*n_after;
-        j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-	MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);
-      }
+  for (k1=0;k1<n_after;k1++){ /* n_after loop */
+    for (k2=0;k2<n_before;k2++){ /* n_before loop */
+      /*
+       * Now we need to calculate the apropriate location of this
+       * within the full Hamiltonian matrix. We need to expand the operator
+       * from its small Hilbert space to the total Hilbert space.
+       * This expansion depends on the order in which the operators
+       * were added. For example, if we added 3 operators:
+       * A, B, and C (with sizes n_a, n_b, n_c, respectively), we would
+       * have (where the ' denotes in the full space and I_(n) means
+       * the identity matrix of size n):
+       *
+       * A' = A cross I_(n_b) cross I_(n_c)
+       * B' = I_(n_a) cross B cross I_(n_c)
+       * C' = I_(n_a) cross I_(n_b) cross C
+       * 
+       * For an arbitrary operator, we only care about
+       * the Hilbert space size before and the Hilbert space size
+       * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
+       *
+       * The calculation of i_ham and j_ham exploit the structure of 
+       * the tensor products - they are general for kronecker products
+       * of identity matrices with some matrix A
+       */
+      i_ham = i_op*n_after+k1+k2*my_levels*n_after;
+      j_ham = j_op*n_after+k1+k2*my_levels*n_after;
+      if (i_ham>=Istart&&i_ham<Iend) MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);
     }
   }
-  /* Flush the matrix assembly, so we don't create huge communication buffers */
-/*   MatAssemblyBegin(full_A,MAT_FLUSH_ASSEMBLY); */
-/*   MatAssemblyEnd(full_A,MAT_FLUSH_ASSEMBLY); */
+
+  //FIXME: Put this code in separate routine?
+  /* /\*  */
+  /*  * We want to parallelize on the largest of n_after or n_before, */
+  /*  * because n_after and n_before will be 1 in some cases, so we */
+  /*  * would have no parallelization of that loop. As such, we */
+  /*  * check here which is bigger and split based on that. */
+  /*  *\/ */
+  /* if (n_after>n_before){ */
+  /*   /\* Parallelize the n_after loop *\/ */
+  /*   my_start_af      = (n_after/np)*nid; */
+  /*   if (n_after%np>nid){ */
+  /*     my_start_af   += nid; */
+  /*     my_end_af      = my_start_af+(n_after/np)+1; */
+  /*   } else { */
+  /*     my_start_af   += n_after % np; */
+  /*     my_end_af      = my_start_af+(n_after/np); */
+  /*   } */
+    
+  /*   for (k1=my_start_af;k1<my_end_af;k1++){ /\* n_after loop *\/ */
+  /*     for (k2=0;k2<n_before;k2++){ /\* n_before loop *\/ */
+  /*       /\* */
+  /*        * Now we need to calculate the apropriate location of this */
+  /*        * within the full Hamiltonian matrix. We need to expand the operator */
+  /*        * from its small Hilbert space to the total Hilbert space. */
+  /*        * This expansion depends on the order in which the operators */
+  /*        * were added. For example, if we added 3 operators: */
+  /*        * A, B, and C (with sizes n_a, n_b, n_c, respectively), we would */
+  /*        * have (where the ' denotes in the full space and I_(n) means */
+  /*        * the identity matrix of size n): */
+  /*        * */
+  /*        * A' = A cross I_(n_b) cross I_(n_c) */
+  /*        * B' = I_(n_a) cross B cross I_(n_c) */
+  /*        * C' = I_(n_a) cross I_(n_b) cross C */
+  /*        *  */
+  /*        * For an arbitrary operator, we only care about */
+  /*        * the Hilbert space size before and the Hilbert space size */
+  /*        * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b) */
+  /*        * */
+  /*        * The calculation of i_ham and j_ham exploit the structure of  */
+  /*        * the tensor products - they are general for kronecker products */
+  /*        * of identity matrices with some matrix A */
+  /*        *\/ */
+  /*       i_ham = i_op*n_after+k1+k2*my_levels*n_after; */
+  /*       j_ham = j_op*n_after+k1+k2*my_levels*n_after; */
+  /*       MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES); */
+  /*     } */
+  /*   } */
+
+  /* } else { */
+  /*   /\* Parallelize the n_before loop *\/ */
+  /*   my_start_bef     = (n_before/np)*nid; */
+  /*   if (n_before%np>nid){ */
+  /*     my_start_bef  += nid; */
+  /*     my_end_bef     = my_start_bef+(n_before/np)+1; */
+  /*   } else { */
+  /*     my_start_bef  += n_before % np; */
+  /*     my_end_bef     = my_start_bef+(n_before/np); */
+  /*   } */
+
+  /*   for (k1=0;k1<n_after;k1++){ /\* n_after loop *\/ */
+  /*     for (k2=my_start_bef;k2<my_end_bef;k2++){ /\* n_before loop *\/ */
+  /*       /\* */
+  /*        * Now we need to calculate the apropriate location of this */
+  /*        * within the full Hamiltonian matrix. We need to expand the operator */
+  /*        * from its small Hilbert space to the total Hilbert space. */
+  /*        * This expansion depends on the order in which the operators */
+  /*        * were added. For example, if we added 3 operators: */
+  /*        * A, B, and C (with sizes n_a, n_b, n_c, respectively), we would */
+  /*        * have (where the ' denotes in the full space and I_(n) means */
+  /*        * the identity matrix of size n): */
+  /*        * */
+  /*        * A' = A cross I_(n_b) cross I_(n_c) */
+  /*        * B' = I_(n_a) cross B cross I_(n_c) */
+  /*        * C' = I_(n_a) cross I_(n_b) cross C */
+  /*        *  */
+  /*        * For an arbitrary operator, we only care about */
+  /*        * the Hilbert space size before and the Hilbert space size */
+  /*        * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b) */
+  /*        * */
+  /*        * The calculation of i_ham and j_ham exploit the structure of  */
+  /*        * the tensor products - they are general for kronecker products */
+  /*        * of identity matrices with some matrix A */
+  /*        *\/ */
+  /*       i_ham = i_op*n_after+k1+k2*my_levels*n_after; */
+  /*       j_ham = j_op*n_after+k1+k2*my_levels*n_after; */
+  /*       MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES); */
+  /*     } */
+  /*   } */
+  /* } */
+  return;
 }
 
 /*

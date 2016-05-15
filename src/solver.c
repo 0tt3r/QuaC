@@ -9,7 +9,6 @@ static PetscInt  default_restart = 100;
 static int       stab_added      = 0;
 
 void steady_state(){
-  PetscErrorCode ierr;
   PetscViewer    mat_view;
   PC             pc;
   Vec            x,b;
@@ -74,8 +73,10 @@ void steady_state(){
   MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
   if (nid==0) printf("Matrix Assembled.\n");
-  PetscViewerSetFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
+  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
   MatView(full_A,mat_view);
+  PetscViewerDestroy(&mat_view);
   /*
    * Create parallel vectors.
    * - When using VecCreate(), VecSetSizes() and VecSetFromOptions(),
@@ -92,8 +93,8 @@ void steady_state(){
    * Set rhs, b, and solution, x to 1.0 in the first
    * element, 0.0 elsewhere.
    */
-  ierr = VecSet(b,0.0);
-  ierr = VecSet(x,0.0);
+  VecSet(b,0.0);
+  VecSet(x,0.0);
   
   if(nid==0) {
     row = 0;
@@ -132,7 +133,7 @@ void steady_state(){
 
   /* bjacobi preconditioner */
   KSPGetPC(ksp,&pc);
-  PCSetType(pc,PCJACOBI);
+  PCSetType(pc,PCASM);
 
   /* gmres solver with 100 restart*/
   KSPSetType(ksp,KSPGMRES);
