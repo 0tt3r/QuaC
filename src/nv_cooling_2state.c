@@ -10,8 +10,9 @@ int main(int argc,char **args){
   double w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par;
   double Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,nv;
-  FILE     *fp;
 
+
+  
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -26,11 +27,12 @@ int main(int argc,char **args){
   N_th       = 10;
   num_phonon = 3;
   num_nv     = 1;
-  /* Read in important parameters */
-  fp         = fopen("parameters","r");
-  fscanf(fp, "%*[^\n]\n", NULL); //Skip first line
-  fscanf(fp,"%d %d %d %f",&num_phonon,&N_th,&num_nv,&alpha);
-  fclose(fp);
+  /* Get arguments from command line */
+  num_nv     = atoi(args[1]);
+  num_phonon = atoi(args[2]);
+  N_th       = atoi(args[3]);
+  alpha      = atof(args[4]);
+
   if (nid==0) printf("Num_phonon: %d N_th: %d num_nv: %d alpha: %f\n",num_phonon,N_th,num_nv,alpha);
   /* Define scalars to add to Ham */
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency

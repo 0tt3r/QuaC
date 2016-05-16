@@ -15,7 +15,7 @@ int main(int argc,char **args){
   double   Q,kHz,MHz,GHz,rate;
   operator a;
   vec_op   *nv;
-  FILE     *fp;
+
   /* enumerate state names so we don't to remember them */
   enum STATE {gp=0,g0,gm,ep,e0,em,s};
 
@@ -32,11 +32,11 @@ int main(int argc,char **args){
   num_phonon = 152;
   num_nv     = 1;
 
-  /* Read in important parameters */
-  fp         = fopen("parameters","r");
-  fscanf(fp, "%*[^\n]\n", NULL); //Skip first line
-  fscanf(fp,"%d %d %d",&num_phonon,&N_th,&num_nv);
-  fclose(fp);
+  /* Get arguments from command line */
+  num_nv     = atoi(args[1]);
+  num_phonon = atoi(args[2]);
+  N_th       = atoi(args[3]);
+
   if (nid==0) printf("Num_phonon: %d N_th %d num_nv: %d\n",num_phonon,N_th,num_nv);
   lambda_s   = 100*1.06*kHz*2*M_PI;
 
