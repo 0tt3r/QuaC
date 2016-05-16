@@ -22,30 +22,30 @@ int main(int argc,char **args){
   kHz = MHz*1e-3;
   THz = GHz*1e3;
   Hz  = kHz*1e-3;
-
+  alpha      = 0.01663;
   N_th       = 10;
   num_phonon = 3;
   num_nv     = 1;
   /* Read in important parameters */
   fp         = fopen("parameters","r");
   fscanf(fp, "%*[^\n]\n", NULL); //Skip first line
-  fscanf(fp,"%d %d %d",&num_phonon,&N_th,&num_nv);
+  fscanf(fp,"%d %d %d %f",&num_phonon,&N_th,&num_nv,&alpha);
   fclose(fp);
-  printf("Num_phonon: %d N_th: %d num_nv: %d\n",num_phonon,N_th,num_nv);
+  if (nid==0) printf("Num_phonon: %d N_th: %d num_nv: %d alpha: %f\n",num_phonon,N_th,num_nv,alpha);
   /* Define scalars to add to Ham */
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency
   gamma_eff  = 145.1*MHz; //Effective dissipation rate
   lambda_s   = 100*1.06*kHz*2*M_PI;
-  alpha      = 0.01663;
+
   lambda_eff = lambda_s*sqrt(alpha)*sqrt(num_nv);
   gamma_par  = 166.666666666*MHz;
   Q          = pow(10,6);  //Mechanical resonator quality factor
 
 
   print_dense_ham();
-  create_op(2,&nv);
-  create_op(num_phonon,&a);
 
+  create_op(num_phonon,&a);
+  create_op(2,&nv);
   
   /* Add terms to the hamiltonian */
   add_to_ham(w_m,a->n); // w_m at a

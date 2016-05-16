@@ -61,6 +61,7 @@ int main(int argc,char **args){
     /* All nv terms are in a function below */
     add_nv_terms(nv[i],a,lambda_s);
   }
+  if (nid==0) printf("Added Hamiltonian.");
   /* phonon bath thermal terms */
   rate = w_m/(Q)*(N_th+1); //CHECK A FACTOR OF 2 HERE!
   add_lin(rate,a);
