@@ -96,9 +96,9 @@ void add_nv_terms(vec_op nv,operator a,double lambda_s){
   MHz = GHz*1e-3;
 
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency
-  omega      = 60*2*M_PI*MHz;
+  omega      = 100*2*M_PI*MHz;
 
-  gamma_opt  = 130*MHz;
+  gamma_opt  = 200*MHz;
   k42        = 65.3*MHz;
   k31        = 64.9*MHz;
   k45        = 79.8*MHz;
@@ -108,8 +108,8 @@ void add_nv_terms(vec_op nv,operator a,double lambda_s){
   T2g        = 59*ns;
   T2e        = 6*ns;
 
-  add_to_ham_mult2(omega/2,nv[g0],nv[gm]); // |g0><g-|
-  add_to_ham_mult2(omega/2,nv[gm],nv[g0]); // |g-><g0
+  add_to_ham_mult2(omega/2,nv[e0],nv[em]); // |e0><e-|
+  add_to_ham_mult2(omega/2,nv[em],nv[e0]); // |e-><e0
 
   add_to_ham_mult3(lambda_s,nv[em],nv[ep],a); // |e-><e+| a
   add_to_ham_mult3(lambda_s,nv[em],nv[ep],a->dag); // |e-><e+| at
