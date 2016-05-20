@@ -8,6 +8,9 @@ static PetscReal default_rtol    = 1e-11;
 static PetscInt  default_restart = 100;
 static int       stab_added      = 0;
 
+PetscErrorCode RHSFunction (TS,PetscReal,Vec,Vec,void*);
+PetscErrorCode (*RHSFunction_p) (TS,PetscReal,Vec,Vec,void*);
+
 void steady_state(){
   PetscViewer    mat_view;
   PC             pc;
@@ -73,6 +76,7 @@ void steady_state(){
   MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
   if (nid==0) printf("Matrix Assembled.\n");
+  /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
   MatView(full_A,mat_view);
@@ -162,6 +166,182 @@ void steady_state(){
 
   return;
 }
+
+
+void time_step(){
+  PetscViewer    mat_view;
+  PC             pc;
+  Vec            x,b;
+  TS             ts; /* timestepping context */
+  int            row,col,its,j;
+  PetscInt       i,Istart,Iend,time_steps_max = 100,steps;
+  PetscReal      time_total_max = 100.0,dt = 0.1;
+  PetscScalar    mat_tmp;
+  long           dim;
+
+
+  dim = total_levels*total_levels;
+
+  if (!stab_added){
+    /* Possibly print dense ham. No stabilization is needed? */
+    if (nid==0) {
+      /* Print dense ham, if it was asked for */
+      if (_print_dense_ham){
+        FILE *fp_ham;
+
+        fp_ham = fopen("ham","w");
+
+        if (nid==0){
+          for (i=0;i<total_levels;i++){
+            for (j=0;j<total_levels;j++){
+              fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
+            }
+            fprintf(fp_ham,"\n");
+          }
+        }
+        fclose(fp_ham);
+      }
+    }
+  }
+
+  
+  MatGetOwnershipRange(full_A,&Istart,&Iend);
+  /*
+   * Explicitly add 0.0 to all diagonal elements;
+   * this fixes a 'matrix in wrong state' message that PETSc
+   * gives if the diagonal was never initialized.
+   */
+  if (nid==0) printf("Adding 0 to diagonal elements...\n");
+  for (i=Istart;i<Iend;i++){
+    mat_tmp = 0 + 0.*PETSC_i;
+    MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
+  }
+
+  
+  /* Tell PETSc to assemble the matrix */
+  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  if (nid==0) printf("Matrix Assembled.\n");
+  /* Print information about the matrix. */
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
+  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  MatView(full_A,mat_view);
+  PetscViewerDestroy(&mat_view);
+  /*
+   * Create parallel vectors.
+   * - When using VecCreate(), VecSetSizes() and VecSetFromOptions(),
+   * we specify only the vector's global
+   * dimension; the parallel partitioning is determined at runtime.
+   * - Note: We form 1 vector from scratch and then duplicate as needed.
+   */
+  VecCreate(PETSC_COMM_WORLD,&x);
+  VecSetSizes(x,PETSC_DECIDE,dim);
+  VecSetFromOptions(x);
+  //  VecDuplicate(x,&b);
+
+  /*
+   * Set initial condition to x to 1.0 in the first
+   * element, 0.0 elsewhere.
+   */
+  //  VecSet(b,0.0);
+  VecSet(x,0.0);
+  
+  if(nid==0) {
+    row = 0;
+    mat_tmp = 1.0 + 0.0*PETSC_i;
+    VecSetValue(x,row,mat_tmp,INSERT_VALUES);
+  }
+  
+  /* Assemble x and b */
+  VecAssemblyBegin(x);
+  VecAssemblyEnd(x);
+
+  /* VecAssemblyBegin(b); */
+  /* VecAssemblyEnd(b); */
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
+     *       Create the timestepping solver and set various options       *
+     *- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+  /*
+   * Create timestepping solver context
+   */
+  TSCreate(PETSC_COMM_WORLD,&ts);
+  TSSetProblemType(ts,TS_LINEAR);
+
+
+  /*
+   * Set function to get information at every timestep
+   */
+  TSMonitorSet(ts,ts_monitor,NULL,NULL);
+
+  /*
+   * Set up ODE system
+   */
+  RHSFunction_p = RHSFunction;
+  TSSetRHSFunction(ts,NULL,RHSFunction_p,NULL);
+  /* TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL); */
+  /* TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL); */
+
+  dt = 1.0;
+  TSSetInitialTimeStep(ts,0.0,dt);
+
+  /*
+   * Set default options, can be changed at runtime
+   */
+
+  TSSetDuration(ts,time_steps_max,time_total_max);
+  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
+  TSSetType(ts,TSRK);
+  TSSolve(ts,x);
+  TSGetTimeStepNumber(ts,&steps);
+
+  get_populations(x);
+
+
+
+  PetscPrintf(PETSC_COMM_WORLD,"Stepss %D\n",steps);
+
+  /* Free work space */
+  TSDestroy(&ts);
+  VecDestroy(&x);
+  //  VecDestroy(&b);
+
+  return;
+}
+
+
+PetscErrorCode RHSFunction (TS ts, PetscReal t, Vec Y, Vec F, void *s){
+  printf("before mult\n");
+  MatMult(full_A,Y,F);
+  printf("after mult\n");
+}
+
+/*
+ * ts_monitor is the catchall routine which will look at the data
+ * at every time step, such as printing observables/populations.
+ *
+ * Inputs:
+ *    ts     - the timestep context
+ *    step   - the count of the current step (with 0 meaning the
+ *             initial condition)
+ *    time   - the current time
+ *    u      - the solution at this timestep
+ *    ctx    - the user-provided context for this monitoring routine.
+ */
+
+PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx) {
+  /* Print populations for this time step */
+  get_populations(u);
+}
+
+/*
+ * Get populations for density matrix x
+ * Inputs:
+ *       Vec x - petsc vector representing density matrix
+ * Outputs: 
+ *       None, but prints populations to file
+ */
 
 void get_populations(Vec x) {
   int         j,my_levels,n_after,cur_state,num_pop;
