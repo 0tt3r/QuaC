@@ -279,9 +279,9 @@ void time_step(){
    * Set up ODE system
    */
   RHSFunction_p = RHSFunction;
-  TSSetRHSFunction(ts,NULL,RHSFunction_p,NULL);
-  /* TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL); */
-  /* TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL); */
+  /* TSSetRHSFunction(ts,NULL,RHSFunction_p,NULL); */
+  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+  TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL);
 
   dt = 1.0;
   TSSetInitialTimeStep(ts,0.0,dt);
