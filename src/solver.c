@@ -279,8 +279,8 @@ void time_step(){
    * Set up ODE system
    */
   RHSFunction_p = RHSFunction;
-  /* TSSetRHSFunction(ts,NULL,RHSFunction_p,NULL); */
-  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+//  TSSetRHSFunction(ts,NULL,RHSFunction_p,NULL);
+  TSSetRHSFunction(ts,x,TSComputeRHSFunctionLinear,NULL);
   TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL);
 
   dt = 1.0;
@@ -293,6 +293,7 @@ void time_step(){
   TSSetDuration(ts,time_steps_max,time_total_max);
   TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
   TSSetType(ts,TSRK);
+  TSSetFromOptions(ts);
   TSSolve(ts,x);
   TSGetTimeStepNumber(ts,&steps);
 
@@ -333,6 +334,7 @@ PetscErrorCode RHSFunction (TS ts, PetscReal t, Vec Y, Vec F, void *s){
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx) {
   /* Print populations for this time step */
   get_populations(u);
+  PetscFunctionReturn(0);
 }
 
 /*
@@ -351,7 +353,7 @@ void get_populations(Vec x) {
   PetscReal   tmp_real;
   double      *populations;
   VecGetOwnershipRange(x,&x_low,&x_high);
-  VecGetArray(x,&xa); 
+  VecGetArrayRead(x,&xa); 
 
   /*
    * Loop through operators to see how many populations we need to 
@@ -431,7 +433,7 @@ void get_populations(Vec x) {
   }
 
   /* Put the array back in Petsc's hands */
-  VecRestoreArray(x,&xa);
+  VecRestoreArrayRead(x,&xa);
   /* Free memory */
   free(i_sub_to_i_pop);
   free(populations);
