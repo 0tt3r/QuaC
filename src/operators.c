@@ -12,7 +12,7 @@
  * - add PetscLog for getting setup time
  */
 
-#define MAX_NNZ_PER_ROW 15
+#define MAX_NNZ_PER_ROW 35
 
 static int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -761,8 +761,10 @@ void _check_initialized_A(){
       for (i=1;i<(dim/np)*5;i++){
         d_nz[i] = MAX_NNZ_PER_ROW;
         o_nz[i] = MAX_NNZ_PER_ROW;
+
       }
       MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
+      MatSeqAIJSetPreallocation(full_A,0,d_nz);
       PetscFree(d_nz);
       PetscFree(o_nz);
 
@@ -778,7 +780,7 @@ void _check_initialized_A(){
     /*                       10,NULL,10,NULL,&full_A);CHKERRQ(ierr); */
     /* } */
 
-    ierr = MatSetUp(full_A);
+    ierr = MatSetUp(full_A); // This might not be necessary?
   }
 
   return;

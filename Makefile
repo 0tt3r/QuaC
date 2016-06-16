@@ -19,6 +19,9 @@ $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 nv_cooling_7state: $(ODIR)/nv_cooling_7state.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
+nv_cooling_2state_tc_test: $(ODIR)/nv_cooling_2state_tc_test.o $(OBJ)
+	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+
 nv_cooling_2state: $(ODIR)/nv_cooling_2state.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
