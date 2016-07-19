@@ -1,3 +1,4 @@
+
 #include "operators_p.h"
 #include "operators.h"
 #include "solver.h"
@@ -9,7 +10,6 @@ static PetscInt  default_restart = 100;
 static int       stab_added      = 0;
 
 PetscErrorCode RHSFunction (TS,PetscReal,Vec,Vec,void*);
-PetscErrorCode (*RHSFunction_p) (TS,PetscReal,Vec,Vec,void*);
 
 void steady_state(){
   PetscViewer    mat_view;
@@ -175,14 +175,20 @@ void time_step(){
   TS             ts; /* timestepping context */
   int            row,col,its,j;
   PetscInt       i,Istart,Iend,time_steps_max = 1000000,steps;
-  PetscReal      time_total_max = 10000.0,dt = 0.1;
+  PetscReal      time_total_max = 100000.0,dt = 10,time;
   PetscScalar    mat_tmp;
   long           dim;
-
 
   dim = total_levels*total_levels;
 
   if (!stab_added){
+    /* row = 0; */
+    /* for (i=0;i<total_levels;i++){ */
+    /*   col = i*(total_levels+1); */
+    /*   mat_tmp = 1.0 + 0.*PETSC_i; */
+    /*   MatSetValue(full_A,row,col,mat_tmp,ADD_VALUES); */
+    /* } */
+
     /* Possibly print dense ham. No stabilization is needed? */
     if (nid==0) {
       /* Print dense ham, if it was asked for */
@@ -247,9 +253,15 @@ void time_step(){
   VecSet(x,0.0);
   
   if(nid==0) {
-    row = 3053;
-    mat_tmp = 1.0 + 0.0*PETSC_i;
+    row = 22;
+    mat_tmp = 1. + 0.0*PETSC_i;
     VecSetValue(x,row,mat_tmp,INSERT_VALUES);
+    /* row = 31; */
+    /* mat_tmp = 1./3. + 0.0*PETSC_i; */
+    /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
+    /* row = 93; */
+    /* mat_tmp = 1./3. + 0.0*PETSC_i; */
+    /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
   }
   
   /* Assemble x and b */
@@ -275,12 +287,11 @@ void time_step(){
   /*
    * Set up ODE system
    */
-  RHSFunction_p = RHSFunction;
-//  TSSetRHSFunction(ts,NULL,RHSFunction_p,NULL);
+
+   /* TSSetRHSFunction(ts,NULL,RHSFunction,NULL); */
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
   TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL);
 
-  dt = 1;
   TSSetInitialTimeStep(ts,0.0,dt);
 
   /*
@@ -289,16 +300,15 @@ void time_step(){
 
   TSSetDuration(ts,time_steps_max,time_total_max);
   TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
-  TSSetType(ts,TSRK);
+  TSSetType(ts,TSBEULER);
+  TSSetSolution(ts,x);
   TSSetFromOptions(ts);
   TSSolve(ts,x);
   TSGetTimeStepNumber(ts,&steps);
 
   get_populations(x);
 
-
-
-  PetscPrintf(PETSC_COMM_WORLD,"Stepss %D\n",steps);
+  PetscPrintf(PETSC_COMM_WORLD,"Steps %D\n",steps);
 
   /* Free work space */
   TSDestroy(&ts);
@@ -307,11 +317,129 @@ void time_step(){
   return;
 }
 
+void time_step_euler(){
+  PetscViewer    mat_view;
+  PC             pc;
+  Vec            x,b;
+  TS             ts; /* timestepping context */
+  int            row,col,its,j;
+  PetscInt       i,Istart,Iend,time_steps_max = 1000000,steps;
+  PetscReal      time_total_max = 100000.0,dt = 0.0001,time;
+  PetscScalar    mat_tmp;
+  long           dim;
 
-PetscErrorCode RHSFunction (TS ts, PetscReal t, Vec Y, Vec F, void *s){
-  printf("before mult\n");
-  MatMult(full_A,Y,F);
-  printf("after mult\n");
+
+  dim = total_levels*total_levels;
+
+  if (!stab_added){
+    /* row = 0; */
+    /* for (i=0;i<total_levels;i++){ */
+    /*   col = i*(total_levels+1); */
+    /*   mat_tmp = 1.0 + 0.*PETSC_i; */
+    /*   MatSetValue(full_A,row,col,mat_tmp,ADD_VALUES); */
+    /* } */
+
+    /* Possibly print dense ham. No stabilization is needed? */
+    if (nid==0) {
+      /* Print dense ham, if it was asked for */
+      if (_print_dense_ham){
+        FILE *fp_ham;
+
+        fp_ham = fopen("ham","w");
+
+        if (nid==0){
+          for (i=0;i<total_levels;i++){
+            for (j=0;j<total_levels;j++){
+              fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
+            }
+            fprintf(fp_ham,"\n");
+          }
+        }
+        fclose(fp_ham);
+      }
+    }
+  }
+
+  
+  MatGetOwnershipRange(full_A,&Istart,&Iend);
+  /*
+   * Explicitly add 0.0 to all diagonal elements;
+   * this fixes a 'matrix in wrong state' message that PETSc
+   * gives if the diagonal was never initialized.
+   */
+  if (nid==0) printf("Adding 0 to diagonal elements...\n");
+  for (i=Istart;i<Iend;i++){
+    mat_tmp = 0 + 0.*PETSC_i;
+    MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
+  }
+
+  
+  /* Tell PETSc to assemble the matrix */
+  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  if (nid==0) printf("Matrix Assembled.\n");
+  /* Print information about the matrix. */
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
+  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  MatView(full_A,mat_view);
+  PetscViewerDestroy(&mat_view);
+  /*
+   * Create parallel vectors.
+   * - When using VecCreate(), VecSetSizes() and VecSetFromOptions(),
+   * we specify only the vector's global
+   * dimension; the parallel partitioning is determined at runtime.
+   * - Note: We form 1 vector from scratch and then duplicate as needed.
+   */
+  VecCreate(PETSC_COMM_WORLD,&x);
+  VecSetSizes(x,PETSC_DECIDE,dim);
+  VecSetFromOptions(x);
+  VecDuplicate(x,&b);
+
+  /*
+   * Set initial condition to x to 1.0 in the first
+   * element, 0.0 elsewhere.
+   */
+  //  VecSet(b,0.0);
+  VecSet(x,0.0);
+  
+  if(nid==0) {
+    row = 22;
+    mat_tmp = 1. + 0.0*PETSC_i;
+    VecSetValue(x,row,mat_tmp,INSERT_VALUES);
+    /* row = 31; */
+    /* mat_tmp = 1./3. + 0.0*PETSC_i; */
+    /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
+    /* row = 93; */
+    /* mat_tmp = 1./3. + 0.0*PETSC_i; */
+    /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
+  }
+  
+  /* Assemble x and b */
+  VecAssemblyBegin(x);
+  VecAssemblyEnd(x);
+
+  while (time<time_total_max) {
+    if (nid==0) printf("Time: %e ",time);
+    MatMult(full_A,x,b);
+    VecAXPY(x,dt,b);
+    get_populations(x);
+    time+=dt;
+  }
+
+
+  PetscPrintf(PETSC_COMM_WORLD,"Steps %D\n",steps);
+
+  /* Free work space */
+
+  VecDestroy(&x);
+  VecDestroy(&b);
+  return;
+}
+
+
+PetscErrorCode RHSFunction (TS ts, PetscReal t, Vec array_in, Vec array_out, void *s){
+  MatMult(full_A,array_in,array_out);
+  return 0;
 }
 
 /*
@@ -329,7 +457,7 @@ PetscErrorCode RHSFunction (TS ts, PetscReal t, Vec Y, Vec F, void *s){
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx) {
   /* Print populations for this time step */
-  if (nid==0) printf("Time: %f ",time);
+  if (nid==0) printf("Time: %e ",time);
   get_populations(u);
   //get_concurrence(u);
   PetscFunctionReturn(0);
@@ -411,8 +539,6 @@ void get_populations(Vec x) {
       }
     }
   } 
-
-
 
   /* Reduce results across cores */
   if(nid==0) {

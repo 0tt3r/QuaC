@@ -8,7 +8,7 @@
 int main(int argc,char **args){
   /* tc is whether to do Tavis Cummings or not */
   PetscInt n_th=10,num_phonon=200,num_nv=1,tc=1; //Default values set here
-  PetscInt i;
+  PetscInt i,nv_levels=2;
   PetscReal w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par;
   PetscReal Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,*nv;
@@ -31,12 +31,13 @@ int main(int argc,char **args){
   PetscOptionsGetInt(NULL,NULL,"-num_phonon",&num_phonon,NULL);
   PetscOptionsGetInt(NULL,NULL,"-n_th",&n_th,NULL);
   PetscOptionsGetInt(NULL,NULL,"-tc",&tc,NULL);
+  PetscOptionsGetInt(NULL,NULL,"-nv_levels",&nv_levels,NULL);
 
-  if (nid==0) printf("Num_phonon: %d n_th: %d num_nv: %d Tavis Cummings?: %d\n",num_phonon,n_th,num_nv,tc);
+  if (nid==0) printf("Num_phonon: %d n_th: %d num_nv: %d nv_levels: %d Tavis Cummings?: %d\n",num_phonon,n_th,num_nv,nv_levels,tc);
   /* Define scalars to add to Ham */
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency
   gamma_eff  = 145.1*MHz; //Effective dissipation rate
-  lambda_s   = 100*1.06*kHz*2*M_PI;
+  lambda_s   = 10*1.06*kHz*2*M_PI;
 
 
   gamma_par  = 166.666666666*MHz;
@@ -49,7 +50,7 @@ int main(int argc,char **args){
   if (tc) {
     nv = malloc(1*sizeof(struct operator));
     /* Use Tavis Cummings approximation */
-    create_op(2,&nv[0]);
+    create_op(nv_levels,&nv[0]);
 
     lambda_eff = lambda_s*sqrt(num_nv);
     /* Add terms to the hamiltonian */
@@ -64,13 +65,13 @@ int main(int argc,char **args){
     
     /* nv center lindblad terms */
     add_lin(gamma_eff,nv[0]);
-    add_lin(gamma_par,nv[0]->n);
-    add_lin_mult2(gamma_par,nv[0],nv[0]->dag);
+    //add_lin(gamma_par,nv[0]->n);
+    //    add_lin_mult2(gamma_par,nv[0],nv[0]->dag);
   } else {
     /* Do not use Tavis Cummings */
     nv = malloc(num_nv*sizeof(struct operator));
     for (i=0;i<num_nv;i++){
-      create_op(2,&nv[i]);
+      create_op(nv_levels,&nv[i]);
     }
     add_to_ham(w_m,a->n); // w_m at a
 
@@ -86,8 +87,8 @@ int main(int argc,char **args){
     
       /* nv center lindblad terms */
       add_lin(gamma_eff,nv[i]);
-      add_lin(gamma_par,nv[i]->n);
-      add_lin_mult2(gamma_par,nv[i],nv[i]->dag);
+      //add_lin(gamma_par,nv[i]->n);
+      //      add_lin_mult2(gamma_par,nv[i],nv[i]->dag);
     }
   }
 

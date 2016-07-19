@@ -12,7 +12,7 @@
  * - add PetscLog for getting setup time
  */
 
-#define MAX_NNZ_PER_ROW 35
+#define MAX_NNZ_PER_ROW 50
 
 static int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -751,17 +751,29 @@ void _check_initialized_A(){
        * off diagonal part. We assume that core 0 owns roughly dim/np
        * rows.
        */
-      
+
       PetscMalloc1((dim/np)*5,&d_nz); /* malloc array of nnz diagonal elements*/
       PetscMalloc1((dim/np)*5,&o_nz); /* malloc array of nnz off diagonal elements*/
-
-      d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
-      o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
-
-      for (i=1;i<(dim/np)*5;i++){
-        d_nz[i] = MAX_NNZ_PER_ROW;
-        o_nz[i] = MAX_NNZ_PER_ROW;
-
+      /* 
+       * If the system is small enough, we can just allocate a lot of
+       * memory for it. Fixes a bug from PETSc when you try to preallocate bigger
+       * the row size
+       */
+      if (total_levels<MAX_NNZ_PER_ROW) {
+        d_nz[0] = total_levels;
+        o_nz[0] = total_levels;
+        for (i=1;i<(dim/np)*5;i++){
+          d_nz[i] = total_levels;
+          o_nz[i] = total_levels;
+        }
+      } else {
+        d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
+        o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
+        for (i=1;i<(dim/np)*5;i++){
+          d_nz[i] = MAX_NNZ_PER_ROW;
+          o_nz[i] = MAX_NNZ_PER_ROW;
+          
+        }
       }
       MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
       MatSeqAIJSetPreallocation(full_A,0,d_nz);

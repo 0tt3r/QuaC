@@ -69,8 +69,8 @@ int main(int argc,char **args){
   rate = w_m/(Q)*(N_th);
   add_lin(rate,a->dag);
   
-  time_step();
-  //  steady_state();
+  //  time_step();
+  steady_state();
 
   
   destroy_op(&a);
