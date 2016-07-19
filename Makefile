@@ -1,6 +1,5 @@
 CFLAGS	         =
 
-
 ODIR=obj
 SRCDIR=src
 
@@ -14,6 +13,7 @@ _OBJ  = quac.o operators.o solver.o kron.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
+	@mkdir -p $(@D)
 	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} 
 
 nv_cooling_7state: $(ODIR)/nv_cooling_7state.o $(OBJ)
