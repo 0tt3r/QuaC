@@ -41,4 +41,4 @@ simple_jc_test_vec: $(ODIR)/simple_jc_test_vec.o $(OBJ) $(DEPS)
 
 clean:
 	rm -f $(OBJ)
-	rm -f simple_jc_test nv_cooling_2state
+	rm -f simple_jc_test nv_cooling_2state qd_plasmon nv_cooling_2state_tc_test simple_jc_test simple_jc_test_vec nv_cooling_7state nv_mech_polarization

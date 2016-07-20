@@ -119,7 +119,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
 void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
                            int n_before,int n_after,int my_levels){
   long k1,k2,i_ham,j_ham;
-  int  my_start_af,my_end_af,my_start_bef,my_end_bef;
+  //  int  my_start_af,my_end_af,my_start_bef,my_end_bef;
   PetscInt Istart,Iend;
   
   MatGetOwnershipRange(full_A,&Istart,&Iend); //FIXME: Make these library global?

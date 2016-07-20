@@ -16,16 +16,16 @@ int np;
  *       int argc, char **args - command line input, for PETSc
  */
 void QuaC_initialize(int argc,char **args){
-  PetscErrorCode ierr;
+
   /* Initialize Petsc */
-  ierr             = PetscInitialize(&argc,&args,(char*)0,NULL);CHKERRQ(ierr);
+  PetscInitialize(&argc,&args,(char*)0,NULL);
 #if !defined(PETSC_USE_COMPLEX)
   SETERRQ(PETSC_COMM_WORLD,1,"This example requires complex numbers");
 #endif
   /* Get core's id */
-  ierr              = MPI_Comm_rank(PETSC_COMM_WORLD,&nid);CHKERRQ(ierr);
+  MPI_Comm_rank(PETSC_COMM_WORLD,&nid);
   /* Get number of processors */
-  ierr              = MPI_Comm_size(PETSC_COMM_WORLD,&np);CHKERRQ(ierr);
+  MPI_Comm_size(PETSC_COMM_WORLD,&np);
 
   petsc_initialized = 1;
 }
@@ -37,13 +37,11 @@ void QuaC_initialize(int argc,char **args){
  */
 
 void QuaC_finalize(){
-  PetscErrorCode ierr;
-  int            i;
   /* Destroy Matrix */
-  ierr = MatDestroy(&full_A);CHKERRQ(ierr);
+  MatDestroy(&full_A);
 
   /* Finalize Petsc */
-  ierr             = PetscFinalize();CHKERRQ(ierr);
+  PetscFinalize();
   return;
 }
 

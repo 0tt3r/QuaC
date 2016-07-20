@@ -5,19 +5,20 @@
 struct operator;
 
 typedef struct operator{
-
+  double  initial_pop;
   int     n_before;
   int     my_levels;
   op_type my_op_type;
   int     position; /* For vec operators only */
-
+  struct operator *vec_array;
   struct operator *dag; /* Raising operator */
   struct operator *n;   /* number operator */
   
 } *operator;
 
-/* /\* Treat vec_op as an array of operators *\/ */
 typedef operator *vec_op;
+/* /\* Treat vec_op as an array of operators *\/ */
+
 
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
@@ -29,6 +30,7 @@ int  _check_op_type3(operator,operator,operator);
 void add_lin(double,operator);
 void add_lin_mult2(double,operator,operator);
 void print_dense_ham();
+void set_initial_pop_op(operator,int);
 extern int nid; /* a ranks id */
 extern int np; /* number of processors */
 #define MAX_SUB 100  //Consider making this not a define

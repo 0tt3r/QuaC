@@ -46,33 +46,36 @@ void create_op(int number_of_levels,operator *new_op) {
   _check_initialized_op();
 
   /* First make the annihilation operator */
-  temp             = malloc(sizeof(struct operator));
-  temp->n_before   = total_levels;
-  temp->my_levels  = number_of_levels;
-  temp->my_op_type = LOWER;
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = 0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = LOWER;
   /* Since this is a basic operator, not a vec, set positions to -1 */
-  temp->position   = -1;
-  *new_op          = temp;
+  temp->position    = -1;
+  *new_op           = temp;
 
-  temp             = malloc(sizeof(struct operator));
-  temp->n_before   = total_levels;
-  temp->my_levels  = number_of_levels;
-  temp->my_op_type = RAISE;
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = 0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = RAISE;
   /* Since this is a basic operator, not a vec, set positions to -1 */
-  temp->position   = -1;
-  (*new_op)->dag   = temp;
+  temp->position    = -1;
+  (*new_op)->dag    = temp;
 
-  temp             = malloc(sizeof(struct operator));
-  temp->n_before   = total_levels;
-  temp->my_levels  = number_of_levels;
-  temp->my_op_type = NUMBER;
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = 0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = NUMBER;
   /* Since this is a basic operator, not a vec, set positions to -1 */
-  temp->position   = -1;
+  temp->position    = -1;
 
-  (*new_op)->n     = temp;
+  (*new_op)->n      = temp;
 
   /* Increase total_levels */
-  total_levels = total_levels * number_of_levels;
+  total_levels = total_levels*number_of_levels;
 
   /* Add to list */
   subsystem_list[num_subsystems] = (*new_op);
@@ -96,18 +99,18 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
 
   (*new_vec) = malloc(number_of_levels*(sizeof(struct operator*)));
   for (i=0;i<number_of_levels;i++){
-    temp             = malloc(sizeof(struct operator));
-    temp->n_before   = total_levels;
-    temp->my_levels  = number_of_levels;
-    temp->my_op_type = VEC;
+    temp              = malloc(sizeof(struct operator));
+    temp->initial_pop = 0;
+    temp->n_before    = total_levels;
+    temp->my_levels   = number_of_levels;
+    temp->my_op_type  = VEC;
     /* This is a VEC operator; set its position */
-    temp->position   = i;
-    (*new_vec)[i]       = temp;
+    temp->position    = i;
+    (*new_vec)[i]     = temp;
   }
 
   /* Increase total_levels */
-  total_levels = total_levels * number_of_levels;
-
+  total_levels = total_levels*number_of_levels;
   /* 
    * We store just the first VEC in the subsystem list, since it has
    * enough information to define all others
@@ -699,9 +702,7 @@ int _check_op_type3(operator op1,operator op2,operator op3){
 void _check_initialized_A(){
   int            i;
   long           dim;
-  PetscInt       *d_nz,*o_nz,Istart,Iend;
-  PetscErrorCode ierr;
-  
+  PetscInt       *d_nz,*o_nz;
 
   /* Check to make sure petsc was initialize */
   if (!petsc_initialized){ 
@@ -726,7 +727,7 @@ void _check_initialized_A(){
      * (for printing and debugging purposes)
      */
     if (nid==0) {
-      printf("Operators created. Total Hilbert space size: %d\n",total_levels);
+      printf("Operators created. Total Hilbert space size: %ld\n",total_levels);
       if (_print_dense_ham){
         _hamiltonian = malloc(total_levels*sizeof(double*));
         for (i=0;i<total_levels;i++){
@@ -792,8 +793,31 @@ void _check_initialized_A(){
     /*                       10,NULL,10,NULL,&full_A);CHKERRQ(ierr); */
     /* } */
 
-    ierr = MatSetUp(full_A); // This might not be necessary?
+    MatSetUp(full_A); // This might not be necessary?
   }
 
   return;
 }
+
+/*
+ * set_initial_pop_op sets the initial population for a single operator
+ * Inputs:
+ *       operator op1
+ *       int initial_pop
+ * Return:
+ *       none
+ */
+void set_initial_pop_op(operator op1,int initial_pop){
+
+  if (initial_pop>op1->my_levels&&op1->my_op_type!=VEC){
+    if (nid==0){
+      printf("ERROR! The initial population cannot be greater than the number of levels!\n");
+      exit(0);
+    }
+  }
+
+  op1->initial_pop = (double)initial_pop;
+
+  return;
+}
+

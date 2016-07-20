@@ -37,12 +37,12 @@ int main(int argc,char **args){
   }
   create_op(num_plasmon,&a);  
   /* Add terms to the hamiltonian */
-  /* add_to_ham(omega,a->n); // omega at a */
+  add_to_ham(omega,a->n); // omega at a
   for (i=0;i<num_qd;i++){
-    /* add_to_ham(omega,qd[i]->n); // omega qdt qd */
+    add_to_ham(omega,qd[i]->n); // omega qdt qd
     
-    /* add_to_ham_mult2(g_couple,qd[i]->dag,a);  //qdt a */
-    /* add_to_ham_mult2(g_couple,qd[i],a->dag);  //qd at */
+    add_to_ham_mult2(g_couple,qd[i]->dag,a);  //qdt a
+    add_to_ham_mult2(g_couple,qd[i],a->dag);  //qd at
     
     /* qd decay */
     add_lin(gamma_pi/2,qd[i]);
@@ -51,6 +51,9 @@ int main(int argc,char **args){
   /* plasmon decay */
   add_lin(gamma_s,a);
 
+  set_initial_pop_op(a,8);
+  set_initial_pop_op(qd[0],1);
+  set_initial_pop_op(qd[1],1);
   time_step();
   /* steady_state(); */
 
