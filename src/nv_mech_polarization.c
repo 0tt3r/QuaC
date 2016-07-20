@@ -22,7 +22,7 @@ int main(int argc,char **args){
   
   /* Define units, in AU */
   GHz = 1.519827e-7;
-  MHz = 10;//GHz*1e-3;
+  MHz = 1;//GHz*1e-3;
   kHz = MHz*1e-3;
   THz = GHz*1e3;
   Hz  = kHz*1e-3;
@@ -44,29 +44,29 @@ int main(int argc,char **args){
   print_dense_ham();
 
   create_op(num_phonon,&a);
-  /* create_vec(3,&nv); */
+  create_vec(3,&nv);
 
 
   /* Add terms to the hamiltonian */
   add_to_ham(resFreq,a->n); // w_m at a
-  /* add_to_ham_mult2(magDrvP/2,nv[gp],nv[g0]); //magDrvP/2 |+1><0| */
-  /* add_to_ham_mult2(magDrvP/2,nv[g0],nv[gp]);//magDrvP/2 |0><+1| */
+  add_to_ham_mult2(magDrvP/2,nv[gp],nv[g0]); //magDrvP/2 |+1><0|
+  add_to_ham_mult2(magDrvP/2,nv[g0],nv[gp]);//magDrvP/2 |0><+1|
 
-  /* add_to_ham_mult2(magDrvM/2,nv[gm],nv[g0]); //magDrvM/2 |-1><0| */
-  /* add_to_ham_mult2(magDrvM/2,nv[g0],nv[gm]);//magDrvM/2 |0><-1| */
+  add_to_ham_mult2(magDrvM/2,nv[gm],nv[g0]); //magDrvM/2 |-1><0|
+  add_to_ham_mult2(magDrvM/2,nv[g0],nv[gm]);//magDrvM/2 |0><-1|
 
-  /* add_to_ham(-resFreq,nv[gm]); //-resFreq |-1><-1| */
+  add_to_ham(-resFreq,nv[gm]); //-resFreq |-1><-1|
 
   /* Lindblad terms */
   /* 1/T2star */
   rate = 1/T2star;
-  /* add_lin_mult2(rate,nv[gp],nv[gp]); //L gp gp */
-  /* add_lin_mult2(rate,nv[gm],nv[gm]); //L gm gm */
+  add_lin_mult2(rate,nv[gp],nv[gp]); //L gp gp
+  add_lin_mult2(rate,nv[gm],nv[gm]); //L gm gm
 
   
   /* /\* Below 4 terms represent coupling *\/ */
-  /* add_to_ham_mult3(lambda,nv[gm],nv[gp],a); // |e-><e+| a */
-  /* add_to_ham_mult3(lambda,nv[gm],nv[gp],a->dag); // |e-><e+| at */
+  add_to_ham_mult3(lambda,nv[gm],nv[gp],a); // |e-><e+| a
+  add_to_ham_mult3(lambda,nv[gp],nv[gm],a->dag); // |e+><e-| at
   
   /* phonon bath thermal terms */
   rate = resFreq/(Q)*(n_th+1);
@@ -75,15 +75,15 @@ int main(int argc,char **args){
   rate = resFreq/(Q)*(n_th);
   add_lin(rate,a->dag);
 
-  /* rate = gamOpto; */
-  /* add_lin(rate,a); */
+  rate = gamOpto*2;
+  add_lin(rate,a);
 
   time_step();
   /* time_step_euler(); */
   /* steady_state(); */
 
   destroy_op(&a);
-  /* destroy_vec(&nv); */
+  destroy_vec(&nv);
   QuaC_finalize();
 
   return 0;

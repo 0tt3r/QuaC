@@ -175,7 +175,7 @@ void time_step(){
   TS             ts; /* timestepping context */
   int            row,col,its,j;
   PetscInt       i,Istart,Iend,time_steps_max = 1000000,steps;
-  PetscReal      time_total_max = 100000.0,dt = 10,time;
+  PetscReal      time_total_max = 10000000.0,dt = 100,time;
   PetscScalar    mat_tmp;
   long           dim;
 
@@ -253,9 +253,13 @@ void time_step(){
   VecSet(x,0.0);
   
   if(nid==0) {
-    row = 22;
+    row = 3;
+    row = total_levels*row + row;
     mat_tmp = 1. + 0.0*PETSC_i;
     VecSetValue(x,row,mat_tmp,INSERT_VALUES);
+    /* row = 62; */
+    /* mat_tmp = 1./3. + 0.0*PETSC_i; */
+    /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
     /* row = 31; */
     /* mat_tmp = 1./3. + 0.0*PETSC_i; */
     /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
@@ -324,20 +328,14 @@ void time_step_euler(){
   TS             ts; /* timestepping context */
   int            row,col,its,j;
   PetscInt       i,Istart,Iend,time_steps_max = 1000000,steps;
-  PetscReal      time_total_max = 100000.0,dt = 0.0001,time;
+  PetscReal      time_total_max = 100000.0,dt = 0.01,time;
   PetscScalar    mat_tmp;
   long           dim;
-
+  printf("in time step euler\n");
 
   dim = total_levels*total_levels;
 
   if (!stab_added){
-    /* row = 0; */
-    /* for (i=0;i<total_levels;i++){ */
-    /*   col = i*(total_levels+1); */
-    /*   mat_tmp = 1.0 + 0.*PETSC_i; */
-    /*   MatSetValue(full_A,row,col,mat_tmp,ADD_VALUES); */
-    /* } */
 
     /* Possibly print dense ham. No stabilization is needed? */
     if (nid==0) {
@@ -403,18 +401,18 @@ void time_step_euler(){
   VecSet(x,0.0);
   
   if(nid==0) {
-    row = 22;
-    mat_tmp = 1. + 0.0*PETSC_i;
+    row = 62;
+    mat_tmp = 1./3. + 0.0*PETSC_i;
     VecSetValue(x,row,mat_tmp,INSERT_VALUES);
-    /* row = 31; */
-    /* mat_tmp = 1./3. + 0.0*PETSC_i; */
-    /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
-    /* row = 93; */
-    /* mat_tmp = 1./3. + 0.0*PETSC_i; */
-    /* VecSetValue(x,row,mat_tmp,INSERT_VALUES); */
+    row = 31;
+    mat_tmp = 1./3. + 0.0*PETSC_i;
+    VecSetValue(x,row,mat_tmp,INSERT_VALUES);
+    row = 93;
+    mat_tmp = 1./3. + 0.0*PETSC_i;
+    VecSetValue(x,row,mat_tmp,INSERT_VALUES);
   }
   
-  /* Assemble x and b */
+  /* assemble x and b */
   VecAssemblyBegin(x);
   VecAssemblyEnd(x);
 
