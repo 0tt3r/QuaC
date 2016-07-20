@@ -11,7 +11,7 @@ int np;
 
 /* 
  * QuaC_initialize initializes petsc, gets each core's nid, and lets the
- * rest of the program know that it has been initialized.
+ * rest of the program know that it has been initialized. 
  * Inputs:
  *       int argc, char **args - command line input, for PETSc
  */
