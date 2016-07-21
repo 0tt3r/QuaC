@@ -47,7 +47,7 @@ void create_op(int number_of_levels,operator *new_op) {
 
   /* First make the annihilation operator */
   temp              = malloc(sizeof(struct operator));
-  temp->initial_pop = 0;
+  temp->initial_pop = (double) 0.0;
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = LOWER;
@@ -56,7 +56,7 @@ void create_op(int number_of_levels,operator *new_op) {
   *new_op           = temp;
 
   temp              = malloc(sizeof(struct operator));
-  temp->initial_pop = 0;
+  temp->initial_pop = (double) 0.0;
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = RAISE;
@@ -65,7 +65,7 @@ void create_op(int number_of_levels,operator *new_op) {
   (*new_op)->dag    = temp;
 
   temp              = malloc(sizeof(struct operator));
-  temp->initial_pop = 0;
+  temp->initial_pop = (double) 0.0;
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = NUMBER;
@@ -94,13 +94,14 @@ void create_op(int number_of_levels,operator *new_op) {
 
 void create_vec(int number_of_levels,vec_op *new_vec) {
   operator temp = NULL;
+  vec_op temp_vec;
   int i;
   _check_initialized_op();
 
   (*new_vec) = malloc(number_of_levels*(sizeof(struct operator*)));
   for (i=0;i<number_of_levels;i++){
     temp              = malloc(sizeof(struct operator));
-    temp->initial_pop = 0;
+    temp->initial_pop = (double)0.0;
     temp->n_before    = total_levels;
     temp->my_levels   = number_of_levels;
     temp->my_op_type  = VEC;
@@ -108,6 +109,12 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
     temp->position    = i;
     (*new_vec)[i]     = temp;
   }
+
+  /*
+   * Store the top of the array in vec[0], so we can access it later, 
+   * through subsystem_list.
+   */
+  (*new_vec)[0]->vec_op_list = (*new_vec);
 
   /* Increase total_levels */
   total_levels = total_levels*number_of_levels;
@@ -807,7 +814,7 @@ void _check_initialized_A(){
  * Return:
  *       none
  */
-void set_initial_pop_op(operator op1,int initial_pop){
+void set_initial_pop(operator op1,double initial_pop){
 
   if (initial_pop>op1->my_levels&&op1->my_op_type!=VEC){
     if (nid==0){

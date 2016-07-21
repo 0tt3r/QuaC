@@ -51,9 +51,9 @@ int main(int argc,char **args){
   /* plasmon decay */
   add_lin(gamma_s,a);
 
-  set_initial_pop_op(a,8);
-  set_initial_pop_op(qd[0],1);
-  set_initial_pop_op(qd[1],1);
+  set_initial_pop(a,8);
+  set_initial_pop(qd[0],1);
+  set_initial_pop(qd[1],1);
   time_step();
   /* steady_state(); */
 

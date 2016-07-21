@@ -41,10 +41,11 @@ int main(int argc,char **args){
   magDrvP    = lambda;
   Q          = pow(10,6);
 
-  print_dense_ham();
+  //  print_dense_ham();
 
-  create_op(num_phonon,&a);
   create_vec(3,&nv);
+  create_op(num_phonon,&a);
+
 
 
   /* Add terms to the hamiltonian */
@@ -77,6 +78,11 @@ int main(int argc,char **args){
 
   rate = gamOpto*2;
   add_lin(rate,a);
+
+  set_initial_pop(a,8);
+  set_initial_pop(nv[gm],1.);
+  set_initial_pop(nv[gp],1.);
+  set_initial_pop(nv[g0],1.);
 
   time_step();
   /* time_step_euler(); */

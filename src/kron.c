@@ -102,7 +102,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
  * the Kronecker product with I_before and with I_after.
  *
  * This is where the parallelization of the matrix generation
- * happens.
+ * could happen.
  *
  * Inputs:
  *       PetscScalar add_to_mat: value to add
@@ -244,6 +244,103 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
   /*     } */
   /*   } */
   /* } */
+  return;
+}
+
+
+/*
+ * _add_PETSc_DM_kron_ij is the main driver of the kronecker
+ * products. It takes an i,j pair from some subspace which
+ * then needs to be expanded to the larger space, defined by
+ * the Kronecker product with I_before and with I_after. This
+ * routine specifically adds to the initial density matrix, rho.
+ *
+ * This is where the parallelization of the matrix generation
+ * could happen. 
+ *
+ * Inputs:
+ *       PetscScalar add_to_mat: value to add
+ *       Mat subspace_dm:        subspace density matrix
+ *       Mat rho_mat:            initial density matrix
+ *       int i_op:               i of the subspace
+ *       int j_op:               j of the subspace
+ *       int n_before:           size of I_before
+ *       int n_after:            size of I_after
+ *       int my_levels:          size of subspace
+ * Outputs:
+ *       none, but adds to PETSc matrix 
+ *
+ */
+
+void _add_PETSc_DM_kron_ij(PetscScalar add_to_rho,Mat subspace_dm,Mat rho_mat,int i_op,int j_op,
+                            int n_before,int n_after,int my_levels){
+  long k1,k2,i_dm,j_dm;
+
+  for (k1=0;k1<n_after;k1++){ /* n_after loop */
+    for (k2=0;k2<n_before;k2++){ /* n_before loop */
+      /*
+       * Now we need to calculate the apropriate location of this
+       * within the full DM vector. We need to expand the operator
+       * from its small Hilbert space to the total Hilbert space.
+       * This expansion depends on the order in which the operators
+       * were added. For example, if we multiplied 3 operators:
+       * A, B, and C (with sizes n_a, n_b, n_c, respectively), we would
+       * have (where the ' denotes in the full space and I_(n) means
+       * the identity matrix of size n):
+       * DM = A' B' C' = A cross B cross C
+       * A' = A cross I_(n_b) cross I_(n_c)
+       * B' = I_(n_a) cross B cross I_(n_c)
+       * C' = I_(n_a) cross I_(n_b) cross C
+       * 
+       * For an arbitrary operator, we only care about
+       * the Hilbert space size before and the Hilbert space size
+       * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
+       *
+       * The calculation of i_ham and j_ham exploit the structure of 
+       * the tensor products - they are general for kronecker products
+       * of identity matrices with some matrix A
+       */
+      i_dm = i_op*n_after+k1+k2*my_levels*n_after;
+      j_dm = j_op*n_after+k1+k2*my_levels*n_after;
+      MatSetValue(subspace_dm,i_dm,j_dm,add_to_rho,ADD_VALUES);
+    }
+  }
+  return;
+}
+
+/*
+ * _mult_PETSc_init_DM takes in a (fully expanded) subspace's
+ * density matrix and does rho = rho*sub_DM. Since each DM is from a
+ * separate Hilbert space, this is valid.
+ * Inputs:
+ *      Mat subspace_dm - the (fully expanded) subspace's DM
+ *      Mat rho_mat     - the initial DM
+ */
+void _mult_PETSc_init_DM(Mat subspace_dm,Mat rho_mat,double trace){
+  Mat tmp_mat;
+
+  /* Assemble matrix */
+
+  MatAssemblyBegin(subspace_dm,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(subspace_dm,MAT_FINAL_ASSEMBLY);
+
+  /* 
+   * Check to make sure trace is 1; if not, normalize and print a warning.
+   */
+  if (trace!=(double)1.0){
+    printf("WARNING! The trace over the subsystem is not 1.0!\n");
+    printf("         The initial populations were normalized.\n");
+    MatScale(subspace_dm,1./trace);
+  }
+  
+  /* 
+   * Do rho = rho*subspace_dm - this is correct because the initial DMs
+   * are all from different subspaces
+   */
+  MatMatMult(rho_mat,subspace_dm,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&tmp_mat);
+  MatCopy(tmp_mat,rho_mat,SAME_NONZERO_PATTERN);
+  MatDestroy(&tmp_mat);
+
   return;
 }
 

@@ -9,15 +9,17 @@ typedef struct operator{
   int     n_before;
   int     my_levels;
   op_type my_op_type;
-  int     position; /* For vec operators only */
-  struct operator *vec_array;
-  struct operator *dag; /* Raising operator */
-  struct operator *n;   /* number operator */
+  /* For ladder operators only */
+  struct operator *dag; 
+  struct operator *n;   
+  /* For vec operators only */
+  int     position; 
+  /* Stores a pointer to the top of the list. Used in vec[0] only*/
+  struct operator **vec_op_list;
   
 } *operator;
+typedef operator *vec_op; /* Treat vec_op as an array of operators  */
 
-typedef operator *vec_op;
-/* /\* Treat vec_op as an array of operators *\/ */
 
 
 void create_op(int,operator*);
@@ -30,7 +32,7 @@ int  _check_op_type3(operator,operator,operator);
 void add_lin(double,operator);
 void add_lin_mult2(double,operator,operator);
 void print_dense_ham();
-void set_initial_pop_op(operator,int);
+void set_initial_pop(operator,double);
 extern int nid; /* a ranks id */
 extern int np; /* number of processors */
 #define MAX_SUB 100  //Consider making this not a define
