@@ -9,6 +9,8 @@
 int main(int argc,char **args){
   double omega,gamma_pi,gamma_di,gamma_s,g_couple;
   double eV;
+  PetscReal time_max,dt;
+  PetscInt  steps_max;
   int num_plasmon=10,num_qd=2,i;
   operator a,*qd;
 
@@ -54,7 +56,13 @@ int main(int argc,char **args){
   set_initial_pop(a,8);
   set_initial_pop(qd[0],1);
   set_initial_pop(qd[1],1);
-  time_step();
+
+  /* What units are these?! */
+  time_max  = 10000;
+  dt        = 0.01;
+  steps_max = 100;
+
+  time_step(time_max,dt,steps_max);
   /* steady_state(); */
 
   destroy_op(&a);

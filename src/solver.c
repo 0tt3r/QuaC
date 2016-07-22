@@ -10,8 +10,9 @@ static PetscReal default_rtol    = 1e-11;
 static PetscInt  default_restart = 100;
 static int       stab_added      = 0;
 
-PetscErrorCode RHSFunction (TS,PetscReal,Vec,Vec,void*);
-void _set_initial_density_matrix(Vec);
+PetscErrorCode RHSFunction (TS,PetscReal,Vec,Vec,void*); // Move to header?
+PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*); // Move to header?
+void _set_initial_density_matrix(Vec); // Move to header?
 
 /*
  * steady_state solves for the steady_state of the system
@@ -178,28 +179,26 @@ void steady_state(){
 /*
  * time_step solves for the time_dependence of the system
  * that was previously setup using the add_to_ham and add_lin
- * routines. Solver selection and parameterscan be controlled via PETSc
- * command line options.
+ * routines. Solver selection and parameters can be controlled via PETSc
+ * command line options. Default solver is TSRK3BS
+ *
+ * Inputs:
+ *       double dt:       initial timestep. For certain explicit methods, this timestep 
+ *                        can be changed, as those methods have adaptive time steps
+ *       double time_max: the maximum time to integrate to
+ *       int steps_max:   max number of steps to take
  */
-void time_step(){
+void time_step(PetscReal time_max,PetscReal dt,PetscInt steps_max){
   PetscViewer    mat_view;
   Vec            x;
   TS             ts; /* timestepping context */
-  PetscInt       i,j,Istart,Iend,time_steps_max = 1000,steps;
-  PetscReal      time_total_max = 100.0,dt = 10;
+  PetscInt       i,j,Istart,Iend,steps;
   PetscScalar    mat_tmp;
   long           dim;
 
   dim = total_levels*total_levels;
 
   if (!stab_added){
-    /* row = 0; */
-    /* for (i=0;i<total_levels;i++){ */
-    /*   col = i*(total_levels+1); */
-    /*   mat_tmp = 1.0 + 0.*PETSC_i; */
-    /*   MatSetValue(full_A,row,col,mat_tmp,ADD_VALUES); */
-    /* } */
-
     /* Possibly print dense ham. No stabilization is needed? */
     if (nid==0) {
       /* Print dense ham, if it was asked for */
@@ -293,9 +292,10 @@ void time_step(){
    * Set default options, can be changed at runtime
    */
 
-  TSSetDuration(ts,time_steps_max,time_total_max);
+  TSSetDuration(ts,steps_max,time_max);
   TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
-  TSSetType(ts,TSBEULER);
+  TSSetType(ts,TSRK);
+  TSRKSetType(ts,TSRK3BS);
   TSSetSolution(ts,x);
   TSSetFromOptions(ts);
   TSSolve(ts,x);

@@ -6,7 +6,6 @@
 
 void steady_state();
 void get_populations(Vec);// Move to private?
-void time_step();
-PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*); // Move to private?
-//PetscErrorCode RHSFunction(TS,PetscReal,Vec,Vec,void*);
+void time_step(PetscReal,PetscReal,PetscInt);
+
 #endif

@@ -8,13 +8,13 @@
 int main(int argc,char **args){
   /* tc is whether to do Tavis Cummings or not */
   PetscInt n_th=10,num_phonon=200; //Default values set here
-  PetscInt i;
-  PetscReal lambda,T2star,resFreq,magDrvM,magDrvP,gamOpto;
-  PetscReal Q,kHz,MHz,GHz,THz,Hz,rate;
+  PetscInt i,steps_max;
+  PetscReal lambda,T2star,resFreq,magDrvM,magDrvP,gamOpto,gamma_mech;
+  PetscReal Q,kHz,MHz,GHz,THz,Hz,rate,time_max,dt;
   operator a;
   vec_op   nv;
 
-  enum STATE {gm=0,g0,gp};
+  enum STATE {gp=0,g0,gm};
   
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
@@ -33,19 +33,19 @@ int main(int argc,char **args){
 
   if (nid==0) printf("Num_phonon: %d n_th: %d \n",num_phonon,n_th);
   /* Define scalars to add to Ham */
-  lambda     = 0.1*MHz*2*M_PI;
+  lambda     = 1*kHz*2*M_PI;
   T2star     = 1*MHz;
   resFreq    = 5*MHz*2*M_PI;
+  gamma_mech = 1*kHz;
   magDrvM    = 0;
-  gamOpto    = 2*MHz;
+  gamOpto    = 50*kHz;
   magDrvP    = lambda;
   Q          = pow(10,6);
 
-  //  print_dense_ham();
+  print_dense_ham();
 
-  create_vec(3,&nv);
   create_op(num_phonon,&a);
-
+  create_vec(3,&nv);
 
 
   /* Add terms to the hamiltonian */
@@ -65,28 +65,31 @@ int main(int argc,char **args){
   add_lin_mult2(rate,nv[gm],nv[gm]); //L gm gm
 
   
-  /* /\* Below 4 terms represent coupling *\/ */
-  add_to_ham_mult3(lambda,nv[gm],nv[gp],a); // |e-><e+| a
-  add_to_ham_mult3(lambda,nv[gp],nv[gm],a->dag); // |e+><e-| at
+  /* Below 4 terms represent coupling  */
+  add_to_ham_mult3(lambda,nv[gm],nv[gp],a->dag); // |e-><e+| at
+  add_to_ham_mult3(lambda,nv[gp],nv[gm],a); // |e+><e-| a
   
   /* phonon bath thermal terms */
-  rate = resFreq/(Q)*(n_th+1);
+  rate = gamma_mech*(n_th+1);
   add_lin(rate,a);
 
-  rate = resFreq/(Q)*(n_th);
+  rate = gamma_mech*(n_th);
   add_lin(rate,a->dag);
 
-  rate = gamOpto*2;
+  rate = gamOpto;
   add_lin(rate,a);
 
-  set_initial_pop(a,8);
+  set_initial_pop(a,4);
   set_initial_pop(nv[gm],1.);
   set_initial_pop(nv[gp],1.);
   set_initial_pop(nv[g0],1.);
 
-  time_step();
-  /* time_step_euler(); */
-  /* steady_state(); */
+  /* What units are these?! */
+  time_max  = 100000;
+  dt        = 0.01;
+  steps_max = 10000;
+  /* time_step(time_max,dt,steps_max); */
+  steady_state();
 
   destroy_op(&a);
   destroy_vec(&nv);

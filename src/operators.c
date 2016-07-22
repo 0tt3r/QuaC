@@ -94,7 +94,6 @@ void create_op(int number_of_levels,operator *new_op) {
 
 void create_vec(int number_of_levels,vec_op *new_vec) {
   operator temp = NULL;
-  vec_op temp_vec;
   int i;
   _check_initialized_op();
 
