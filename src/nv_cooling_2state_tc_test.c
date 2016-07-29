@@ -7,7 +7,7 @@
 
 int main(int argc,char **args){
   /* tc is whether to do Tavis Cummings or not */
-  PetscInt n_th=10,num_phonon=200,num_nv=1,tc=1; //Default values set here
+  PetscInt n_th=3,num_phonon=5,num_nv=2,tc=0; //Default values set here
   PetscInt i,nv_levels=2;
   PetscReal w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par;
   PetscReal Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
@@ -20,7 +20,7 @@ int main(int argc,char **args){
 
   
   /* Define units, in AU */
-  GHz = 1.519827e-7;
+  GHz = 1e3;//1.519827e-7;
   MHz = GHz*1e-3;
   kHz = MHz*1e-3;
   THz = GHz*1e3;
@@ -87,8 +87,8 @@ int main(int argc,char **args){
     
       /* nv center lindblad terms */
       add_lin(gamma_eff,nv[i]);
-      //add_lin(gamma_par,nv[i]->n);
-      //      add_lin_mult2(gamma_par,nv[i],nv[i]->dag);
+      /* add_lin(gamma_par,nv[i]->n); */
+      /* add_lin_mult2(gamma_par,nv[i],nv[i]->dag); */
     }
   }
 
