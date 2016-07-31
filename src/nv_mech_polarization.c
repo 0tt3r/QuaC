@@ -85,7 +85,7 @@ int main(int argc,char **args){
   set_initial_pop(nv[g0],1.);
 
   /* What units are these?! */
-  time_max  = 100000;
+  time_max  = 10000000;
   dt        = 0.01;
   steps_max = 10000;
   /* time_step(time_max,dt,steps_max); */
