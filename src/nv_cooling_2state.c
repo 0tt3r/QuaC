@@ -25,10 +25,10 @@ int main(int argc,char **args){
   THz = GHz*1e3;
   Hz  = kHz*1e-3;
   alpha      = 0.01663;
-  N_th       = 3;
-  num_phonon = 10;
-  num_nv     = 1;
-  init_phonon = 5;
+  N_th       = 2;
+  num_phonon = 5;
+  num_nv     = 2;
+  init_phonon = 4;
   steady_state_solve = 1;
   /* Get arguments from command line */
   PetscOptionsGetInt(NULL,NULL,"-num_nv",&num_nv,NULL);
@@ -42,7 +42,7 @@ int main(int argc,char **args){
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency
   gamma_eff  = 145.1*MHz; //Effective dissipation rate
   lambda_s   = 100*1.06*kHz*2*M_PI;
-
+  lambda_s   = 0.1*MHz*2*M_PI;
   /* lambda_eff = lambda_s*sqrt(alpha)*sqrt(num_nv); */
   gamma_par  = 166.666666666*MHz;
   Q          = pow(10,6);  //Mechanical resonator quality factor
@@ -50,9 +50,9 @@ int main(int argc,char **args){
 
   print_dense_ham();
 
-  create_op(num_phonon,&a);
+  create_op(num_phonon,&a);  
   create_op(2,&nv);
-  
+
   /* Add terms to the hamiltonian */
   add_to_ham(w_m,a->n); // w_m at a
   
@@ -81,7 +81,8 @@ int main(int argc,char **args){
     steady_state();
   } else {
     set_initial_pop(a,init_phonon);
-    time_max  = 10000000;
+    set_initial_pop(nv,1);
+    time_max  = 100;
     dt        = 0.01;
     steps_max = 10000;
     time_step(time_max,dt,steps_max);

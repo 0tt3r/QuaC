@@ -767,11 +767,11 @@ void _check_initialized_A(){
        * the row size
        */
       if (total_levels<MAX_NNZ_PER_ROW) {
-        d_nz[0] = total_levels;
-        o_nz[0] = total_levels;
+        d_nz[0] = total_levels*5;
+        o_nz[0] = total_levels*5;
         for (i=1;i<(dim/np)*5;i++){
-          d_nz[i] = total_levels;
-          o_nz[i] = total_levels;
+          d_nz[i] = total_levels*5;
+          o_nz[i] = total_levels*5;
         }
       } else {
         d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
@@ -815,7 +815,7 @@ void _check_initialized_A(){
  */
 void set_initial_pop(operator op1,double initial_pop){
 
-  if (initial_pop>op1->my_levels&&op1->my_op_type!=VEC){
+  if (initial_pop>=op1->my_levels&&op1->my_op_type!=VEC){
     if (nid==0){
       printf("ERROR! The initial population cannot be greater than the number of levels!\n");
       exit(0);

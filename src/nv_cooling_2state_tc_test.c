@@ -7,18 +7,15 @@
 
 int main(int argc,char **args){
   /* tc is whether to do Tavis Cummings or not */
-  PetscInt n_th=3,num_phonon=5,num_nv=2,tc=0; //Default values set here
+  PetscInt n_th=2,num_phonon=5,num_nv=2,tc=0; //Default values set here
   PetscInt i,nv_levels=2;
   PetscReal w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par;
   PetscReal Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,*nv;
-
-
   
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
-  
   /* Define units, in AU */
   GHz = 1e3;//1.519827e-7;
   MHz = GHz*1e-3;
@@ -38,7 +35,7 @@ int main(int argc,char **args){
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency
   gamma_eff  = 145.1*MHz; //Effective dissipation rate
   lambda_s   = 10*1.06*kHz*2*M_PI;
-
+  lambda_s   = 0.1*MHz*2*M_PI;
 
   gamma_par  = 166.666666666*MHz;
   Q          = pow(10,6);  //Mechanical resonator quality factor
@@ -46,12 +43,12 @@ int main(int argc,char **args){
 
   print_dense_ham();
 
-  create_op(num_phonon,&a);
+
   if (tc) {
     nv = malloc(1*sizeof(struct operator));
     /* Use Tavis Cummings approximation */
     create_op(nv_levels,&nv[0]);
-
+    create_op(num_phonon,&a);
     lambda_eff = lambda_s*sqrt(num_nv);
     /* Add terms to the hamiltonian */
     add_to_ham(w_m,a->n); // w_m at a
@@ -73,6 +70,7 @@ int main(int argc,char **args){
     for (i=0;i<num_nv;i++){
       create_op(nv_levels,&nv[i]);
     }
+    create_op(num_phonon,&a);
     add_to_ham(w_m,a->n); // w_m at a
 
     lambda_eff = lambda_s;
@@ -80,10 +78,10 @@ int main(int argc,char **args){
       add_to_ham(w_m,nv[i]->n); // w_m nvt nv
     
       /* Below 4 terms represent lambda_eff (nvt + nv)(at + a) */
-      add_to_ham_mult2(lambda_eff,a->dag,nv[i]->dag); //nvt at
+      /* add_to_ham_mult2(lambda_eff,a->dag,nv[i]->dag); //nvt at */
       add_to_ham_mult2(lambda_eff,nv[i]->dag,a);  //nvt a
       add_to_ham_mult2(lambda_eff,nv[i],a->dag);  //nt at
-      add_to_ham_mult2(lambda_eff,nv[i],a);   //nv a
+      /* add_to_ham_mult2(lambda_eff,nv[i],a);   //nv a */
     
       /* nv center lindblad terms */
       add_lin(gamma_eff,nv[i]);
@@ -116,3 +114,4 @@ int main(int argc,char **args){
   QuaC_finalize();
   return 0;
 }
+
