@@ -66,8 +66,10 @@ int main(int argc,char **args){
   /* steady_state(); */
 
   destroy_op(&a);
-  destroy_op(&qd);
-
+  for (i=0;i<num_qd;i++){
+    destroy_op(&qd[i]);
+  }
+  free(qd);
   QuaC_finalize();
   return 0;
 }
