@@ -171,7 +171,7 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
 }
 
 
-void get_populations(Vec x) {
+void get_populations(Vec x,PetscReal time) {
   int               j,my_levels,n_after,cur_state,num_pop;
   int               *i_sub_to_i_pop;
   PetscInt          x_low,x_high,i;
@@ -249,11 +249,22 @@ void get_populations(Vec x) {
 
   /* Print results */
   if(nid==0) {
-    printf("Populations: ");
-    for(i=0;i<num_pop;i++){
-      printf(" %e ",populations[i]);
+    /* A negative time means we were called from steadystate, so print to stdout*/
+    if (time<0){
+      printf("Final populations: ");
+      for(i=0;i<num_pop;i++){
+        printf(" %e ",populations[i]);
+      }
+      printf("\n");
+    } else {
+      FILE *f = fopen("pop","a");
+      fprintf(f,"%e ",time);
+      for(i=0;i<num_pop;i++){
+        fprintf(f," %e ",populations[i]);
+      }
+      fprintf(f,"\n");
+      fclose(f);
     }
-    printf("\n");
   }
 
   

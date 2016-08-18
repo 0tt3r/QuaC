@@ -5,7 +5,7 @@
 #include <petscts.h>
 
 void steady_state();
-void get_populations(Vec);// Move to private?
 void time_step(PetscReal,PetscReal,PetscInt);
+void set_ts_monitor(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*));
 
 #endif

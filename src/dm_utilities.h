@@ -10,6 +10,6 @@ void create_dm(Vec*,PetscInt);
 void destroy_dm(Vec);
 void partial_trace_over_one(Vec,Vec,PetscInt,PetscInt,PetscInt);
 void partial_trace_over(Vec,Vec,int,...);
-void get_populations(Vec);
+void get_populations(Vec,PetscReal);
 
 #endif

@@ -12,7 +12,8 @@ static PetscInt  default_restart = 100;
 static int       stab_added      = 0;
 
 PetscErrorCode RHSFunction (TS,PetscReal,Vec,Vec,void*); // Move to header?
-PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*); // Move to header?
+PetscErrorCode (*_ts_monitor)(TS,PetscInt,PetscReal,Vec,void*) = NULL;
+  
 void _set_initial_density_matrix(Vec); // Move to header?
 
 /*
@@ -163,7 +164,8 @@ void steady_state(){
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
   if (nid==0) printf("KSP set. Solving for steady state...\n");
   KSPSolve(ksp,b,x);
-  get_populations(x);
+  /* Pass -1.0 to flag the routine to print the final populations to stdout */
+  get_populations(x,-1.0);
 
   KSPGetIterationNumber(ksp,&its);
 
@@ -279,7 +281,7 @@ void time_step(PetscReal time_max,PetscReal dt,PetscInt steps_max){
   /*
    * Set function to get information at every timestep
    */
-  TSMonitorSet(ts,ts_monitor,NULL,NULL);
+  TSMonitorSet(ts,_ts_monitor,NULL,NULL);
 
   /*
    * Set up ODE system
@@ -305,7 +307,8 @@ ion(ts,NULL,RHSFunction,NULL); */
   TSSolve(ts,x);
   TSGetTimeStepNumber(ts,&steps);
 
-  get_populations(x);
+  /* Pass -1.0 to flag the routine to print the final populations to stdout */
+  get_populations(x,-1.0);
 
   PetscPrintf(PETSC_COMM_WORLD,"Steps %D\n",steps);
 
@@ -317,6 +320,11 @@ ion(ts,NULL,RHSFunction,NULL); */
   return;
 }
 
+void set_ts_monitor(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*)){
+  printf("before set monitor\n");
+  _ts_monitor = (*monitor);
+  printf("after set monitor\n");
+}
 
 /*
  * _set_initial_density_matrix sets the initial condition from the
@@ -476,114 +484,9 @@ PetscErrorCode RHSFunction (TS ts, PetscReal t, Vec array_in, Vec array_out, voi
  *    ctx    - the user-provided context for this monitoring routine.
  */
 
-PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx) {
-  /* Print populations for this time step */
-  if (nid==0) printf("Time: %e ",time);
-  get_populations(u);
-  //get_concurrence(u);
-  PetscFunctionReturn(0);
-}
+/* PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx) { */
+  
+/*   get_populations(u); */
+/*   PetscFunctionReturn(0); */
+/* } */
 
-/*
- * Get populations for density matrix x
- * Inputs:
- *       Vec x - petsc vector representing density matrix
- * Outputs: 
- *       None, but prints populations to file
- */
-
-
-void get_concurrence(Vec x) {
-  int               j,my_levels,n_after,cur_state,num_pop;
-  int               *i_sub_to_i_pop;
-  PetscInt          x_low,x_high,i;
-  const PetscScalar *xa;
-  PetscReal         tmp_real;
-  double            *populations;
-  VecGetOwnershipRange(x,&x_low,&x_high);
-  VecGetArrayRead(x,&xa); 
-
-  /*
-   * Loop through operators to see how many populations we need to 
-   * calculate, because VEC need a population for each level.
-   * We also set an array that translates i_subsystem to i_pop for normal ops.
-   */
-  i_sub_to_i_pop = malloc(num_subsystems*sizeof(int));
-  num_pop = 0;
-  for (i=0;i<num_subsystems;i++){
-    if (subsystem_list[i]->my_op_type==VEC){
-      i_sub_to_i_pop[i] = num_pop;
-      num_pop += subsystem_list[i]->my_levels;
-    } else {
-      i_sub_to_i_pop[i] = num_pop;
-      num_pop += 1;      
-    }
-  }
-
-  /* Initialize population arrays */
-  populations = malloc(num_pop*sizeof(double));
-  for (i=0;i<num_pop;i++){
-    populations[i] = 0.0;
-  }
-
-
-  for (i=0;i<total_levels;i++){
-    if ((i*total_levels+i)>=x_low&&(i*total_levels+i)<x_high) {
-      /* Get the diagonal entry of rho */
-      tmp_real = (double)PetscRealPart(xa[i*(total_levels)+i-x_low]);
-      //      printf("%e \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
-      for(j=0;j<num_subsystems;j++){
-        /*
-         * We want to calculate the populations. To do that, we need 
-         * to know what the state of the number operator for a specific
-         * subsystem is for a given i. To accomplish this, we make use
-         * of the fact that we can take the diagonal index i from the
-         * full space and get which diagonal index it is in the subspace
-         * by calculating:
-         * i_subspace = mod(mod(floor(i/n_a),l*n_a),l)
-         * For regular operators, these are just number operators, and we count from 0,
-         * so, cur_state = i_subspace
-         *
-         * For VEC ops, we can use the same technique. Once we get cur_state (i_subspace),
-         * we use that to go the appropriate location in the population array.
-         */
-        if (subsystem_list[j]->my_op_type==VEC){
-          my_levels = subsystem_list[j]->my_levels;
-          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-          populations[i_sub_to_i_pop[j]+cur_state] += tmp_real;
-        } else {
-          my_levels = subsystem_list[j]->my_levels;
-          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-          populations[i_sub_to_i_pop[j]] += tmp_real*cur_state;
-        }
-      }
-    }
-  } 
-
-
-
-  /* Reduce results across cores */
-  if(nid==0) {
-    MPI_Reduce(MPI_IN_PLACE,populations,num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-  } else {
-    MPI_Reduce(populations,populations,num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-  }
-
-  /* Print results */
-  if(nid==0) {
-    printf("Populations: ");
-    for(i=0;i<num_pop;i++){
-      printf(" %e ",populations[i]);
-    }
-    printf("\n");
-  }
-
-  /* Put the array back in Petsc's hands */
-  VecRestoreArrayRead(x,&xa);
-  /* Free memory */
-  free(i_sub_to_i_pop);
-  free(populations);
-  return;
-}
