@@ -4,17 +4,24 @@
 #include "quac.h"
 #include "operators.h"
 #include "solver.h"
+#include "dm_utilities.h"
 #include "petsc.h"
+
+PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
+
+/* Declared globally so that we can access this in ts_monitor */
+FILE *f_fid;
+operator a,*qd;
+Vec antisym_bell_dm,ptraced_dm;
 
 int main(int argc,char **args){
   double omega,gamma_pi,gamma_di,gamma_s,g_couple;
   double eV;
   PetscReal time_max,dt;
+  PetscScalar val;
   PetscInt  steps_max;
   int num_plasmon=10,num_qd=2,i;
-  operator a,*qd;
 
-  
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -53,15 +60,42 @@ int main(int argc,char **args){
   /* plasmon decay */
   add_lin(gamma_s,a);
 
-  set_initial_pop(a,8);
-  set_initial_pop(qd[0],1);
+  set_initial_pop(a,0);
+  set_initial_pop(qd[0],0);
   set_initial_pop(qd[1],1);
 
-  /* What units are these?! */
-  time_max  = 10000;
+
+  /* Create a reference dm (the antisym bell state) for fidelity calculations */
+  create_dm(&antisym_bell_dm,4);
+  
+  val = 0.5;
+  add_value_to_dm(antisym_bell_dm,1,1,val);
+  add_value_to_dm(antisym_bell_dm,2,2,val);
+  val = -0.5;
+  add_value_to_dm(antisym_bell_dm,1,2,val);
+  add_value_to_dm(antisym_bell_dm,2,1,val);
+
+  assemble_dm(antisym_bell_dm);
+
+  /* 
+   * Also create a place to store the partial trace 
+   * No assembly is necessary here, as we will be ptracing into this dm
+   */
+  create_dm(&ptraced_dm,4);
+
+  /* These units are 1/eV, because we used eV as our base unit */
+  time_max  = 100000;
   dt        = 0.01;
   steps_max = 100;
 
+  /* Set the ts_monitor to print results at each time step */
+  set_ts_monitor(ts_monitor);
+  /* Open file that we will print to in ts_monitor */
+  if (nid==0){
+    f_fid = fopen("fid","w");
+    fprintf(f_fid,"#Time Fidelity Concurrence\n");
+  }
+  
   time_step(time_max,dt,steps_max);
   /* steady_state(); */
 
@@ -70,6 +104,30 @@ int main(int argc,char **args){
     destroy_op(&qd[i]);
   }
   free(qd);
+  destroy_dm(ptraced_dm);
+  destroy_dm(antisym_bell_dm);
+  if (nid==0) fclose(f_fid);
   QuaC_finalize();
   return 0;
+}
+
+PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
+  double fidelity,concurrence;
+
+  /* get_populations prints to pop file */
+
+  get_populations(dm,time);
+  /* Partial trace away the oscillator */
+
+  partial_trace_over(dm,ptraced_dm,1,a);
+
+  get_fidelity(antisym_bell_dm,ptraced_dm,&fidelity);
+  get_bipartite_concurrence(ptraced_dm,&concurrence);
+
+  if (nid==0){
+    /* Print fidelity and concurrence to file */
+    fprintf(f_fid,"%e %e %e\n",time,fidelity,concurrence);
+  }
+  PetscFunctionReturn(0);
+
 }

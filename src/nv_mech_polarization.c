@@ -6,7 +6,7 @@
 #include "petsc.h"
 #include "dm_utilities.h"
 
-PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*); // Move to header?
+PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
 operator a;
 
@@ -116,7 +116,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
 
 
   get_fidelity(ptraced_dm,ptraced_dm,&fidelity);
-  printf("fidelity: %f\n",fidelity);
+  if (nid==0) printf("fidelity: %f\n",fidelity);
   destroy_dm(ptraced_dm);
   PetscFunctionReturn(0);
 

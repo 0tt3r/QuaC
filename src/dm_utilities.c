@@ -27,6 +27,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   va_start(ap,number_of_ops);
   
   /* Check that the full_dm is of size total_levels */
+
   VecGetSize(full_dm,&dm_size);
 
   if (dm_size!=pow(total_levels,2)){
@@ -83,8 +84,10 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
     nop_prev[i]  = op->my_levels;
   }
 
-  /* Check that ptraced_dm is big enough */  
+  /* Check that ptraced_dm is big enough */
+
   VecGetSize(ptraced_dm,&dm_size);
+
   if (dm_size<current_total_levels){
     if (nid==0){
       printf("ERROR! ptraced_dm is not large enough to store the traced over density matrix!\n");
@@ -114,6 +117,17 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   return;
 }
 
+/* 
+ * void create_dm creates a new density matrix object 
+ * and initializes it to 0
+ *
+ * Inputs: 
+ *        Vec* new_dm   - where the new density matrix will be stored
+ *        PetscInt size - size of the Hilbert space (N if the matrix is NxN)
+ * Outpus:
+ *        Vec* new_dm   - new, initialized DM
+ *
+ */
 void create_dm(Vec* new_dm,PetscInt size){
   /* Create the dm, partition with PETSc */
   VecCreate(PETSC_COMM_WORLD,new_dm);
@@ -123,9 +137,63 @@ void create_dm(Vec* new_dm,PetscInt size){
   VecSet(*new_dm,0.0);
 }
 
+
+/* 
+ * void destroy_dm frees the memory from a previously created dm object
+ *
+ * Inputs: 
+ *         Vec dm - memory to free
+ * Outpus:
+ *         None, but frees the memory from dm
+ *
+ */
+
 void destroy_dm(Vec dm){
   /* destroy the density matrix */
   VecDestroy(&dm);
+}
+
+/* 
+ * void add_value_to_dm adds the specified value to the density matrix
+ *
+ * Inputs: 
+ *         Vec dm - dm to add to
+ *         PetscInt row - row location of value
+ *         PetscInt col - column location of value
+ *         PetscScalr val - value to add at row,col
+ * Outpus:
+ *         None, but adds the value to the dm
+ *
+ * NOTE: You MUST call assemble_dm after adding all values.
+ *
+ */
+
+void add_value_to_dm(Vec dm,PetscInt row,PetscInt col,PetscScalar val){
+  PetscInt location,dm_size,low,high;
+
+  /* Get information about the dm */
+  VecGetSize(dm,&dm_size);
+  VecGetOwnershipRange(dm,&low,&high);
+  location = sqrt(dm_size)*row + col;
+  /* If I own it, set the value */
+  if (location>=low&&location<high) {
+    VecSetValue(dm,location,val,ADD_VALUES);
+  }
+}
+
+/* 
+ * void assemble_dm puts all the cached values in the right place and 
+ * allows for the dm to be used
+ *
+ * Inputs: 
+ *         Vec dm - dm to assemble
+ * Outpus:
+ *         None, but assembles the dm
+ *
+ */
+void assemble_dm(Vec dm){
+  VecAssemblyBegin(dm);
+  VecAssemblyEnd(dm);
 }
 
 void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt nop,PetscInt naf){
@@ -168,14 +236,38 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
   VecAssemblyEnd(ptraced_dm);
 }
 
+/* 
+ * void get_populations calculates the populations of all operators previously declared
+ * and prints it to a file
+ * For normal operators, this is Tr(C^\dagger C rho). For vec_op's, we instead calculate
+ * the probability of each level, i.e. Tr(|i><i| rho) for i=0,num_levels. 
+ *
+ * Inputs: 
+ *         Vec x   - density matrix with which to find the populations
+ *                    Note: Must represent the full density matrix, with all states
+ *         PetscReal time - the current time of the timestep, or negative to print to stdout
+ * Outputs:
+ *         None, but prints to file or stdout
+ */
 
 void get_populations(Vec x,PetscReal time) {
   int               j,my_levels,n_after,cur_state,num_pop;
   int               *i_sub_to_i_pop;
-  PetscInt          x_low,x_high,i;
+  PetscInt          x_low,x_high,i,dm_size;
   const PetscScalar *xa;
   PetscReal         tmp_real;
   double            *populations;
+
+  VecGetSize(x,&dm_size);
+
+  if (dm_size!=total_levels*total_levels){
+    if (nid==0){
+      printf("ERROR! The input density matrix does not seem to be the full one!\n");
+      printf("       Populations cannot be calculated.\n");
+      exit(0);
+    }
+  }
+
   VecGetOwnershipRange(x,&x_low,&x_high);
   VecGetArrayRead(x,&xa); 
 
@@ -246,6 +338,7 @@ void get_populations(Vec x,PetscReal time) {
   }
 
   /* Print results */
+  /* FIXME? Possibly move the printing to user? */
   if(nid==0) {
     /* A negative time means we were called from steadystate, so print to stdout*/
     if (time<0){
@@ -254,7 +347,17 @@ void get_populations(Vec x,PetscReal time) {
         printf(" %e ",populations[i]);
       }
       printf("\n");
+    } else if (time==0){
+      /* If time is 0, we should overwrite the old file */
+      FILE *f = fopen("pop","w");
+      fprintf(f,"%e ",time);
+      for(i=0;i<num_pop;i++){
+        fprintf(f," %e ",populations[i]);
+      }
+      fprintf(f,"\n");
+      fclose(f);
     } else {
+      /* Normal printing, append to file */
       FILE *f = fopen("pop","a");
       fprintf(f,"%e ",time);
       for(i=0;i<num_pop;i++){
@@ -296,6 +399,133 @@ void get_populations(Vec x,PetscReal time) {
   free(i_sub_to_i_pop);
   free(populations);
   return;
+}
+
+
+/* 
+ * void get_bipartite_concurrence calculates the bipartite concurrence of a density matrix
+ * bipartite concurrence is defined as:
+ *              C(rho) = max(0,lamba_1 - lambda_2 - lambda_3 - lambda_4)
+ * where lambda_i's are the square roots of the eigenvalues (in decreasing order) of:
+ *              rho*(sigma_y cross sigma_y)*conj(rho)*(sigma_y cross sigma_y)
+ * where sigma_y is the y pauli spin matrix
+ *
+ * Inputs: 
+ *         Vec dm   - density matrix with which to find the concurrence
+ *                    Note: Must represent a 4x4 density matrix!
+ * Outputs:
+ *         double *concurrence - the concurrence of the state
+ *
+ */
+
+void get_bipartite_concurrence(Vec dm,double *concurrence) {
+  VecScatter        ctx_dm;
+  PetscInt          i,dm_size,levels;
+  PetscScalar       *dm_a,val;
+  PetscReal         max;
+  Mat               dm_mat,dm_tilde,result_mat,sigy_sigy;
+  Vec               dm_local;
+  /* Variables needed for LAPACK */
+  PetscScalar  *work,*eigs,sdummy,*array;
+  PetscReal    *rwork;
+  PetscBLASInt idummy,lwork,lierr,nb;
+
+  levels = 4;//4 is hardcoded because this is bipartite concurrence
+  
+  VecGetSize(dm,&dm_size);
+  if (dm_size!=levels*levels){ 
+    if (nid==0){
+      printf("ERROR! The input density matrix is not 4x4!\n");
+      printf("       Concurrence cannot be calculated.\n");
+      exit(0);
+    }
+  }
+
+  /* Collect DM onto master core */
+  VecScatterCreateToZero(dm,&ctx_dm,&dm_local);
+
+  VecScatterBegin(ctx_dm,dm,dm_local,INSERT_VALUES,SCATTER_FORWARD);
+  VecScatterEnd(ctx_dm,dm,dm_local,INSERT_VALUES,SCATTER_FORWARD);
+  /* Rank 0 now has a local copy of the matrices, so it does the calculations */
+  if (nid==0){
+    levels = sqrt(dm_size);
+    /* 
+     * We want to work with the density matrices as matrices directly,
+     * so that we can get eigenvalues, etc.
+     */
+    VecGetArray(dm_local,&dm_a);
+    MatCreateSeqDense(PETSC_COMM_SELF,levels,levels,dm_a,&dm_mat);
+    MatCreateSeqDense(PETSC_COMM_SELF,levels,levels,NULL,&sigy_sigy);
+
+    /* Fill in the sigy_sigy matrix */
+    val = -1.0;
+    MatSetValue(sigy_sigy,0,3,val,INSERT_VALUES);
+    MatSetValue(sigy_sigy,3,0,val,INSERT_VALUES);
+    val = 1.0;
+    MatSetValue(sigy_sigy,1,2,val,INSERT_VALUES);
+    MatSetValue(sigy_sigy,2,1,val,INSERT_VALUES);
+
+    MatAssemblyBegin(sigy_sigy,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(sigy_sigy,MAT_FINAL_ASSEMBLY);
+    MatDuplicate(dm_mat,MAT_COPY_VALUES,&dm_tilde);
+    
+    /* Calculate conjugate of dm */
+    MatConjugate(dm_tilde);
+    
+    /* Calculate dm_tilde = (sigy cross sigy) conj(dm) (sigy cross sigy)*/
+    MatMatMult(sigy_sigy,dm_tilde,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
+    MatMatMult(result_mat,sigy_sigy,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_tilde);
+
+    /* Calculate dm * dm_tilde */
+    MatMatMult(dm_mat,dm_tilde,MAT_REUSE_MATRIX,PETSC_DEFAULT,&result_mat);
+
+      /* We need the actual array so that we can pass it to lapack */
+    MatDenseGetArray(result_mat,&array);
+
+    /* Setup lapack things */
+    idummy = levels;
+    lwork  = 5*levels;
+    PetscMalloc1(5*levels,&work);
+    PetscMalloc1(2*levels,&rwork);
+    PetscMalloc1(levels,&eigs);
+    PetscBLASIntCast(levels,&nb);
+    
+    /* Call LAPACK through PETSc to ensure portability */
+    LAPACKgeev_("N","N",&nb,array,&nb,eigs,&sdummy,&idummy,&sdummy,&idummy,work,&lwork,rwork,&lierr);
+    /*
+     * We want eig_max - sum(other_eigs), so we do
+     * 2*eig_max - sum(all_eigs)
+     */
+
+    /* Find max eigenvalue and sum up all eigs */
+    max = -1; //The values should all be positive, so we can set the base comparison to negative
+    *concurrence = 0;
+    for (i=0;i<levels;i++){
+      *concurrence = *concurrence + PetscRealPart(eigs[i]);
+      if (PetscRealPart(eigs[i])>max) {
+        max = PetscRealPart(eigs[i]);
+      }
+    }
+    *concurrence = 2*max - *concurrence;
+
+    /* Clean up memory */
+    VecRestoreArray(dm_local,&dm_a);
+    MatDenseRestoreArray(result_mat,&array);
+    MatDestroy(&dm_mat);
+    MatDestroy(&sigy_sigy);
+    MatDestroy(&dm_tilde);
+    MatDestroy(&result_mat);
+    PetscFree(work);
+    PetscFree(rwork);
+    PetscFree(eigs);
+
+  }
+
+  /* Broadcast the value to all cores */
+  MPI_Bcast(concurrence,1,MPI_DOUBLE,0,PETSC_COMM_WORLD);
+
+  VecDestroy(&dm_local);
+  VecScatterDestroy(&ctx_dm);
 }
 
 /* 
@@ -358,8 +588,11 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
     MatCreateSeqDense(PETSC_COMM_SELF,levels,levels,dm_r_a,&dm_mat_r);
 
     /* Get the sqrt of the matrix */
-    sqrt_mat(dm_mat);
+    /* printf("before sqrt1\n"); */
+    /* MatView(dm_mat,PETSC_VIEWER_STDOUT_SELF); */
 
+    sqrt_mat(dm_mat);
+    /* MatView(dm_mat,PETSC_VIEWER_STDOUT_SELF);     */
     /* calculate sqrt(dm_mat)*dm_mat_r */
     MatMatMult(dm_mat,dm_mat_r,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
     /* 
@@ -371,7 +604,7 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
 
 
     /* Get eigenvalues of result_mat */
-    /* We need the actual array so that we can pass it to lapack */
+
     idummy = levels;
     lwork  = 5*levels;
     PetscMalloc1(5*levels,&work);
@@ -386,9 +619,6 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
       /* 
        * Only positive values because sometimes we get small, negative eigenvalues 
        * Also, we take the real part, because of small, imaginary parts
-       * FIXME: This should be the trace norm, which is the sum of singular values.
-       * Singular values are equal to eigen values when the matrix is 
-       * positive definite. is sqrt(rho) sqrt(rho2) always posit
        */
       if (PetscRealPart(eigs[i])>0){
         *fidelity = *fidelity + sqrt(PetscRealPart(eigs[i]));
@@ -396,6 +626,7 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
     }
     VecRestoreArray(dm_local,&dm_a);
     VecRestoreArray(dm_r_local,&dm_r_a);
+    /* Clean up memory */
     MatDestroy(&dm_mat);
     MatDestroy(&dm_mat_r);
     MatDestroy(&result_mat);
@@ -417,7 +648,7 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
   return;
 }
 
-/* p
+/* 
  * void sqrt_mat takes the square root of square, hermitian matrix 
  *
  * Inputs: 
@@ -464,18 +695,15 @@ void sqrt_mat(Mat dm_mat){
   MatSetUp(V);
   MatSetUp(sqrt_D);
 
-  /* 
-   * We make this 'rows list' so that we can tell MatSetValues
-   * to place the single column in with the correct locations.
-   */
   for (i=0;i<rows;i++){
-    MatSetValue(sqrt_D,i,i,sqrt(PetscRealPart(eigs[i])),INSERT_VALUES);
+    /* Stop NaN's from roundoff error by checking that eigs be positive */
+    if (PetscRealPart(eigs[i])>0){
+      MatSetValue(sqrt_D,i,i,sqrt(PetscRealPart(eigs[i])),INSERT_VALUES);
+    }
   }
-  /* MatAssemblyBegin(V,MAT_FINAL_ASSEMBLY); */
-  /* MatAssemblyEnd(V,MAT_FINAL_ASSEMBLY); */
+
   MatAssemblyBegin(sqrt_D,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(sqrt_D,MAT_FINAL_ASSEMBLY);
-
   /* Calculate V*sqrt(D) */
   MatMatMult(V,sqrt_D,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
 
