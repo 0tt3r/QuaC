@@ -8,6 +8,7 @@
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*); // Move to header?
 
+operator a;
 
 int main(int argc,char **args){
   /* tc is whether to do Tavis Cummings or not */
@@ -15,7 +16,7 @@ int main(int argc,char **args){
   PetscInt i,steps_max;
   PetscReal lambda,T2star,resFreq,magDrvM,magDrvP,gamOpto,gamma_mech;
   PetscReal Q,kHz,MHz,GHz,THz,Hz,rate,time_max,dt;
-  operator a;
+
   vec_op   nv;
 
   enum STATE {gp=0,g0,gm};
@@ -91,7 +92,7 @@ int main(int argc,char **args){
   /* What units are these?! */
   time_max  = 10000000;
   dt        = 0.1;
-  steps_max = 10000;
+  steps_max = 10;
   set_ts_monitor(ts_monitor);
   time_step(time_max,dt,steps_max);
   /* steady_state(); */
@@ -105,11 +106,18 @@ int main(int argc,char **args){
 
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
-  
+  Vec ptraced_dm;
+  double fidelity;
+  create_dm(&ptraced_dm,3);
+  /* get_populations prints to pop file */
   get_populations(dm,time);
   /* Partial trace away the oscillator */
-  /* partial_trace_over(dm,ptraced_dm,1,a); */
-  /* get_fidelity(ptraced_dm,reference_dm,fidelity); */
+  partial_trace_over(dm,ptraced_dm,1,a);
+
+
+  get_fidelity(ptraced_dm,ptraced_dm,&fidelity);
+  printf("fidelity: %f\n",fidelity);
+  destroy_dm(ptraced_dm);
   PetscFunctionReturn(0);
 
 }

@@ -1,9 +1,7 @@
-
 #include "dm_utilities.h"
 #include <stdlib.h>
 #include <stdio.h>
-
-
+#include <petscblaslapack.h>
 
 /*
  * partial_trace_over does the partial trace over a list of operators,
@@ -298,4 +296,201 @@ void get_populations(Vec x,PetscReal time) {
   free(i_sub_to_i_pop);
   free(populations);
   return;
+}
+
+/* 
+ * void get_fidelity calculates the fidelity between two matrices,
+ * where the fidelity is defined as:
+ *         F = Tr(sqrt(sqrt(rho) sigma sqrt(rho)))
+ * where rho, sigma are the density matrices to calculate the 
+ * fidelity between
+ *
+ * Inputs: 
+ *         Vec dm   - one density matrix with which to find the fidelity
+ *         Vec dm_r - the other density matrix
+ * Outpus:
+ *         double *fidelity - the fidelity between the two dms
+ *
+ */
+void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
+  VecScatter        ctx_dm,ctx_dm_r;
+  PetscInt          i,dm_size,dm_r_size,levels;
+  PetscScalar       *dm_a,*dm_r_a;;
+  Mat               dm_mat,dm_mat_r,result_mat;
+  Vec               dm_local,dm_r_local;
+  /* Variables needed for LAPACK */
+  PetscScalar  *work,*eigs,sdummy;
+  PetscReal    *rwork;
+  PetscBLASInt idummy,lwork,lierr,nb;
+
+  VecGetSize(dm,&dm_size);
+  VecGetSize(dm_r,&dm_r_size);
+
+  if (dm_size!=dm_r_size){
+    if (nid==0){
+      printf("ERROR! The input density matrices are not the same size!\n");
+      printf("       Fidelity cannot be calculated.\n");
+      exit(0);
+    }
+  }
+
+  /* Collect both DM's onto master core */
+  VecScatterCreateToZero(dm,&ctx_dm,&dm_local);
+  VecScatterCreateToZero(dm_r,&ctx_dm_r,&dm_r_local);
+
+  VecScatterBegin(ctx_dm,dm,dm_local,INSERT_VALUES,SCATTER_FORWARD);
+  VecScatterBegin(ctx_dm_r,dm_r,dm_r_local,INSERT_VALUES,SCATTER_FORWARD);
+
+  VecScatterEnd(ctx_dm,dm,dm_local,INSERT_VALUES,SCATTER_FORWARD);
+  VecScatterEnd(ctx_dm_r,dm_r,dm_r_local,INSERT_VALUES,SCATTER_FORWARD);
+
+  /* Rank 0 now has a local copy of the matrices, so it does the calculations */
+  if (nid==0){
+    levels = sqrt(dm_size);
+    /* 
+     * We want to work with the density matrices as matrices directly,
+     * so that we can get eigenvalues, etc.
+     */
+    VecGetArray(dm_local,&dm_a);
+    MatCreateSeqDense(PETSC_COMM_SELF,levels,levels,dm_a,&dm_mat);
+
+    VecGetArray(dm_r_local,&dm_r_a);
+    MatCreateSeqDense(PETSC_COMM_SELF,levels,levels,dm_r_a,&dm_mat_r);
+
+    /* Get the sqrt of the matrix */
+    sqrt_mat(dm_mat);
+
+    /* calculate sqrt(dm_mat)*dm_mat_r */
+    MatMatMult(dm_mat,dm_mat_r,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
+    /* 
+     * calculate (sqrt(dm_mat)*dm_mat_r)*sqrt(dm_mat)
+     * we reuse dm_mat_r as our result to save memory, since we are done with
+     * that data
+     */ 
+    MatMatMult(result_mat,dm_mat,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_mat_r);
+
+
+    /* Get eigenvalues of result_mat */
+    /* We need the actual array so that we can pass it to lapack */
+    idummy = levels;
+    lwork  = 5*levels;
+    PetscMalloc1(5*levels,&work);
+    PetscMalloc1(2*levels,&rwork);
+    PetscMalloc1(levels,&eigs);
+    PetscBLASIntCast(levels,&nb);
+
+    /* Call LAPACK through PETSc to ensure portability */
+    LAPACKgeev_("N","N",&nb,dm_r_a,&nb,eigs,&sdummy,&idummy,&sdummy,&idummy,work,&lwork,rwork,&lierr);
+    *fidelity = 0;
+    for (i=0;i<levels;i++){
+      /* 
+       * Only positive values because sometimes we get small, negative eigenvalues 
+       * Also, we take the real part, because of small, imaginary parts
+       * FIXME: This should be the trace norm, which is the sum of singular values.
+       * Singular values are equal to eigen values when the matrix is 
+       * positive definite. is sqrt(rho) sqrt(rho2) always posit
+       */
+      if (PetscRealPart(eigs[i])>0){
+        *fidelity = *fidelity + sqrt(PetscRealPart(eigs[i]));
+      }
+    }
+    VecRestoreArray(dm_local,&dm_a);
+    VecRestoreArray(dm_r_local,&dm_r_a);
+    MatDestroy(&dm_mat);
+    MatDestroy(&dm_mat_r);
+    MatDestroy(&result_mat);
+    PetscFree(work);
+    PetscFree(rwork);
+    PetscFree(eigs);
+  } 
+
+  /* Broadcast the value to all cores */
+  MPI_Bcast(fidelity,1,MPI_DOUBLE,0,PETSC_COMM_WORLD);
+
+  VecDestroy(&dm_local);
+  VecDestroy(&dm_r_local);
+ 
+  VecScatterDestroy(&ctx_dm);
+  VecScatterDestroy(&ctx_dm_r);
+
+
+  return;
+}
+
+/* p
+ * void sqrt_mat takes the square root of square, hermitian matrix 
+ *
+ * Inputs: 
+ *         Mat dm_mat - matrix to take square root of
+ * Outpus:
+ *         None, but does square root in place
+ *
+ */
+void sqrt_mat(Mat dm_mat){
+  Mat V,sqrt_D,result_mat;
+  PetscInt rows,columns,i;
+  PetscScalar  *array,*work,*eigs,*evec,sdummy;
+  PetscReal    *rwork;
+  PetscBLASInt idummy,lwork,lierr,nb;
+
+  MatGetSize(dm_mat,&rows,&columns);
+
+  if (rows!=columns){
+    if (nid==0){
+      printf("ERROR! The input matrix in sqrt_mat is not square!\n");
+      exit(0);
+    }
+  }
+
+  
+  /* We need the actual array so that we can pass it to lapack */
+  MatDenseGetArray(dm_mat,&array);
+
+  /* Lots of setup for LAPACK stuff */
+  idummy = rows;
+  lwork  = 5*rows;
+  PetscMalloc1(5*rows,&work);
+  PetscMalloc1(2*rows,&rwork);
+  PetscMalloc1(rows*rows,&evec);
+  PetscMalloc1(rows,&eigs);
+  PetscBLASIntCast(rows,&nb);
+  
+  /* Call LAPACK through PETSc to ensure portability */
+  LAPACKgeev_("N","V",&nb,array,&nb,eigs,&sdummy,&idummy,evec,&nb,work,&lwork,rwork,&lierr);
+  /* Create matrices to store eigenvectors / values */
+  MatCreateSeqDense(PETSC_COMM_SELF,rows,rows,evec,&V);
+  MatCreateSeqDense(PETSC_COMM_SELF,rows,rows,NULL,&sqrt_D);
+
+  MatSetUp(V);
+  MatSetUp(sqrt_D);
+
+  /* 
+   * We make this 'rows list' so that we can tell MatSetValues
+   * to place the single column in with the correct locations.
+   */
+  for (i=0;i<rows;i++){
+    MatSetValue(sqrt_D,i,i,sqrt(PetscRealPart(eigs[i])),INSERT_VALUES);
+  }
+  /* MatAssemblyBegin(V,MAT_FINAL_ASSEMBLY); */
+  /* MatAssemblyEnd(V,MAT_FINAL_ASSEMBLY); */
+  MatAssemblyBegin(sqrt_D,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(sqrt_D,MAT_FINAL_ASSEMBLY);
+
+  /* Calculate V*sqrt(D) */
+  MatMatMult(V,sqrt_D,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
+
+  /* Calculate V^\dagger */
+  MatHermitianTranspose(V,MAT_REUSE_MATRIX,&V);
+  MatDenseRestoreArray(dm_mat,&array);
+  /* Calculate (V*sqrt(D))*V^\dagger, store in dm_mat */
+  MatMatMult(result_mat,V,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_mat);
+
+
+  MatDestroy(&V);
+  MatDestroy(&sqrt_D);
+  MatDestroy(&result_mat);
+  PetscFree(work);
+  PetscFree(rwork);
+  PetscFree(evec);
+  PetscFree(eigs);
 }

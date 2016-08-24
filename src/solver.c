@@ -27,8 +27,7 @@ void steady_state(){
   PC             pc;
   Vec            x,b;
   KSP            ksp; /* linear solver context */
-  int            row,col,its,j;
-  PetscInt       i,Istart,Iend;
+  PetscInt       row,col,its,j,i,Istart,Iend;
   PetscScalar    mat_tmp;
   long           dim;
 
@@ -65,6 +64,10 @@ void steady_state(){
           }
         }
         fclose(fp_ham);
+        for (i=0;i<total_levels;i++){
+          free(_hamiltonian[i]);
+        }
+        free(_hamiltonian);
       }
     }
   }
@@ -197,9 +200,9 @@ void time_step(PetscReal time_max,PetscReal dt,PetscInt steps_max){
   TS             ts; /* timestepping context */
   PetscInt       i,j,Istart,Iend,steps;
   PetscScalar    mat_tmp;
-  long           dim;
+  /* long           dim; */
 
-  dim = total_levels*total_levels;
+  /* dim = total_levels*total_levels; */
 
   if (!stab_added){
     /* Possibly print dense ham. No stabilization is needed? */
@@ -219,6 +222,10 @@ void time_step(PetscReal time_max,PetscReal dt,PetscInt steps_max){
           }
         }
         fclose(fp_ham);
+        for (i=0;i<total_levels;i++){
+          free(_hamiltonian[i]);
+        }
+        free(_hamiltonian);
       }
     }
   }
@@ -281,8 +288,9 @@ void time_step(PetscReal time_max,PetscReal dt,PetscInt steps_max){
   /*
    * Set function to get information at every timestep
    */
-  TSMonitorSet(ts,_ts_monitor,NULL,NULL);
-
+  if (_ts_monitor!=NULL){
+    TSMonitorSet(ts,_ts_monitor,NULL,NULL);
+  }
   /*
    * Set up ODE system
    */
@@ -321,9 +329,7 @@ ion(ts,NULL,RHSFunction,NULL); */
 }
 
 void set_ts_monitor(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*)){
-  printf("before set monitor\n");
   _ts_monitor = (*monitor);
-  printf("after set monitor\n");
 }
 
 /*

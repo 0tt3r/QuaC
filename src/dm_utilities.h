@@ -11,5 +11,6 @@ void destroy_dm(Vec);
 void partial_trace_over_one(Vec,Vec,PetscInt,PetscInt,PetscInt);
 void partial_trace_over(Vec,Vec,int,...);
 void get_populations(Vec,PetscReal);
-
+void sqrt_mat(Mat);
+void get_fidelity(Vec,Vec,double*);
 #endif
