@@ -1,0 +1,250 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage[T1]{fontenc}
+\usepackage{listings}
+\newenvironment{ttenv}{\begin{center}\ttfamily}{\end{center}}
+
+\begin{document}
+
+\definecolor{mygreen}{rgb}{0,0.6,0}
+\definecolor{mygray}{rgb}{0.5,0.5,0.5}
+\definecolor{mymauve}{rgb}{0.58,0,0.82}
+
+\lstset{ %
+  belowcaptionskip=1\baselineskip,
+  breaklines=true,
+  frame=L,
+  xleftmargin=\parindent,
+  language=C,
+  showstringspaces=false,
+  basicstyle=\ttfamily,
+  keywordstyle=\bfseries\color{green!40!black},
+  commentstyle=\color{red},
+  stringstyle=\color{orange},
+}
+\title{QuaC User Manual}
+\author{Matthew Otten}
+
+\maketitle
+
+\begin{abstract}
+  Basic notes on using QuaC, a Lindblad master equation solver written in C.
+\end{abstract}
+
+\section{Installation}
+
+\section{Creating a New System}
+QuaC was designed to allow the user to go from the physics to the computations with
+as little pain as possible. To illustrate this concept, we will use a simple
+Jaynes-Cummings Hamiltonian coupled to a thermal resonator
+as our physics and show the steps necessary to
+program the physics and run the code.
+
+\subsection{Hamiltonian}
+The Jaynes-Cummings model describeds the dynamics of
+a two level system coupled to an oscillator mode (be it a mechanical resonator, a
+plasmonic system, or an electromagnetic field):
+\begin{equation}\label{jc_ham}
+  H =  \omega_a a^\dagger a +  \omega_\sigma \sigma^\dagger \sigma +
+   g (\sigma^\dagger a + \sigma a^\dagger),
+\end{equation}
+where $a^\dagger$ is the creation operator of the oscillator, $\omega_s$ is the frequency
+of the oscillator, $\sigma^\dagger$ is the creation operator of the two level system,
+$\omega_\sigma$ is the transition frequency of the two level sistem, and $g$ is the
+coupling strength between the two systems. We are using units such that $\hbar = 1$.
+To create this system within QuaC, we first
+have to create operators for each subsystem, via
+\begin{lstlisting}
+  create_op(number_of_levels,&op_name)
+\end{lstlisting}
+where \texttt{number\_of\_levels} is the number of levels of the operator and \texttt{op\_name}
+is a previously declared variable of the \texttt{operator} type. The \texttt{operator} type
+is a special QuaC object that is used in the creation of the Hamiltonian and Lindblad terms.
+One call to \texttt{create\_op}, with a single \texttt{op\_name} creates the annihilation,
+creation, and number (i.e. $a^\dagger a$) operators.
+\texttt{op\_name} is the annihilation operator within the subsystem's Hilbert space,
+\texttt{op\_name->dag} in the creation operator, and \texttt{op\_name->n} is the number operator.
+Each of these three should be thought of as opaque objects; internally, they store
+all the necessary information
+for the creation of the Hamiltonian matrix which uses those terms,
+but they should never be directly manipulated by the
+user.
+
+For our example, we need to create two operators: one for the oscillator, and one
+for the two level system. Trivially, we know the number of levels for the two level system, but
+it is not so clear for the oscillator. Formally, the oscillator has infinite levels. Practically,
+there will be some maximum excitation number for a given problem. The infinite ladder
+should be truncated at a point in which adding more levels has minimal impact on the
+dynamics. In this example, we will use 25. Two create our two operators, we call
+\begin{lstlisting}
+  create_op(2,&sigma)
+  create_op(25,&a)
+\end{lstlisting}
+where \texttt{sigma} and \texttt{a} are previously declared variables of the \texttt{operator} type.
+With our operators defined, we can now construct the Hamiltonian matrix. In QuaC, Hamiltonians
+are created term by term, with calls to the \texttt{add\_to\_ham} family of functions. To add
+a term which has a single operator (including the number operator, $a^\dagger a$, as a
+'single operator'), we use
+\begin{lstlisting}
+  add_to_ham(scalar,op_name)
+\end{lstlisting}
+where \texttt{scalar} is the scalar that multiplies the operator, \texttt{op\_name}. In our
+Jaynes-Cummings model, we need to add two such terms to the Hamiltonian,
+$\omega_a a^\dagger a$ and $\omega_\sigma \sigma^\dagger \sigma$. We would call
+\begin{lstlisting}
+  add_to_ham(omega_a,a->n)
+  add_to_ham(omega_s,sigma->n)
+\end{lstlisting}
+where \texttt{omega\_a} and \texttt{omega\_s} are previously declared (and assigned) numbers,
+and \texttt{a->n} and \texttt{sigma->n} are the number operators for the oscillator
+and two level system.
+The coupling terms in our Hamiltonian have two operators
+($g (\sigma^\dagger a + \sigma a^\dagger)$), so we will need to use
+\begin{lstlisting}
+  add_to_ham_mult2(scalar,op_name1,op_name2).
+\end{lstlisting}
+Since we have the sum of two such terms, we will need to call this function twice:
+\begin{lstlisting}
+  add_to_ham_mult2(g,sigma->dag,a)
+  add_to_ham_mult2(g,sigma,a->dag)
+\end{lstlisting}
+where $g$ is a previously declare and assigned number. Here we have used both the
+annihilation and creation operators of the \texttt{operator} type. We have now taken
+our initial Hamiltonian of eq.~(\ref{jc_ham}) and told QuaC everything it needs
+to do a calculation using that Hamiltonian. 
+\subsection{Lindblad Terms}
+QuaC is optimized for open quantum systems. As such, we need to 
+include nonunitary evolution. QuaC does this
+through the Lindblad superoperator. The Lindblad superoperator is defined as
+\begin{equation}
+  L(C)\rho = C\rho C^\dagger - \frac{1}{2}(C^\dagger C \rho + \rho C^\dagger C),
+\end{equation}
+where $C$ is an operator. The Lindblad superoperator can effectively describe
+dissipation and dephasing. For example, our TLS might have some spontaneous emission
+with rate $\gamma_\sigma$. This could be included using a Lindblad term of
+the form $\gamma_\sigma L(\sigma)\rho$ in our master equation. In QuaC, the general
+function for adding Lindblad terms is
+\begin{lstlisting}
+  add_lin(scalar,op_name)
+\end{lstlisting}
+where \texttt{scalar} is the rate, and \texttt{op\_name} is the associated operator. In our example,
+we want to add $\gamma_\sigma L(\sigma)\rho$, so we call
+\begin{lstlisting}
+  add_lin(gamma_s,sigma)
+\end{lstlisting}
+where \texttt{gamma\_s} is the (previously declared and assigned) spontaneous emission rate
+of our TLS and \texttt{sigma} is the annihilation operator which we previously created.
+Our oscillator can also have Lindblad terms. For this example, let's say that the oscillator
+is coupled to a thermal bath with thermal occupation number $n_{th}$ and has a linewidth
+$\gamma_a$. This would give two Lindblad terms:
+$\gamma_s (n_{th} + 1) L(a)\rho + \gamma_s n_{th} L(a^\dagger)\rho$. To add these terms in
+QuaC, we call
+\begin{lstlisting}
+  add_lin(gamma_a*(n_th+1),a)
+  add_lin(gamma_a*n_th,a->dag)
+\end{lstlisting}
+We could, of course, add additional Lindblad terms (such as environmental dephasing), but,
+for our simple example, this will suffice.
+\subsection{Full QuaC Code}
+  For illustrative purposes, we collect
+all the calls needed here:
+\begin{lstlisting}
+  create_op(2,&sigma) //Create the TLS
+  create_op(25,&a)    //Create the oscillator
+
+  //Add terms to the Hamiltonian
+  add_to_ham(omega_a,a->n)      
+  add_to_ham(omega_s,sigma->n)
+ 
+  add_to_ham_mult2(g,sigma->dag,a)
+  add_to_ham_mult2(g,sigma,a->dag)
+
+  //Add Lindblad terms
+  add_lin(gamma_s,sigma)
+  add_lin(gamma_a*(n_th+1),a)
+  add_lin(gamma_a*n_th,a->dag)
+\end{lstlisting}
+Neglecting variable declaration and assignment, these nine lines of code are all that is necessary
+to construct our simple Jaynes-Cummings system. In the next section, we will discuss
+how to use the constructed system to solve for both the steady state and time dependence.
+
+\section{Solving the System}
+QuaC has two modes for using the constructed system: solving for the steady state of the system,
+and solving for the full time dependence.
+\subsection{Steady State}
+Solving for the steady state in QuaC simply involves a call to
+\begin{lstlisting}
+  steady_state()
+\end{lstlisting}
+Once this call is executed, QuaC solves for the steady state of the system, using, as default,
+additive Schwarz method preconditioned GMRES. The selection of algorithm can be changed
+at runtime using PETSc's flexible command line interface (see section on utilizing
+PETSc). The initial condition is unimportant, as the solver goes to the
+(unique?) steady state from any initial condition rapidly (maybe?).
+TODO: Add information about getting population/concurrence/etc after the solve and results
+
+\subsection{Time Dependence}
+To solve for the time dependence, we must first set the initial conditions. Initial conditions
+are set per subsystem, and the system is restricted to starting in a pure state (though
+this limitation will be removed in a future version). If no initial condition is set
+for a subsystem, it is assumed to be in the $| 0\rangle$ state initially. In QuaC, to set
+the initial population of a subsystem, you call
+\begin{lstlisting}
+  set_initial_pop(op_name,pop)
+\end{lstlisting}
+where \texttt{op\_name} is an operator and \texttt{pop} is the population to add.
+\texttt{op\_name} can be any of the three basic operators created by QuaC in the initial
+\texttt{create\_op} call; there is no difference between the three for this routine. By convention,
+it is best to use the annihilation operator. \texttt{pop} will be understood as an
+integer, and must be less than the total number of levels for that subsystem. This stems
+from the fact that \texttt{set\_initial\_pop} is really setting the initial condition of the
+subsystem as a pure state of the form $|\texttt{pop}\rangle\langle\texttt{pop}|$. For our
+Jaynes-Cummings example, we would call
+\begin{lstlisting}
+  set_initial_pop(a,pop_a)
+  set_initial_pop(sigma,pop_sigma)
+\end{lstlisting}
+With the initial conditions set, we can now proceed to do the timestepping using
+\begin{lstlisting}
+  time_step(time_max,dt,steps_max)
+\end{lstlisting}
+where \texttt{time\_max} is the maximum time to integrate to, \texttt{dt} is the initial
+time step, and \texttt{steps\_max} is the maximum number of time steps to take. The default
+solver is an explicit, adaptive time step Runge-Kutta method. QuaC (through PETSc) also
+supports other explicit, as well as implicit, time steppers. Algorithms can be chosen
+at runtime; see the section on PETSc to learn more about these options. QuaC will
+then run the time dynamics until it either reaches the end time or completes
+the maximum number of steps.
+
+\subsubsection{Printing Results at Each Time Step}
+To get results at each time step, a user defined function must be declared and passed to
+QuaC via the function
+\begin{lstlisting}
+  set_ts_monitor(function_name)
+\end{lstlisting}
+\texttt{function\_name} must have this particular form:
+\begin{lstlisting}
+PetscErrorCode function_name(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx)
+\end{lstlisting}
+where \texttt{ts} is an opaque object which holds information about the timestepping algorithm
+(and need not be touched by the user), \texttt{step} is the current step number,
+\texttt{time} is the current time, \texttt{dm} is the (vectorized) density matrix (and should
+be though of as an opaque object to be passed to other routines), and \texttt{ctx} is another
+opaque object that the user should not touch. Within the ts\_monitor function,
+the user can
+call a variety of functions to obtain and print different observables and metrics.
+To print the current populations to a file name \texttt{pop}, you call
+\begin{lstlisting}
+  get_populations(dm,time)
+\end{lstlisting}
+This routine will calculate the populations for each subsystem and print them to the file
+\texttt{pop}. TODO: Add observables (\texttt{get\_observables}), concurrence, fidelity, etc
+The ts\_monitor function must have \texttt{PetscFunctionReturn(0)} as its final line.
+
+\section{Unequally Spaced Operators}
+
+\section{Using PETSc Command Line Options}
+
+\end{document}
