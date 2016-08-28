@@ -137,6 +137,29 @@ void create_dm(Vec* new_dm,PetscInt size){
   VecSet(*new_dm,0.0);
 }
 
+/* 
+ * void get_dm_element gets a specific i,j element from the 
+ * input density matrix.
+ *
+ * Inputs: 
+ *        Vec new_dm   - density matrix from which to get element
+ *        PetscInt row - i location of requested element
+ *        PetscInt col - j location of requested element
+ * Outpus:
+ *        PetscScalar val - requested density matrix element
+ *
+ */
+void get_dm_element(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
+  PetscInt location[1],dm_size;
+  PetscScalar val_array[1];
+  location[0] = row;
+  VecGetSize(dm,&dm_size);
+  location[0] = sqrt(dm_size)*row + col;
+
+  VecGetValues(dm,1,location,val_array);
+  *val = val_array[0];
+}
+
 
 /* 
  * void destroy_dm frees the memory from a previously created dm object

@@ -108,6 +108,7 @@ int main(int argc,char **args){
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
   Vec ptraced_dm;
   double fidelity;
+  PetscScalar dm_element;
   create_dm(&ptraced_dm,3);
   /* get_populations prints to pop file */
   get_populations(dm,time);
@@ -116,6 +117,10 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
 
 
   get_fidelity(ptraced_dm,ptraced_dm,&fidelity);
+
+  get_dm_element(ptraced_dm,0,0,&dm_element);
+  
+  if (nid==0) printf("dm_element: %f\n",PetscRealPart(dm_element));
   if (nid==0) printf("fidelity: %f\n",fidelity);
   destroy_dm(ptraced_dm);
   PetscFunctionReturn(0);
