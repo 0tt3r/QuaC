@@ -34,6 +34,45 @@
 \end{abstract}
 
 \section{Installation}
+QuaC is designed to run on Linux systems/clusters, as well as Mac OSX computers.
+QuaC can be downloaded via \texttt{git} by doing a clone,
+\begin{lstlisting}[language=bash]
+  git clone https://github.com/0tt3r/QuaC.git
+\end{lstlisting}
+or, if \texttt{git} is not available, via wget
+\begin{lstlisting}[language=bash]
+  wget https://github.com/0tt3r/QuaC/archive/master.zip
+\end{lstlisting}
+QuaC is built upon PETSc; without a PETSc installation, QuaC will fail to compile.
+PETSc has an extensive set of installation options (which can be viewed at
+http://www.mcs.anl.gov/petsc/documentation/installation.html); QuaC requires the
+option \texttt{--with-scalar-type=complex}. To install PETSc from scratch (which
+will also install BLAS/LAPACK and MPICH), do (assuming bash as the shell, and that
+GCC compilers are available)
+\begin{lstlisting}[language=bash]
+  git clone -b maint https://bitbucket.org/petsc/petsc petsc
+  cd petsc/
+  export PETSC_DIR=$(pwd)
+  export PETSC_ARCH=linux-gnu-c
+  ./configure --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-fblaslapack --download-mpich --with-scalar-type=complex
+  make all
+  make test
+\end{lstlisting}
+Furthermore, the environment variables \texttt{PETSC\_DIR} and \texttt{PETSC\_ARCH} will
+need to be set everytime QuaC is used; the easiest way to do this is by putting
+\texttt{export PETSC\_DIR=<dir/where/petsc>} and \texttt{export PETSC\_ARCH=linux-gnu-c}
+in a .bashrc or .profile type file. For more installation instructions for PETSc
+(such as using an already installed version of BLAS or MPI), please
+see their website.
+Once PETSc is installed and QuaC is downloaded, all that is left is to run a simulation.
+There are several examples within the \texttt{src} directory. To run an example, try:
+\begin{lstlisting}[language=bash]
+  make simple_jc_test
+  ./simple_jc_test
+\end{lstlisting}
+within the QuaC directory. This should print out the steady state populations
+for a simple Jaynes Cummings like Hamiltonian. In the following section,
+we will discuss creating such a system from scratch.
 
 \section{Creating a New System}
 QuaC was designed to allow the user to go from the physics to the computations with
