@@ -20,7 +20,7 @@ int main(int argc,char **args){
   PetscReal time_max,dt;
   PetscScalar val;
   PetscInt  steps_max;
-  int num_plasmon=10,num_qd=2,i;
+  PetscInt num_plasmon=10,num_qd=2,i;
 
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
@@ -89,15 +89,15 @@ int main(int argc,char **args){
   steps_max = 100;
 
   /* Set the ts_monitor to print results at each time step */
-  set_ts_monitor(ts_monitor);
+  /* set_ts_monitor(ts_monitor); */
   /* Open file that we will print to in ts_monitor */
   if (nid==0){
     f_fid = fopen("fid","w");
     fprintf(f_fid,"#Time Fidelity Concurrence\n");
   }
   
-  time_step(time_max,dt,steps_max);
-  /* steady_state(); */
+  /* time_step(time_max,dt,steps_max); */
+  steady_state();
 
   destroy_op(&a);
   for (i=0;i<num_qd;i++){
