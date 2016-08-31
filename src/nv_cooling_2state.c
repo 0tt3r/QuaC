@@ -43,7 +43,7 @@ int main(int argc,char **args){
   gamma_eff  = 145.1*MHz; //Effective dissipation rate
   lambda_s   = 100*1.06*kHz*2*M_PI;
   lambda_s   = 0.1*MHz*2*M_PI;
-  /* lambda_eff = lambda_s*sqrt(alpha)*sqrt(num_nv); */
+  lambda_eff = lambda_s*sqrt(alpha)*sqrt(num_nv);
   gamma_par  = 166.666666666*MHz;
   Q          = pow(10,6);  //Mechanical resonator quality factor
 
