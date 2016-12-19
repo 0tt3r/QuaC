@@ -157,7 +157,6 @@ void add_to_ham(double a,operator op){
    * We pass the -a*PETSC_i to get the sign and imaginary part correct.
    */
 
-
   mat_scalar = -a*PETSC_i;
   _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,
                      op->my_op_type,op->position,total_levels,1);
