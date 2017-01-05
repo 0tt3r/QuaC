@@ -16,6 +16,8 @@ $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 	@mkdir -p $(@D)
 	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} 
 
+all: nv_cooling_7state nv_mech_polarization qd_plasmon nv_cooling_2state_tc_test rpurcell_ev rpurcell nv_cooling_2state simple_jc_test simple_jc_test_vec
+
 nv_cooling_7state: $(ODIR)/nv_cooling_7state.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
@@ -47,4 +49,4 @@ simple_jc_test_vec: $(ODIR)/simple_jc_test_vec.o $(OBJ)
 
 clean:
 	rm -f $(OBJ)
-	rm -f simple_jc_test nv_cooling_2state qd_plasmon nv_cooling_2state_tc_test simple_jc_test simple_jc_test_vec nv_cooling_7state nv_mech_polarization
+	rm -f nv_cooling_7state nv_mech_polarization qd_plasmon nv_cooling_2state_tc_test rpurcell_ev rpurcell nv_cooling_2state simple_jc_test simple_jc_test_vec

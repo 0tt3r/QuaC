@@ -8,11 +8,11 @@
 int main(int argc,char **args){
   /* tc is whether to do Tavis Cummings or not */
   PetscInt n_th=2,num_phonon=5,num_nv=2,tc=0; //Default values set here
-  PetscInt i,nv_levels=2;
+  PetscInt i,nv_levels=2,full_H_space;
   PetscReal w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par;
   PetscReal Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,*nv;
-  
+  Vec rho;
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -99,8 +99,9 @@ int main(int argc,char **args){
 
   rate = w_m/(Q)*(n_th);
   add_lin(rate,a->dag);
-  
-  steady_state();
+
+  create_full_dm(&rho);
+  steady_state(rho);
 
   destroy_op(&a);
   if (tc) {
@@ -111,6 +112,7 @@ int main(int argc,char **args){
     }
   }
   free(nv);
+  destroy_dm(rho);
   QuaC_finalize();
   return 0;
 }

@@ -136,6 +136,29 @@ void create_dm(Vec* new_dm,PetscInt size){
   /* Set all elements to 0 */
   VecSet(*new_dm,0.0);
 }
+/* 
+ * void create_dm creates a new density matrix object 
+ * and initializes it to 0
+ *
+ * Inputs: 
+ *        Vec* new_dm   - where the new density matrix will be stored
+ *        PetscInt size - size of the Hilbert space (N if the matrix is NxN)
+ * Outpus:
+ *        Vec* new_dm   - new, initialized DM
+ *
+ */
+void create_full_dm(Vec* new_dm){
+  PetscInt size = total_levels;
+
+  _check_initialized_A();
+
+  /* Create the dm, partition with PETSc */
+  VecCreate(PETSC_COMM_WORLD,new_dm);
+  VecSetType(*new_dm,VECMPI);
+  VecSetSizes(*new_dm,PETSC_DECIDE,pow(size,2));
+  /* Set all elements to 0 */
+  VecSet(*new_dm,0.0);
+}
 
 /*
  * set_dm_from_initial_pop sets the initial condition from the

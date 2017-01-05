@@ -21,7 +21,7 @@ int main(int argc,char **args){
   PetscScalar val;
   PetscInt  steps_max;
   PetscInt num_plasmon=10,num_qd=2,i;
-
+  Vec      rho;
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -60,10 +60,11 @@ int main(int argc,char **args){
   /* plasmon decay */
   add_lin(gamma_s,a);
 
+  create_full_dm(&rho);
   set_initial_pop(a,0);
   set_initial_pop(qd[0],0);
   set_initial_pop(qd[1],1);
-
+  set_dm_from_initial_pop(rho);
 
   /* Create a reference dm (the antisym bell state) for fidelity calculations */
   create_dm(&antisym_bell_dm,4);
@@ -96,8 +97,8 @@ int main(int argc,char **args){
     fprintf(f_fid,"#Time Fidelity Concurrence\n");
   }
   
-  /* time_step(time_max,dt,steps_max); */
-  steady_state();
+  /* time_step(rho,time_max,dt,steps_max); */
+  steady_state(rho);
 
   destroy_op(&a);
   for (i=0;i<num_qd;i++){
@@ -106,6 +107,7 @@ int main(int argc,char **args){
   free(qd);
   destroy_dm(ptraced_dm);
   destroy_dm(antisym_bell_dm);
+  destroy_dm(rho);
   if (nid==0) fclose(f_fid);
   QuaC_finalize();
   return 0;

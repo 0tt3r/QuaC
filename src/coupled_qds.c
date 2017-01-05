@@ -21,7 +21,7 @@ int main(int argc,char **args){
   PetscScalar val;
   PetscInt  steps_max;
   int num_plasmon=10,num_qd=2,i;
-
+  
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -67,7 +67,6 @@ int main(int argc,char **args){
 
   assemble_dm(antisym_bell_dm);
 
-  set_initial_dm(antisym_bell_dm);
   /* 
    * Also create a place to store the partial trace 
    * No assembly is necessary here, as we will be ptracing into this dm
@@ -86,8 +85,8 @@ int main(int argc,char **args){
     fprintf(f_fid,"#Time Fidelity Concurrence\n");
   }
   
-  /* time_step(time_max,dt,steps_max); */
-  steady_state();
+  /* time_step(antisym_bell_dm,time_max,dt,steps_max); */
+  steady_state(antisym_bell_dm);
 
   for (i=0;i<num_qd;i++){
     destroy_op(&qd[i]);

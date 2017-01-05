@@ -8,7 +8,7 @@
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
 int main(int argc,char **args){
-  PetscInt N_th,num_phonon,num_nv,init_phonon,steady_state_solve,steps_max,full_H_space;
+  PetscInt N_th,num_phonon,num_nv,init_phonon,steady_state_solve,steps_max;
   PetscReal time_max,dt,gam_res,gam_eff,gam_dep;
   double w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par,purcell_f,gamma_res,gamma_dep;
   double Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
@@ -58,7 +58,7 @@ int main(int argc,char **args){
 
   create_op(num_phonon,&a);  
   create_op(2,&nv);
-  full_H_space = 2*num_phonon;
+
   /* Add terms to the hamiltonian */
   add_to_ham(w_m,a->n); // w_m at a
   
@@ -82,7 +82,8 @@ int main(int argc,char **args){
   rate = gamma_res*(N_th);
   add_lin(rate,a->dag);
   
-  create_dm(&rho,full_H_space);
+  create_full_dm(&rho);
+
   if (steady_state_solve==1) {
     steady_state(rho);
     purcell_f = 4*lambda_s*lambda_s/(gamma_eff+gamma_res+0.5*gamma_dep);
@@ -90,10 +91,10 @@ int main(int argc,char **args){
     if(nid==0) printf("Predicted cooling fraction: %f\n",rate);
   } else {
     set_ts_monitor(ts_monitor);
-    set_initial_pop(a,init_phonon);
-    set_initial_pop(nv,0);
-    set_dm_from_initial_pop(rho);
-    //    steady_state(rho);
+    //    set_initial_pop(a,init_phonon);
+    //    set_initial_pop(nv,0);
+    //    set_dm_from_initial_pop(rho);
+    steady_state(rho);
     add_to_ham_mult2(lambda_s,nv->dag,a);  //nvt a
     add_to_ham_mult2(lambda_s,nv,a->dag);  //nv at
     time_max  = 15;

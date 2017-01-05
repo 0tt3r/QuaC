@@ -13,7 +13,7 @@ int main(int argc,char **args){
   double w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par,purcell_f,gamma_res,gamma_dep,hbar;
   double Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,nv;
-
+  Vec      rho;
 
   
   /* Initialize QuaC */
@@ -88,9 +88,10 @@ int main(int argc,char **args){
   rate = gamma_res*(N_th);
   add_lin(rate,a->dag);
   
-  
+  create_full_dm(&rho);
+
   if (steady_state_solve==1) {
-    steady_state();
+    steady_state(rho);
     purcell_f = 4*lambda_s*lambda_s/(gamma_eff+gamma_res+0.5*gamma_dep);
     rate = gamma_res/(gamma_res+purcell_f/(1+purcell_f/gamma_eff));
     if(nid==0) printf("Predicted cooling fraction: %f\n",rate);
@@ -98,15 +99,16 @@ int main(int argc,char **args){
     set_ts_monitor(ts_monitor);
     set_initial_pop(a,init_phonon);
     set_initial_pop(nv,init_phonon);
+    set_dm_from_initial_pop(rho);
     time_max  = 150;
     dt        = 0.01;
     steps_max = 10000;
-    time_step(time_max,dt,steps_max);
+    time_step(rho,time_max,dt,steps_max);
   }
 
   destroy_op(&a);
   destroy_op(&nv);
-
+  destroy_dm(rho);
   QuaC_finalize();
   return 0;
 }

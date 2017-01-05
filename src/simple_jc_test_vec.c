@@ -20,7 +20,8 @@ int main(int argc,char **args){
   int num_cavity,N_th,i;
   operator a;
   vec_op   sm,sm2,a2;
-  
+  Vec      rho;
+
   wc         = 1.0*2*M_PI;
   wa         = 1.0*2*M_PI;
   g          = 0.05*2*M_PI;
@@ -60,10 +61,13 @@ int main(int argc,char **args){
   add_lin_mult2(gamma,sm[0],sm[1]);
   add_lin_mult2(sqrt(2)*gamma,sm[1],sm[2]);
 
-  steady_state();
+  create_full_dm(&rho);
+
+  steady_state(rho);
 
   destroy_vec(&sm);
   destroy_op(&a);
+  destroy_dm(rho);
 
   QuaC_finalize();
   return 0;

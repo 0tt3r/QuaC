@@ -15,6 +15,7 @@ int main(int argc,char **args){
   double   Q,kHz,MHz,GHz,rate;
   operator a;
   vec_op   *nv;
+  Vec      rho;
 
   /* enumerate state names so we don't to remember them */
   enum STATE {gp=0,g0,gm,ep,e0,em,s};
@@ -69,8 +70,9 @@ int main(int argc,char **args){
   rate = w_m/(Q)*(N_th);
   add_lin(rate,a->dag);
   
+  create_full_dm(&rho);
   //  time_step();
-  steady_state();
+  steady_state(rho);
 
   
   destroy_op(&a);
@@ -78,7 +80,7 @@ int main(int argc,char **args){
     destroy_vec(&nv[i]);
   }
   free(nv);
-
+  destroy_dm(rho);
   QuaC_finalize();
   return 0;
 }

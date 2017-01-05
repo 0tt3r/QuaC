@@ -21,7 +21,6 @@ typedef struct operator{
 typedef operator *vec_op; /* Treat vec_op as an array of operators  */
 
 
-
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
 void add_to_ham(double,operator);

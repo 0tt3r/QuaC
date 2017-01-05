@@ -10,6 +10,7 @@
  * - variable number of arguments to add_to_ham and add_to_lin
  * - add_to_ham_mult4 for coupling between two vec subsystems
  * - add PetscLog for getting setup time
+ * - check if input DM is a valid DM (trace, hermitian, etc)
  */
 
 #define MAX_NNZ_PER_ROW 50
@@ -18,7 +19,7 @@ static int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
 int op_finalized;
 Mat full_A;
-long total_levels;
+PetscInt total_levels;
 int num_subsystems;
 operator subsystem_list[MAX_SUB];
 int _print_dense_ham = 0;

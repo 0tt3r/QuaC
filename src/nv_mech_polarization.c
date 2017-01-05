@@ -16,8 +16,8 @@ int main(int argc,char **args){
   PetscInt i,steps_max;
   PetscReal lambda,T2star,resFreq,magDrvM,magDrvP,gamOpto,gamma_mech;
   PetscReal Q,kHz,MHz,GHz,THz,Hz,rate,time_max,dt;
-
   vec_op   nv;
+  Vec      rho;
 
   enum STATE {gp=0,g0,gm};
   
@@ -84,21 +84,24 @@ int main(int argc,char **args){
   rate = gamOpto;
   add_lin(rate,a);
 
+  create_full_dm(&rho);
   set_initial_pop(a,4);
   set_initial_pop(nv[gm],1.);
   set_initial_pop(nv[gp],1.);
   set_initial_pop(nv[g0],1.);
+  set_dm_from_initial_pop(rho);
 
   /* What units are these?! */
   time_max  = 10000000;
   dt        = 0.1;
   steps_max = 10;
   set_ts_monitor(ts_monitor);
-  time_step(time_max,dt,steps_max);
+  time_step(rho,time_max,dt,steps_max);
   /* steady_state(); */
 
   destroy_op(&a);
   destroy_vec(&nv);
+  destroy_dm(rho);
   QuaC_finalize();
 
   return 0;

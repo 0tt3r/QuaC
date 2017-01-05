@@ -8,12 +8,12 @@
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
 int main(int argc,char **args){
-  PetscInt N_th,num_phonon,num_nv,init_phonon,steady_state_solve,steps_max;
+  PetscInt N_th,num_phonon,num_nv,init_phonon,steady_state_solve,steps_max,full_H_space;
   PetscReal time_max,dt;
   double w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par;
   double Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,nv;
-
+  Vec rho;
 
   
   /* Initialize QuaC */
@@ -77,22 +77,24 @@ int main(int argc,char **args){
 
   rate = w_m/(Q)*(N_th);
   add_lin(rate,a->dag);
-  
+  create_full_dm(&rho);
   
   if (steady_state_solve==1) {
-    steady_state();
+    steady_state(rho);
   } else {
     set_ts_monitor(ts_monitor);
     set_initial_pop(a,init_phonon);
     set_initial_pop(nv,1);
+    set_dm_from_initial_pop(rho);
     time_max  = 100;
     dt        = 1;
     steps_max = 10000;
-    time_step(time_max,dt,steps_max);
+    time_step(rho,time_max,dt,steps_max);
   }
 
   destroy_op(&a);
   destroy_op(&nv);
+  destroy_dm(rho);
 
   QuaC_finalize();
   return 0;

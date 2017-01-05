@@ -16,7 +16,7 @@ void _check_initialized_A();
 void _check_initialized_op();
 extern Mat  full_A;
 extern int  op_finalized;
-extern long total_levels;
+extern PetscInt total_levels;
 extern int  num_subsystems;
 extern double **_hamiltonian;
 extern int _print_dense_ham;
