@@ -28,6 +28,12 @@ qd_plasmon: $(ODIR)/qd_plasmon.o $(OBJ)
 nv_cooling_2state_tc_test: $(ODIR)/nv_cooling_2state_tc_test.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
+rpurcell_ev: $(ODIR)/rpurcell_ev.o $(OBJ)
+	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+
+rpurcell: $(ODIR)/rpurcell.o $(OBJ)
+	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+
 nv_cooling_2state: $(ODIR)/nv_cooling_2state.o $(OBJ)
 	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
