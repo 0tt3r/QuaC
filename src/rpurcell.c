@@ -8,12 +8,12 @@
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
 int main(int argc,char **args){
-  PetscInt N_th,num_phonon,num_nv,init_phonon,steady_state_solve,steps_max;
+  PetscInt N_th,num_phonon,num_nv,init_phonon,steady_state_solve,steps_max,full_H_space;
   PetscReal time_max,dt,gam_res,gam_eff,gam_dep;
   double w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par,purcell_f,gamma_res,gamma_dep;
   double Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,nv;
-
+  Vec rho;
 
   
   /* Initialize QuaC */
@@ -58,7 +58,7 @@ int main(int argc,char **args){
 
   create_op(num_phonon,&a);  
   create_op(2,&nv);
-
+  full_H_space = 2*num_phonon;
   /* Add terms to the hamiltonian */
   add_to_ham(w_m,a->n); // w_m at a
   
@@ -66,8 +66,8 @@ int main(int argc,char **args){
 
   /* Below 4 terms represent lambda_s (nvt + nv)(at + a) */
   //  add_to_ham_mult2(lambda_s,a->dag,nv->dag); //nvt at
-  add_to_ham_mult2(lambda_s,nv->dag,a);  //nvt a
-  add_to_ham_mult2(lambda_s,nv,a->dag);  //nv at
+  add_to_ham_mult2(0*lambda_s,nv->dag,a);  //nvt a
+  add_to_ham_mult2(0*lambda_s,nv,a->dag);  //nv at
  //  add_to_ham_mult2(lambda_s,nv,a);   //nv a
 
   /* nv center lindblad terms */
@@ -82,9 +82,9 @@ int main(int argc,char **args){
   rate = gamma_res*(N_th);
   add_lin(rate,a->dag);
   
-  
+  create_dm(&rho,full_H_space);
   if (steady_state_solve==1) {
-    steady_state();
+    steady_state(rho);
     purcell_f = 4*lambda_s*lambda_s/(gamma_eff+gamma_res+0.5*gamma_dep);
     rate = gamma_res/(gamma_res+purcell_f/(1+purcell_f/gamma_eff));
     if(nid==0) printf("Predicted cooling fraction: %f\n",rate);
@@ -92,15 +92,19 @@ int main(int argc,char **args){
     set_ts_monitor(ts_monitor);
     set_initial_pop(a,init_phonon);
     set_initial_pop(nv,0);
+    set_dm_from_initial_pop(rho);
+    //    steady_state(rho);
+    add_to_ham_mult2(lambda_s,nv->dag,a);  //nvt a
+    add_to_ham_mult2(lambda_s,nv,a->dag);  //nv at
     time_max  = 15;
     dt        = 0.01;
     steps_max = 10000;
-    time_step(time_max,dt,steps_max);
+    time_step(rho,time_max,dt,steps_max);
   }
 
   destroy_op(&a);
   destroy_op(&nv);
-
+  destroy_dm(rho);
   QuaC_finalize();
   return 0;
 }

@@ -10,6 +10,7 @@ void create_dm(Vec*,PetscInt);
 void destroy_dm(Vec);
 void get_dm_element(Vec,PetscInt,PetscInt,PetscScalar *);
 void add_value_to_dm(Vec,PetscInt,PetscInt,PetscScalar);
+void set_dm_from_initial_pop(Vec);
 void assemble_dm(Vec);
 void partial_trace_over_one(Vec,Vec,PetscInt,PetscInt,PetscInt);
 void partial_trace_over(Vec,Vec,int,...);
