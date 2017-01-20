@@ -193,9 +193,9 @@ void set_dm_from_initial_pop(Vec x){
      * are ladder operators, and the user hasn't used any special initialization routine
      */
     for (i=0;i<num_subsystems;i++){ 
-      //      n_after   = total_levels/(subsystem_list[i]->my_levels*subsystem_list[i]->n_before);
-      //      init_row_op += ((int)subsystem_list[i]->initial_pop)*n_after;
-      init_row_op += ((int)subsystem_list[i]->initial_pop)*subsystem_list[i]->n_before;
+      n_after   = total_levels/(subsystem_list[i]->my_levels*subsystem_list[i]->n_before);
+      init_row_op += ((int)subsystem_list[i]->initial_pop)*n_after;
+      //      init_row_op += ((int)subsystem_list[i]->initial_pop)*subsystem_list[i]->n_before;
     }
 
     init_row_op = total_levels*init_row_op + init_row_op;
@@ -231,7 +231,7 @@ void set_dm_from_initial_pop(Vec x){
     /* Loop through subsystems */
     for (i=0;i<num_subsystems;i++){ 
       n_after = total_levels/(subsystem_list[i]->my_levels*subsystem_list[i]->n_before);
-      n_before = subsystem_list[i]->n_before;
+      //      n_before = subsystem_list[i]->n_before;
       /* 
        * If the subsystem is a ladder operator, the population will be just on a 
        * diagonal element within the subspace.
@@ -244,8 +244,8 @@ void set_dm_from_initial_pop(Vec x){
         i_sub = (int)subsystem_list[i]->initial_pop;
         j_sub = i_sub;
         mat_tmp_val = 1. + 0.0*PETSC_i;
-        //        _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
-        _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,n_after,n_before,subsystem_list[i]->my_levels);
+        _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
+        //     _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,n_after,n_before,subsystem_list[i]->my_levels);
         _mult_PETSc_init_DM(subspace_dm,rho_mat,(double)1.0);
 
       } else if (subsystem_list[i]->my_op_type==VEC){
@@ -254,7 +254,7 @@ void set_dm_from_initial_pop(Vec x){
          * state and set the initial population.
          */
         n_after = total_levels/(subsystem_list[i]->my_levels*subsystem_list[i]->n_before);
-        n_before = subsystem_list[i]->n_before;
+        //        n_before = subsystem_list[i]->n_before;
         /* Zero out the subspace density matrix */
         MatZeroEntries(subspace_dm);
         vec_pop = 0.0;
@@ -263,8 +263,8 @@ void set_dm_from_initial_pop(Vec x){
           j_sub   = i_sub;
           vec_pop += subsystem_list[i]->vec_op_list[j]->initial_pop;
           mat_tmp_val = subsystem_list[i]->vec_op_list[j]->initial_pop + 0.0*PETSC_i;
-          //          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
-          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,n_after,n_before,subsystem_list[i]->my_levels);
+          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
+          //          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,n_after,n_before,subsystem_list[i]->my_levels);
         }
 
         if (vec_pop==(double)0.0){
@@ -272,8 +272,8 @@ void set_dm_from_initial_pop(Vec x){
           printf("         Defaulting to all population in the 0th element\n");
           mat_tmp_val = 1.0 + 0.0*PETSC_i;
           vec_pop     = 1.0;
-          //          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,0,0,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
-          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,0,0,n_after,n_before,subsystem_list[i]->my_levels);
+          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,0,0,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
+          //          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,0,0,n_after,n_before,subsystem_list[i]->my_levels);
         }
         /* 
          * Now that the subspace_dm is fully constructed, we multiply it into the full
@@ -509,15 +509,15 @@ void get_populations(Vec x,PetscReal time) {
          */
         if (subsystem_list[j]->my_op_type==VEC){
           my_levels = subsystem_list[j]->my_levels;
-          //          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          //          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-          cur_state = (i/subsystem_list[j]->n_before) % my_levels;
+          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
+          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
+          //          cur_state = (i/subsystem_list[j]->n_before) % my_levels;
           populations[i_sub_to_i_pop[j]+cur_state] += tmp_real;
         } else {
           my_levels = subsystem_list[j]->my_levels;
-          //          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          //          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-          cur_state = (i/subsystem_list[j]->n_before) % my_levels;
+          n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
+          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
+          //          cur_state = (i/subsystem_list[j]->n_before) % my_levels;
           populations[i_sub_to_i_pop[j]] += tmp_real*cur_state;
         }
       }
