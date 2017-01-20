@@ -8,7 +8,7 @@
  * leaving the operators not listed.
  *
  * Inputs:
- *     Vec full_dm: the full Hilbert space density matrix to trace ove.
+ *     Vec full_dm: the full Hilbert space density matrix to trace over.
  *                  Note: MUST be the full density matrix; use other routines
  *                        if starting with an already traced DM
  *     int number_of_ops: number of ops in list to trace over
