@@ -499,8 +499,7 @@ void get_populations(Vec x,PetscReal time) {
          * of the fact that we can take the diagonal index i from the
          * full space and get which diagonal index it is in the subspace
          * by calculating:
-         * i_subspace = i/n_b % l
-/// TEMP         * i_subspace = mod(mod(floor(i/n_a),l*n_a),l)
+         * i_subspace = floor(i/n_a) % l
          * For regular operators, these are just number operators, and we count from 0,
          * so, cur_state = i_subspace
          *
@@ -510,14 +509,12 @@ void get_populations(Vec x,PetscReal time) {
         if (subsystem_list[j]->my_op_type==VEC){
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-          //          cur_state = (i/subsystem_list[j]->n_before) % my_levels;
+          cur_state = ((int)floor(i/n_after)%(n_after));
           populations[i_sub_to_i_pop[j]+cur_state] += tmp_real;
         } else {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          cur_state = ((int)floor(i/n_after)%(my_levels*n_after))%my_levels;
-          //          cur_state = (i/subsystem_list[j]->n_before) % my_levels;
+          cur_state = ((int)floor(i/n_after)%(n_after));
           populations[i_sub_to_i_pop[j]] += tmp_real*cur_state;
         }
       }
