@@ -4,22 +4,6 @@
 #include <petscblaslapack.h>
 
 
-void print_rho2(Vec rho,int h_dim){
-  PetscScalar *avec;
-  int i,j;
-  VecGetArray(rho,&avec);
-
-  for (i=0;i<h_dim;i++){
-    for (j=0;j<h_dim;j++){
-      PetscPrintf(PETSC_COMM_WORLD,"%f ",avec[i+j*h_dim]);
-    }
-    PetscPrintf(PETSC_COMM_WORLD,"\n");
-  }
-    PetscPrintf(PETSC_COMM_WORLD,"\n");
-}
-
-
-
 /*
  * partial_trace_over does the partial trace over a list of operators,
  * leaving the operators not listed.
@@ -103,7 +87,6 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
     /* Store this ops information in the *_prev arrays */
     nbef_prev[i] = op->n_before;
     nop_prev[i]  = op->my_levels;
-    print_rho2(tmp_full_dm,current_total_levels);
   }
 
   /* Check that ptraced_dm is big enough */
