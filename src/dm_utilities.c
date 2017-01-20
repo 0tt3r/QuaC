@@ -417,7 +417,7 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
   /* Get the full_dm information */
   VecGetOwnershipRange(full_dm,&full_low,&full_high);
   VecGetArrayRead(full_dm,&full_dm_array); 
-  printf("let's jam\n");
+
   for (ibef=0;ibef<nbef;ibef++){
     for (jbef=0;jbef<nbef;jbef++){
       for (iaf=0;iaf<naf;iaf++){
@@ -433,7 +433,7 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
               /* Location in ptraced Hilbert space */
               /* naf*nbef = total_levels in subspace. Needed to get linearized position */
               loc_sub = naf*nbef*(naf*ibef+iaf)+naf*jbef+jaf;
-              printf("loc_full loc_sub: %d %d\n",loc_full,loc_sub);
+
               /* Add values */
               VecSetValue(ptraced_dm,loc_sub,val,ADD_VALUES);
             }
