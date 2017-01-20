@@ -4,6 +4,24 @@
 #include <petscblaslapack.h>
 
 
+
+/* Print the DM as a matrix.
+ * Not recommended for large matrices.
+ */
+void print_dm(Vec rho,int h_dim){
+  PetscScalar val;
+  int i,j;
+
+  for (i=0;i<h_dim;i++){
+    for (j=0;j<h_dim;j++){
+      get_dm_element(rho,i,j,&val);
+      PetscPrintf(PETSC_COMM_WORLD,"%f ",val);
+    }
+    PetscPrintf(PETSC_COMM_WORLD,"\n");
+  }
+    PetscPrintf(PETSC_COMM_WORLD,"\n");
+}
+
 /*
  * partial_trace_over does the partial trace over a list of operators,
  * leaving the operators not listed.

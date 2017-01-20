@@ -19,4 +19,5 @@ void get_populations(Vec,PetscReal);
 void get_bipartite_concurrence(Vec,double*);
 void sqrt_mat(Mat);
 void get_fidelity(Vec,Vec,double*);
+void print_dm(Vec,int);
 #endif
