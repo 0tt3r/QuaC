@@ -3,6 +3,23 @@
 #include <stdio.h>
 #include <petscblaslapack.h>
 
+
+void print_rho2(Vec rho,int h_dim){
+  PetscScalar *avec;
+  int i,j;
+  VecGetArray(rho,&avec);
+
+  for (i=0;i<h_dim;i++){
+    for (j=0;j<h_dim;j++){
+      PetscPrintf(PETSC_COMM_WORLD,"%f ",avec[i+j*h_dim]);
+    }
+    PetscPrintf(PETSC_COMM_WORLD,"\n");
+  }
+    PetscPrintf(PETSC_COMM_WORLD,"\n");
+}
+
+
+
 /*
  * partial_trace_over does the partial trace over a list of operators,
  * leaving the operators not listed.
@@ -23,7 +40,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   va_list ap;
   Vec tmp_dm,tmp_full_dm;
   operator op;
-  PetscInt i,j,current_total_levels,*nbef_prev,*nop_prev,dm_size,nbef,naf;
+  PetscInt i,j,current_total_levels,*nbef_prev,*nop_prev,dm_size,nbef,naf,previous_total_levels;
   va_start(ap,number_of_ops);
   
   /* Check that the full_dm is of size total_levels */
@@ -47,7 +64,9 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   // Loop through ops that we are tracing over
   for (i=0;i<number_of_ops;i++){
     op = va_arg(ap,operator);
+    previous_total_levels = current_total_levels;
     current_total_levels = current_total_levels/op->my_levels;
+
     /* Creat a smaller, temporary DM to store the current partial trace */
     create_dm(&tmp_dm,current_total_levels);
 
@@ -73,7 +92,9 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
         naf = naf/nop_prev[j];
       }
     }
-    partial_trace_over_one(tmp_full_dm,tmp_dm,nbef,op->my_levels,naf);
+
+    partial_trace_over_one(tmp_full_dm,tmp_dm,nbef,op->my_levels,naf,previous_total_levels);
+
     /* Destroy old large copy, copy smaller DM into a new 'large' copy for the next trace */
     destroy_dm(tmp_full_dm);
     VecDuplicate(tmp_dm,&tmp_full_dm);
@@ -82,6 +103,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
     /* Store this ops information in the *_prev arrays */
     nbef_prev[i] = op->n_before;
     nop_prev[i]  = op->my_levels;
+    print_rho2(tmp_full_dm,current_total_levels);
   }
 
   /* Check that ptraced_dm is big enough */
@@ -387,7 +409,7 @@ void assemble_dm(Vec dm){
   VecAssemblyEnd(dm);
 }
 
-void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt nop,PetscInt naf){
+void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt nop,PetscInt naf,PetscInt cur_levels){
   PetscInt ibef,jbef,iaf,jaf,iop,loc_full,loc_sub,full_low,full_high;
   PetscScalar val;
   const PetscScalar *full_dm_array;
@@ -395,14 +417,14 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
   /* Get the full_dm information */
   VecGetOwnershipRange(full_dm,&full_low,&full_high);
   VecGetArrayRead(full_dm,&full_dm_array); 
-
+  printf("let's jam\n");
   for (ibef=0;ibef<nbef;ibef++){
     for (jbef=0;jbef<nbef;jbef++){
       for (iaf=0;iaf<naf;iaf++){
         for (jaf=0;jaf<naf;jaf++){
           for (iop=0;iop<nop;iop++){
             /* Location in full hilbert space */
-            loc_full = total_levels*(naf*nop*ibef+naf*iop+iaf) + naf*nop*jbef+naf*iop+jaf;
+            loc_full = cur_levels*(naf*nop*ibef+naf*iop+iaf) + naf*nop*jbef+naf*iop+jaf;
             
             /* Only partial trace a processor's own values */
             if (loc_full>=full_low&&loc_full<full_high) {
@@ -411,6 +433,7 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
               /* Location in ptraced Hilbert space */
               /* naf*nbef = total_levels in subspace. Needed to get linearized position */
               loc_sub = naf*nbef*(naf*ibef+iaf)+naf*jbef+jaf;
+              printf("loc_full loc_sub: %d %d\n",loc_full,loc_sub);
               /* Add values */
               VecSetValue(ptraced_dm,loc_sub,val,ADD_VALUES);
             }
