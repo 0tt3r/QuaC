@@ -10,10 +10,17 @@ typedef enum {
     VEC    = 2
   } op_type;
 
+typedef struct time_dep_struct{
+  double (*time_dep_func)(double);
+  Mat mat;
+} time_dep_struct;
+
 
 
 void _check_initialized_A();
 void _check_initialized_op();
+
+extern int  _num_time_dep;
 extern Mat  full_A;
 extern int  op_finalized;
 extern PetscInt total_levels;

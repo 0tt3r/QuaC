@@ -36,5 +36,6 @@ extern int nid; /* a ranks id */
 extern int np; /* number of processors */
 #define MAX_SUB 100  //Consider making this not a define
 extern operator subsystem_list[MAX_SUB];
+extern time_dep_struct _time_dep_list[MAX_SUB];
 
 #endif

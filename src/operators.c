@@ -23,6 +23,8 @@ PetscInt total_levels;
 int num_subsystems;
 operator subsystem_list[MAX_SUB];
 int _print_dense_ham = 0;
+int _num_time_dep = 0;
+time_dep_struct _time_dep_list[MAX_SUB];
 double **_hamiltonian;
 
 /*
@@ -129,9 +131,24 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
 }
 
 /*
- * add_to_ham adds a*op(handle1) to the hamiltonian
+ * add_to_ham_time_dep adds a(t)*op to the time dependent hamiltonian list
  * Inputs:
- *        double a:    scalar to multiply op(handle1)
+ *        double (*time_dep_func)(doubl): time dependent function to multiply op
+ *        operator op: operator to add
+ * Outputs:
+ *        none
+ */
+void add_to_ham_time_dep(double (*time_dep_func)(double),operator op){
+  
+  _check_initialized_A();
+  
+  return;
+}
+
+/*
+ * add_to_ham adds a*op to the hamiltonian
+ * Inputs:
+ *        double a:    scalar to multiply op
  *        operator op: operator to add
  * Outputs:
  *        none
@@ -158,7 +175,7 @@ void add_to_ham(double a,operator op){
    */
 
   mat_scalar = -a*PETSC_i;
-  _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,
+  _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
                      op->my_op_type,op->position,total_levels,1);
 
   /*
@@ -169,7 +186,7 @@ void add_to_ham(double a,operator op){
    */
 
   mat_scalar = a*PETSC_i;
-  _add_to_PETSc_kron(mat_scalar,op->n_before,op->my_levels,
+  _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
                      op->my_op_type,op->position,1,total_levels);
   return;
 }
@@ -223,11 +240,11 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
      * subspace, at location op1->position, op2->position.
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
-    _add_to_PETSc_kron_ij(mat_scalar,op1->position,op2->position,op1->n_before*total_levels,
+    _add_to_PETSc_kron_ij(full_A,mat_scalar,op1->position,op2->position,op1->n_before*total_levels,
                           n_after,op1->my_levels);
   } else {
     /* We are multiplying two normal ops and have to do a little more work. */
-    _add_to_PETSc_kron_comb(mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+    _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                             total_levels,1,1);
   }
@@ -245,11 +262,11 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
      * subspace, at location op1->position, op2->position.
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
-    _add_to_PETSc_kron_ij(mat_scalar,op1->position,op2->position,op1->n_before,
+    _add_to_PETSc_kron_ij(full_A,mat_scalar,op1->position,op2->position,op1->n_before,
                           n_after*total_levels,op1->my_levels);
   } else {
     /* We are multiplying two normal ops and have to do a little more work. */
-    _add_to_PETSc_kron_comb(mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+    _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                             1,1,total_levels);
   }
@@ -304,13 +321,13 @@ void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
   mat_scalar  = -a*PETSC_i;
   if (first_pair) {
     /* The first pair is the vec pair and op3 is the normal op*/  
-    _add_to_PETSc_kron_comb_vec(mat_scalar,op3->n_before,op3->my_levels,
+    _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op3->n_before,op3->my_levels,
                                 op3->my_op_type,op1->n_before,op1->my_levels,
                                 op1->position,op2->position,total_levels,1,1);
 
   } else {
     /* The last pair is the vec pair and op1 is the normal op*/  
-    _add_to_PETSc_kron_comb_vec(mat_scalar,op1->n_before,op1->my_levels,
+    _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op1->n_before,op1->my_levels,
                                 op1->my_op_type,op2->n_before,op2->my_levels,
                                 op2->position,op3->position,total_levels,1,1);
 
@@ -324,13 +341,13 @@ void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
   mat_scalar  = a*PETSC_i;
   if (first_pair) {
     /* The first pair is the vec pair and op3 is the normal op*/  
-    _add_to_PETSc_kron_comb_vec(mat_scalar,op3->n_before,op3->my_levels,
+    _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op3->n_before,op3->my_levels,
                                 op3->my_op_type,op1->n_before,op1->my_levels,
                                 op1->position,op2->position,1,1,total_levels);
 
   } else {
     /* The last pair is the vec pair and op1 is the normal op*/  
-    _add_to_PETSc_kron_comb_vec(mat_scalar,op1->n_before,op1->my_levels,
+    _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op1->n_before,op1->my_levels,
                                 op1->my_op_type,op2->n_before,op2->my_levels,
                                 op2->position,op3->position,1,1,total_levels);
 
@@ -364,7 +381,7 @@ void add_lin(double a,operator op){
    * set extra_before to total_levels
    */
   mat_scalar = -0.5*a;
-  _add_to_PETSc_kron_lin(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+  _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
                          op->position,total_levels,1);
   /*
    * Add (C^t C cross I) to the superoperator matrix, A
@@ -372,7 +389,7 @@ void add_lin(double a,operator op){
    * Since this is an additional I_total after, we simply
    * set extra_after to total_levels
    */
-  _add_to_PETSc_kron_lin(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+  _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
                          op->position,1,total_levels);
 
   /*
@@ -383,7 +400,7 @@ void add_lin(double a,operator op){
    * This is just like add_to_ham_comb, with n_between = n_after*n_before
    */
   mat_scalar = a;
-  _add_to_PETSc_kron_lin_comb(mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+  _add_to_PETSc_kron_lin_comb(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
                               op->position);
 
   return;
@@ -432,7 +449,7 @@ void add_lin_mult2(double a,operator op1,operator op2){
     n_after    = total_levels/(op1->my_levels*op1->n_before);
     mat_scalar = -0.5*a;
 
-    _add_to_PETSc_kron_ij(mat_scalar,op2->position,op2->position,op2->n_before*total_levels,
+    _add_to_PETSc_kron_ij(full_A,mat_scalar,op2->position,op2->position,op2->n_before*total_levels,
                           n_after,op2->my_levels);
     /*
      * Add (C^t C cross I) = (|2><2| cross I) to the superoperator matrix, A
@@ -440,7 +457,7 @@ void add_lin_mult2(double a,operator op1,operator op2){
      * Since this is an additional I_total after, we simply
      * set extra_after to total_levels
      */
-    _add_to_PETSc_kron_ij(mat_scalar,op2->position,op2->position,op2->n_before,
+    _add_to_PETSc_kron_ij(full_A,mat_scalar,op2->position,op2->position,op2->n_before,
                           n_after*total_levels,op2->my_levels);
 
     /*
@@ -476,7 +493,7 @@ void add_lin_mult2(double a,operator op1,operator op2){
       j_comb = op1->my_levels*op1->n_before*n_after*j1 + j2;
     
 
-      _add_to_PETSc_kron_ij(mat_scalar,i_comb,j_comb,op1->n_before,
+      _add_to_PETSc_kron_ij(full_A,mat_scalar,i_comb,j_comb,op1->n_before,
                             n_after,comb_levels);
     
     }
@@ -508,18 +525,18 @@ void add_lin_mult2(double a,operator op1,operator op2){
      * Add (I cross C^t C) to the superoperator matrix, A
      */
     mat_scalar = -0.5*a;
-    _add_to_PETSc_kron_lin2(mat_scalar,op1->n_before,op1->my_levels,total_levels,1);
+    _add_to_PETSc_kron_lin2(full_A,mat_scalar,op1->n_before,op1->my_levels,total_levels,1);
     
     /*
      * Add (C^t C cross I) to the superoperator matrix, A
      */
     mat_scalar = -0.5*a;
-    _add_to_PETSc_kron_lin2(mat_scalar,op1->n_before,op1->my_levels,1,total_levels);
+    _add_to_PETSc_kron_lin2(full_A,mat_scalar,op1->n_before,op1->my_levels,1,total_levels);
     /*
      * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
      */
     mat_scalar = a;
-    _add_to_PETSc_kron_lin2_comb(mat_scalar,op1->n_before,op1->my_levels);
+    _add_to_PETSc_kron_lin2_comb(full_A,mat_scalar,op1->n_before,op1->my_levels);
 
   }
 
@@ -767,11 +784,11 @@ void _check_initialized_A(){
        * the row size
        */
       if (total_levels<MAX_NNZ_PER_ROW) {
-        d_nz[0] = total_levels*5;
-        o_nz[0] = total_levels*5;
+        d_nz[0] = total_levels*total_levels;
+        o_nz[0] = total_levels*total_levels;
         for (i=1;i<(dim/np)*5;i++){
-          d_nz[i] = total_levels*5;
-          o_nz[i] = total_levels*5;
+          d_nz[i] = total_levels*total_levels;
+          o_nz[i] = total_levels*total_levels;
         }
       } else {
         d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
