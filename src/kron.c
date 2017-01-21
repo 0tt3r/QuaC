@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/*                                              
+/*
  * _get_loop_limit is a simple function that returns the
  * appropriate loop limit for a given op_type
  * Inputs:
@@ -37,7 +37,7 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
   return loop_limit;
 }
 
-/*                                              
+/*
  * _get_val_in_subspace is a simple function that returns the
  * i_op,j_op pair and val for a given i;
  * Inputs:
@@ -53,7 +53,7 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
 
 double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,long *j_op){
   double val;
-  /* 
+  /*
    * Since we store our operators as a type and number of levels
    * calculate the actual i,j location for our operator,
    * within its subspace, as well as its values.
@@ -63,7 +63,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
    * If it is a raising operator, it is sub diagonal.
    * If it is a vector operation, it is only one location in the matrix.
    */
-  
+
   if (my_op_type==LOWER) {
     /* Lowering operator */
     *i_op = i;
@@ -81,7 +81,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
     val  = sqrt((double)i+1);
   } else {
     /* Vec operator */
-    /* 
+    /*
      * Since we assume 1 vec operator means |e><e|,
      * the only i,j pair is on the diagonal, at it's position
      * And the value is 1
@@ -90,7 +90,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
     *j_op = position;
     val   = 1.0;
   }
-  
+
   return val;
 }
 
@@ -105,6 +105,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
  * could happen.
  *
  * Inputs:
+ *       Mat matrix:             matrix to add to
  *       PetscScalar add_to_mat: value to add
  *       int i_op:               i of the subspace
  *       int j_op:               j of the subspace
@@ -116,13 +117,13 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
  *
  */
 
-void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
+void _add_to_PETSc_kron_ij(Mat matrix,PetscScalar add_to_mat,int i_op,int j_op,
                            int n_before,int n_after,int my_levels){
   long k1,k2,i_ham,j_ham;
   //  int  my_start_af,my_end_af,my_start_bef,my_end_bef;
   PetscInt Istart,Iend;
-  
-  MatGetOwnershipRange(full_A,&Istart,&Iend); //FIXME: Make these library global?
+
+  MatGetOwnershipRange(matrix,&Istart,&Iend); //FIXME: Make these library global?
 
 
   for (k1=0;k1<n_after;k1++){ /* n_after loop */
@@ -140,18 +141,18 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
        * A' = A cross I_(n_b) cross I_(n_c)
        * B' = I_(n_a) cross B cross I_(n_c)
        * C' = I_(n_a) cross I_(n_b) cross C
-       * 
+       *
        * For an arbitrary operator, we only care about
        * the Hilbert space size before and the Hilbert space size
        * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
        *
-       * The calculation of i_ham and j_ham exploit the structure of 
+       * The calculation of i_ham and j_ham exploit the structure of
        * the tensor products - they are general for kronecker products
        * of identity matrices with some matrix A
        */
       i_ham = i_op*n_after+k1+k2*my_levels*n_after;
       j_ham = j_op*n_after+k1+k2*my_levels*n_after;
-      if (i_ham>=Istart&&i_ham<Iend) MatSetValue(full_A,i_ham,j_ham,add_to_mat,ADD_VALUES);
+      if (i_ham>=Istart&&i_ham<Iend) MatSetValue(matrix,i_ham,j_ham,add_to_mat,ADD_VALUES);
     }
   }
 
@@ -172,7 +173,7 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
   /*     my_start_af   += n_after % np; */
   /*     my_end_af      = my_start_af+(n_after/np); */
   /*   } */
-    
+
   /*   for (k1=my_start_af;k1<my_end_af;k1++){ /\* n_after loop *\/ */
   /*     for (k2=0;k2<n_before;k2++){ /\* n_before loop *\/ */
   /*       /\* */
@@ -256,7 +257,7 @@ void _add_to_PETSc_kron_ij(PetscScalar add_to_mat,int i_op,int j_op,
  * routine specifically adds to the initial density matrix, rho.
  *
  * This is where the parallelization of the matrix generation
- * could happen. 
+ * could happen.
  *
  * Inputs:
  *       PetscScalar add_to_mat: value to add
@@ -291,12 +292,12 @@ void _add_PETSc_DM_kron_ij(PetscScalar add_to_rho,Mat subspace_dm,Mat rho_mat,in
        * A' = A cross I_(n_b) cross I_(n_c)
        * B' = I_(n_a) cross B cross I_(n_c)
        * C' = I_(n_a) cross I_(n_b) cross C
-       * 
+       *
        * For an arbitrary operator, we only care about
        * the Hilbert space size before and the Hilbert space size
        * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
        *
-       * The calculation of i_ham and j_ham exploit the structure of 
+       * The calculation of i_ham and j_ham exploit the structure of
        * the tensor products - they are general for kronecker products
        * of identity matrices with some matrix A
        */
@@ -324,7 +325,7 @@ void _mult_PETSc_init_DM(Mat subspace_dm,Mat rho_mat,double trace){
   MatAssemblyBegin(subspace_dm,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(subspace_dm,MAT_FINAL_ASSEMBLY);
 
-  /* 
+  /*
    * Check to make sure trace is 1; if not, normalize and print a warning.
    */
   if (trace!=(double)1.0){
@@ -332,8 +333,8 @@ void _mult_PETSc_init_DM(Mat subspace_dm,Mat rho_mat,double trace){
     printf("         The initial populations were normalized.\n");
     MatScale(subspace_dm,1./trace);
   }
-  
-  /* 
+
+  /*
    * Do rho = rho*subspace_dm - this is correct because the initial DMs
    * are all from different subspaces
    */
@@ -380,12 +381,12 @@ void _add_to_dense_kron_ij(double a,int i_op,int j_op,
        * A' = A cross I_(n_b) cross I_(n_c)
        * B' = I_(n_a) cross B cross I_(n_c)
        * C' = I_(n_a) cross I_(n_b) cross C
-       * 
+       *
        * For an arbitrary operator, we only care about
        * the Hilbert space size before and the Hilbert space size
        * after the target operator (since I_(n_a) cross I_(n_b) = I_(n_a*n_b)
        *
-       * The calculation of i_ham and j_ham exploit the structure of 
+       * The calculation of i_ham and j_ham exploit the structure of
        * the tensor products - they are general for kronecker products
        * of identity matrices with some matrix A
        */
@@ -397,7 +398,7 @@ void _add_to_dense_kron_ij(double a,int i_op,int j_op,
 
 }
 
-/*                                              
+/*
  * _add_to_PETSc_kron expands an operator given a Hilbert space size
  * before and after and adds that to the Petsc matrix full_A
  *
@@ -413,7 +414,7 @@ void _add_to_dense_kron_ij(double a,int i_op,int j_op,
  *      none, but adds to PETSc matrix full_A
  */
 
-void _add_to_PETSc_kron(PetscScalar a,int n_before,int my_levels,
+void _add_to_PETSc_kron(Mat matrix, PetscScalar a,int n_before,int my_levels,
                         op_type my_op_type,int position,
                         int extra_before,int extra_after){
   long loop_limit,i,i_op,j_op,n_after;
@@ -426,21 +427,21 @@ void _add_to_PETSc_kron(PetscScalar a,int n_before,int my_levels,
    * We want to do this in parallel, so we chunk it up between cores
    * TODO: CHUNK THIS UP
    */
- 
+
   for (i=0;i<my_levels-loop_limit;i++){
-    /* 
+    /*
      * Since we store our operators as a type and number of levels
      * calculate the actual i,j location for our operator,
      * within its subspace, as well as its values.
      */
     val = _get_val_in_subspace(i,my_op_type,position,&i_op,&j_op);
     add_to_mat = a*val;
-    _add_to_PETSc_kron_ij(add_to_mat,i_op,j_op,n_before*extra_before,n_after*extra_after,my_levels);
+    _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,n_after*extra_after,my_levels);
    }
   return;
 }
 
-/*                                              
+/*
  * _add_to_PETSc_kron_comb expands a*op1*op2 given a Hilbert space size
  * before and after and adds that to the Petsc matrix full_A
  *
@@ -461,7 +462,7 @@ void _add_to_PETSc_kron(PetscScalar a,int n_before,int my_levels,
  *      none, but adds to full_A
  */
 
-void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_type1,int position1,
+void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,op_type op_type1,int position1,
                              int n_before2,int levels2,op_type op_type2,int position2,
                              int extra_before,int extra_between,int extra_after){
   long loop_limit1,loop_limit2,k3,i,j,i1,j1,i2,j2;
@@ -473,7 +474,7 @@ void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
   loop_limit1 = _get_loop_limit(op_type1,levels1);
   loop_limit2 = _get_loop_limit(op_type2,levels2);
 
-  /* 
+  /*
    * We want n_before2 to be the larger of the two,
    * because the kroneckor product only cares about
    * what order the operators were added. 
@@ -504,7 +505,7 @@ void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
     op_type2      = tmp_op_switch;
   }
 
-  /* 
+  /*
    * We need to calculate n_between, since, in general,
    * A=op(1) and B=op(2) may not be next to each other (in kroneckor terms)
    * We may have:
@@ -512,15 +513,15 @@ void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
    * B = I_a cross I_c cross b
    * So, A*B = a cross I_c cross b, where I_c is the Hilbert space size
    * of all operators between.
-   * n_between is the hilbert space size between the operators. 
-   * We take the larger n_before (say n2), then divide out all operators 
+   * n_between is the hilbert space size between the operators.
+   * We take the larger n_before (say n2), then divide out all operators
    * before the other operator (say n1), and divide out the other operator's
    * hilbert space (l1), giving n_between = n2/(n1*l1)
    *
    */
   n_between = n_before2/(n_before1*levels1);
 
-  /* 
+  /*
    * n_before and n_after refer to before and after a cross I_c cross b
    * and my_levels is the size of a cross I_c cross b
    */
@@ -529,26 +530,26 @@ void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
   n_after    = total_levels/(my_levels*n_before);
 
   for (i=0;i<levels1-loop_limit1;i++){
-    /* 
+    /*
      * Since we store our operators as a type and number of levels
      * calculate the actual i,j location for our operator,
      * within its subspace, as well as its values.
      */
     val1 = _get_val_in_subspace(i,op_type1,position1,&i1,&j1);
-    /* 
-     * Since we are taking a cross I cross b, we do 
-     * I_n_between cross b below 
+    /*
+     * Since we are taking a cross I cross b, we do
+     * I_n_between cross b below
      */
     for (k3=0;k3<n_between*extra_between;k3++){
       for (j=0;j<levels2-loop_limit2;j++){
         /* Get the i,j and val for operator 2 */
         val2 = _get_val_in_subspace(j,op_type2,position2,&i2,&j2);
-        
+
         /* Update i2,j2 with the kroneckor product for I_between */
         i2 = i2 + k3*levels2;
         j2 = j2 + k3*levels2;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -560,7 +561,7 @@ void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
         i_comb = levels2*n_between*i1 + i2;
         j_comb = levels2*n_between*j1 + j2;
         add_to_mat = a*val1*val2;
-        _add_to_PETSc_kron_ij(add_to_mat,i_comb,j_comb,n_before*extra_before,
+        _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
                               n_after*extra_after,my_levels);
       }
     }
@@ -570,7 +571,7 @@ void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
 }
 
 
-/*                                              
+/*
  * _add_to_PETSc_kron_comb_vec expands a*vec*vec*op or a*op*vec*vec
  * given a Hilbert space size before and after and adds that to the Petsc matrix full_A
  *
@@ -590,7 +591,7 @@ void _add_to_PETSc_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
  *      none, but adds to full_A
  */
 
-void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_type op_type_op,
+void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int levels_op,op_type op_type_op,
                                  int n_before_vec,int levels_vec,int i_vec,int j_vec,
                                  int extra_before,int extra_between,int extra_after){
   long loop_limit_op,k3,i,j,i1,j1,i2,j2;
@@ -600,10 +601,10 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
 
   loop_limit_op = _get_loop_limit(op_type_op,levels_op);
 
-  /* 
+  /*
    * We want n_before2 to be the larger of the two,
    * because the kroneckor product only cares about
-   * what order the operators were added. 
+   * what order the operators were added.
    * I.E a' * b' = b' * a', where a' is the full space
    * representation of a.
    * If that is not true, flip them
@@ -613,10 +614,10 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
     /* n_before_vec => n_before1, n_before_op => n_before2 */
 
     /* The normal op is farther in Hilbert space */
-    
+
     n_between = n_before_op/(n_before_vec*levels_vec);
 
-    /* 
+    /*
      * n_before and n_after refer to before and after a cross I_c cross b
      * and my_levels is the size of a cross I_c cross b
      */
@@ -624,24 +625,24 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
     my_levels  = levels_op*levels_vec*n_between;
     n_after    = total_levels/(my_levels*n_before);
 
-    /* The vec pair is i1, and we know it is only one value in one spot in its subspace */ 
+    /* The vec pair is i1, and we know it is only one value in one spot in its subspace */
     val1 = 1.0;
     i1   = i_vec;
     j1   = j_vec;
-    /* 
-     * Since we are taking a cross I cross b, we do 
-     * I_n_between cross b below 
+    /*
+     * Since we are taking a cross I cross b, we do
+     * I_n_between cross b below
      */
     for (k3=0;k3<n_between*extra_between;k3++){
       for (j=0;j<levels_op-loop_limit_op;j++){
         /* Get the i,j and val for operator 2 */
         val2 = _get_val_in_subspace(j,op_type_op,-1,&i2,&j2);
-        
+
         /* Update i2,j2 with the kroneckor product for I_between */
         i2 = i2 + k3*levels_op;
         j2 = j2 + k3*levels_op;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -654,7 +655,7 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
         j_comb = levels_op*n_between*j1 + j2;
         add_to_mat = a*val1*val2;
 
-        _add_to_PETSc_kron_ij(add_to_mat,i_comb,j_comb,n_before*extra_before,
+        _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
                               n_after*extra_after,my_levels);
       }
     }
@@ -664,8 +665,8 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
     /* The vec op pair is farther in Hilbert space */
 
     n_between = n_before_vec/(n_before_op*levels_op);
-    
-    /* 
+
+    /*
      * n_before and n_after refer to before and after a cross I_c cross b
      * and my_levels is the size of a cross I_c cross b
      */
@@ -674,19 +675,19 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
     n_after    = total_levels/(my_levels*n_before);
 
     for (i=0;i<levels_op-loop_limit_op;i++){
-      /* 
+      /*
        * Since we store our operators as a type and number of levels
        * calculate the actual i,j location for our operator,
        * within its subspace, as well as its values.
        */
       val1 = _get_val_in_subspace(i,op_type_op,-1,&i1,&j1);
-      /* 
-       * Since we are taking a cross I cross b, we do 
+      /*
+       * Since we are taking a cross I cross b, we do
        * I_n_between cross b below 
        */
       for (k3=0;k3<n_between*extra_between;k3++){
 
-        /* The vec pair is op2, and we know it is only one value in one spot in its subspace */ 
+        /* The vec pair is op2, and we know it is only one value in one spot in its subspace */
         val2 = 1.0;
         i2   = i_vec;
         j2   = j_vec;
@@ -694,8 +695,8 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
         /* Update i2,j2 with the kroneckor product for I_between */
         i2 = i2 + k3*levels_vec;
         j2 = j2 + k3*levels_vec;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -708,16 +709,16 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
         j_comb = levels_vec*n_between*j1 + j2;
         add_to_mat = a*val1*val2;
 
-        _add_to_PETSc_kron_ij(add_to_mat,i_comb,j_comb,n_before*extra_before,
+        _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
                               n_after*extra_after,my_levels);
       }
     }
   }
-  
+
   return;
 }
 
-/*                                              
+/*
  * _add_to_PETSc_kron_lin expands an op^dag op given a Hilbert space size
  * before and after and adds that to the Petsc matrix full_A
  *
@@ -730,10 +731,10 @@ void _add_to_PETSc_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
  *      int extra_before:   extra Hilbert space size before
  *      int extra_after:    extra Hilbert space size after
  * Outputs:
- *      none, but adds to PETSc matrix 
+ *      none, but adds to PETSc matrix
  */
 
-void _add_to_PETSc_kron_lin(PetscScalar a,int n_before,int my_levels,
+void _add_to_PETSc_kron_lin(Mat matrix,PetscScalar a,int n_before,int my_levels,
                         op_type my_op_type,int position,
                         int extra_before,int extra_after){
   long loop_limit,i,i_op,j_op,n_after;
@@ -744,7 +745,7 @@ void _add_to_PETSc_kron_lin(PetscScalar a,int n_before,int my_levels,
   n_after    = total_levels/(my_levels*n_before);
 
   for (i=0;i<my_levels-loop_limit;i++){
-    /* 
+    /*
      * For this term, we have to calculate Ct C.
      * We know, a priori, that all operators are (sub or super) diagonal.
      * Any matrix such as this will be (true) diagonal after doing Ct C.
@@ -756,8 +757,8 @@ void _add_to_PETSc_kron_lin(PetscScalar a,int n_before,int my_levels,
     val  = _get_val_in_subspace(i,my_op_type,position,&i_op,&j_op);
     i_op = j_op;
     val  = val*val;
-    add_to_mat = a*val; 
-    _add_to_PETSc_kron_ij(add_to_mat,i_op,j_op,n_before*extra_before,
+    add_to_mat = a*val;
+    _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,
                           n_after*extra_after,my_levels);
   }
 
@@ -765,7 +766,7 @@ void _add_to_PETSc_kron_lin(PetscScalar a,int n_before,int my_levels,
 }
 
 
-/*                        
+/*
  * WARNING: A LITTLE BIT OF A HACK
  * _add_to_PETSc_kron_lin2 assumes op = a a^\dag and
  * expands an op^dag op given a Hilbert space size
@@ -778,10 +779,10 @@ void _add_to_PETSc_kron_lin(PetscScalar a,int n_before,int my_levels,
  *      int extra_before:   extra Hilbert space size before
  *      int extra_after:    extra Hilbert space size after
  * Outputs:
- *      none, but adds to PETSc matrix 
+ *      none, but adds to PETSc matrix
  */
 
-void _add_to_PETSc_kron_lin2(PetscScalar a,int n_before,int my_levels,
+void _add_to_PETSc_kron_lin2(Mat matrix,PetscScalar a,int n_before,int my_levels,
                              int extra_before,int extra_after){
   long i,i_op,j_op,n_after;
   PetscReal    val;
@@ -791,16 +792,16 @@ void _add_to_PETSc_kron_lin2(PetscScalar a,int n_before,int my_levels,
   n_after    = total_levels/(my_levels*n_before);
 
   for (i=1;i<my_levels;i++){
-    /* 
+    /*
      * For this term, we have to calculate Ct C.
-     * We are assuming that C = aa^\dagger, so we 
+     * We are assuming that C = aa^\dagger, so we
      * exploit that structure directly
      */
     i_op = i-1;
     j_op = i-1;
     val  = (double)i*(double)i;
     add_to_mat = a*val;
-    _add_to_PETSc_kron_ij(add_to_mat,i_op,j_op,n_before*extra_before,
+    _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,
                           n_after*extra_after,my_levels);
   }
 
@@ -808,20 +809,21 @@ void _add_to_PETSc_kron_lin2(PetscScalar a,int n_before,int my_levels,
 }
 
 
-/*                                              
- * add_to_PETSc_kron_lin_comb adds C' cross C' to the full_A
+/*
+ * add_to_PETSc_kron_lin_comb adds C' cross C' to matrix
  *
  * Inputs:
+ *      Mat matrix          matrix to add to
  *      PetscScalar a       scalar to multiply operator (can be complex)
  *      int n_before:       Hilbert space size before
  *      int my_levels:      number of levels for operator
  *      op_type my_op_type: operator type
  *      int position:       vec operator's position variable
  * Outputs:
- *      none, but adds to PETSc matrix 
+ *      none, but adds to PETSc matrix
  */
 
-void _add_to_PETSc_kron_lin_comb(PetscScalar a,int n_before,int my_levels,op_type my_op_type,
+void _add_to_PETSc_kron_lin_comb(Mat matrix, PetscScalar a,int n_before,int my_levels,op_type my_op_type,
                                  int position){
   long loop_limit,k3,i,j,i1,j1,i2,j2,i_comb,j_comb;
   long n_after,comb_levels;
@@ -836,25 +838,25 @@ void _add_to_PETSc_kron_lin_comb(PetscScalar a,int n_before,int my_levels,op_typ
 
   for (k3=0;k3<n_before*n_after;k3++){
     for (i=0;i<my_levels-loop_limit;i++){
-      /* 
+      /*
        * Since we store our operators as a type and number of levels
        * calculate the actual i,j location for our operator,
        * within its subspace, as well as its values.
        */
       val1 = _get_val_in_subspace(i,my_op_type,position,&i1,&j1);
-      /* 
-       * Since we are taking c cross I cross c, we do 
-       * I_ab cross c below - the k3 loop is moved to the 
+      /*
+       * Since we are taking c cross I cross c, we do
+       * I_ab cross c below - the k3 loop is moved to the
        * top
        */
       for (j=0;j<my_levels-loop_limit;j++){
-        
+
         val2 = _get_val_in_subspace(j,my_op_type,position,&i2,&j2);
         /* Update i2,j2 with the I cross b value */
         i2 = i2 + k3*my_levels;
         j2 = j2 + k3*my_levels;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -865,9 +867,9 @@ void _add_to_PETSc_kron_lin_comb(PetscScalar a,int n_before,int my_levels,op_typ
          */
         i_comb = my_levels*n_before*n_after*i1 + i2;
         j_comb = my_levels*n_before*n_after*j1 + j2;
-        
+
         add_to_mat = a*val1*val2 + PETSC_i*0;
-        _add_to_PETSc_kron_ij(add_to_mat,i_comb,j_comb,n_before,
+        _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before,
                               n_after,comb_levels);
       }
     }
@@ -888,7 +890,7 @@ void _add_to_PETSc_kron_lin_comb(PetscScalar a,int n_before,int my_levels,op_typ
  *      none, but adds to PETSc matrix 
  */
 
-void _add_to_PETSc_kron_lin2_comb(PetscScalar a,int n_before,int my_levels){
+void _add_to_PETSc_kron_lin2_comb(Mat matrix,PetscScalar a,int n_before,int my_levels){
   long k3,i,j,i1,j1,i2,j2,i_comb,j_comb;
   long n_after,comb_levels;
   double val1,val2;
@@ -901,32 +903,32 @@ void _add_to_PETSc_kron_lin2_comb(PetscScalar a,int n_before,int my_levels){
   for (k3=0;k3<n_before*n_after;k3++){
     for (i=1;i<my_levels;i++){
       /*
-       * We are assuming that C = aa^\dagger, so we 
+       * We are assuming that C = aa^\dagger, so we
        * exploit that structure directly
        */
       i1 = i-1;
       j1 = i-1;
       val1  = (double)i*(double)i;
 
-      /* 
-       * Since we are taking c cross I cross c, we do 
-       * I_ab cross c below - the k3 loop is moved to the 
+      /*
+       * Since we are taking c cross I cross c, we do
+       * I_ab cross c below - the k3 loop is moved to the
        * top
        */
       for (j=1;j<my_levels;j++){
         /*
-         * We are assuming that C = aa^\dagger, so we 
+         * We are assuming that C = aa^\dagger, so we
          * exploit that structure directly
          */
         i2 = j-1;
         j2 = j-1;
         val2  = (double)i*(double)i;
-        
+
         /* Update i2,j2 with the I cross b value */
         i2 = i2 + k3*my_levels;
         j2 = j2 + k3*my_levels;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -937,9 +939,9 @@ void _add_to_PETSc_kron_lin2_comb(PetscScalar a,int n_before,int my_levels){
          */
         i_comb = my_levels*n_before*n_after*i1 + i2;
         j_comb = my_levels*n_before*n_after*j1 + j2;
-        
+
         add_to_mat = a*val1*val2 + PETSC_i*0;
-        _add_to_PETSc_kron_ij(add_to_mat,i_comb,j_comb,n_before,
+        _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before,
                               n_after,comb_levels);
       }
     }
@@ -949,7 +951,7 @@ void _add_to_PETSc_kron_lin2_comb(PetscScalar a,int n_before,int my_levels){
 }
 
 
-/*                                              
+/*
  * _add_to_dense_kron expands an operator given a Hilbert space size
  * before and after and adds that to the dense Hamiltonian
  *
@@ -971,9 +973,9 @@ void _add_to_dense_kron(double a,int n_before,int my_levels,
   loop_limit = _get_loop_limit(my_op_type,my_levels);
 
   n_after    = total_levels/(my_levels*n_before);
- 
+
   for (i=0;i<my_levels-loop_limit;i++){
-    /* 
+    /*
      * Since we store our operators as a type and number of levels
      * calculate the actual i,j location for our operator,
      * within its subspace, as well as its values.
@@ -986,7 +988,7 @@ void _add_to_dense_kron(double a,int n_before,int my_levels,
 }
 
 
-/*                                              
+/*
  * _add_to_dense_kron_comb expands a*op1*op2 given a Hilbert space size
  * before and after and adds that to the dense Ham matrix
  *
@@ -1015,10 +1017,10 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
   loop_limit1 = _get_loop_limit(op_type1,levels1);
   loop_limit2 = _get_loop_limit(op_type2,levels2);
 
-  /* 
+  /*
    * We want n_before2 to be the larger of the two,
    * because the kroneckor product only cares about
-   * what order the operators were added. 
+   * what order the operators were added.
    * I.E a' * b' = b' * a', where a' is the full space
    * representation of a.
    * If that is not true, flip them
@@ -1046,7 +1048,7 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
     op_type2      = tmp_op_switch;
   }
 
-  /* 
+  /*
    * We need to calculate n_between, since, in general,
    * A=op(1) and B=op(2) may not be next to each other (in kroneckor terms)
    * We may have:
@@ -1054,15 +1056,15 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
    * B = I_a cross I_c cross b
    * So, A*B = a cross I_c cross b, where I_c is the Hilbert space size
    * of all operators between.
-   * n_between is the hilbert space size between the operators. 
-   * We take the larger n_before (say n2), then divide out all operators 
+   * n_between is the hilbert space size between the operators.
+   * We take the larger n_before (say n2), then divide out all operators
    * before the other operator (say n1), and divide out the other operator's
    * hilbert space (l1), giving n_between = n2/(n1*l1)
    *
    */
   n_between = n_before2/(n_before1*levels1);
 
-  /* 
+  /*
    * n_before and n_after refer to before and after a cross I_c cross b
    * and my_levels is the size of a cross I_c cross b
    */
@@ -1071,26 +1073,26 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
   n_after    = total_levels/(my_levels*n_before);
 
   for (i=0;i<levels1-loop_limit1;i++){
-    /* 
+    /*
      * Since we store our operators as a type and number of levels
      * calculate the actual i,j location for our operator,
      * within its subspace, as well as its values.
      */
     val1 = _get_val_in_subspace(i,op_type1,position1,&i1,&j1);
-    /* 
-     * Since we are taking a cross I cross b, we do 
-     * I_n_between cross b below 
+    /*
+     * Since we are taking a cross I cross b, we do
+     * I_n_between cross b below
      */
     for (k3=0;k3<n_between;k3++){
       for (j=0;j<levels2-loop_limit2;j++){
         /* Get the i,j and val for operator 2 */
         val2 = _get_val_in_subspace(j,op_type2,position2,&i2,&j2);
-        
+
         /* Update i2,j2 with the kroneckor product for I_between */
         i2 = i2 + k3*levels2;
         j2 = j2 + k3*levels2;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -1101,7 +1103,7 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
          */
         i_comb = levels2*n_between*i1 + i2;
         j_comb = levels2*n_between*j1 + j2;
-        add_to_mat = a*val1*val2; 
+        add_to_mat = a*val1*val2;
         _add_to_dense_kron_ij(add_to_mat,i_comb,j_comb,n_before,
                               n_after,my_levels);
       }
@@ -1113,7 +1115,7 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
 
 
 
-/*                                              
+/*
  * _add_to_dense_kron_comb_vec expands a*vec*vec*op or a*op*vec*vec
  * given a Hilbert space size before and after and adds that to the Petsc matrix full_A
  *
@@ -1139,10 +1141,10 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
 
   loop_limit_op = _get_loop_limit(op_type_op,levels_op);
 
-  /* 
+  /*
    * We want n_before2 to be the larger of the two,
    * because the kroneckor product only cares about
-   * what order the operators were added. 
+   * what order the operators were added.
    * I.E a' * b' = b' * a', where a' is the full space
    * representation of a.
    * If that is not true, flip them
@@ -1152,10 +1154,10 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
     /* n_before_vec => n_before1, n_before_op => n_before2 */
 
     /* The normal op is farther in Hilbert space */
-    
+
     n_between = n_before_op/(n_before_vec*levels_vec);
 
-    /* 
+    /*
      * n_before and n_after refer to before and after a cross I_c cross b
      * and my_levels is the size of a cross I_c cross b
      */
@@ -1163,24 +1165,24 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
     my_levels  = levels_op*levels_vec*n_between;
     n_after    = total_levels/(my_levels*n_before);
 
-    /* The vec pair is i1, and we know it is only one value in one spot in its subspace */ 
+    /* The vec pair is i1, and we know it is only one value in one spot in its subspace */
     val1 = 1.0;
     i1   = i_vec;
     j1   = j_vec;
-    /* 
-     * Since we are taking a cross I cross b, we do 
-     * I_n_between cross b below 
+    /*
+     * Since we are taking a cross I cross b, we do
+     * I_n_between cross b below
      */
     for (k3=0;k3<n_between;k3++){
       for (j=0;j<levels_op-loop_limit_op;j++){
         /* Get the i,j and val for operator 2 */
         val2 = _get_val_in_subspace(j,op_type_op,-1,&i2,&j2);
-        
+
         /* Update i2,j2 with the kroneckor product for I_between */
         i2 = i2 + k3*levels_op;
         j2 = j2 + k3*levels_op;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -1203,8 +1205,8 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
     /* The vec op pair is farther in Hilbert space */
 
     n_between = n_before_vec/(n_before_op*levels_op);
-    
-    /* 
+
+    /*
      * n_before and n_after refer to before and after a cross I_c cross b
      * and my_levels is the size of a cross I_c cross b
      */
@@ -1213,19 +1215,19 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
     n_after    = total_levels/(my_levels*n_before);
 
     for (i=0;i<levels_op-loop_limit_op;i++){
-      /* 
+      /*
        * Since we store our operators as a type and number of levels
        * calculate the actual i,j location for our operator,
        * within its subspace, as well as its values.
        */
       val1 = _get_val_in_subspace(i,op_type_op,-1,&i1,&j1);
-      /* 
-       * Since we are taking a cross I cross b, we do 
-       * I_n_between cross b below 
+      /*
+       * Since we are taking a cross I cross b, we
+       * I_n_between cross b below
        */
       for (k3=0;k3<n_between;k3++){
 
-        /* The vec pair is op2, and we know it is only one value in one spot in its subspace */ 
+        /* The vec pair is op2, and we know it is only one value in one spot in its subspace */
         val2 = 1.0;
         i2   = i_vec;
         j2   = j_vec;
@@ -1233,8 +1235,8 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
         /* Update i2,j2 with the kroneckor product for I_between */
         i2 = i2 + k3*levels_vec;
         j2 = j2 + k3*levels_vec;
-        /* 
-         * Using the standard Kronecker product formula for 
+        /*
+         * Using the standard Kronecker product formula for
          * A and I cross B, we calculate
          * the i,j pair for handle1 cross I cross handle2.
          * Through we do not use it here, we note that the new
@@ -1252,7 +1254,7 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
       }
     }
   }
-  
+
   return;
 }
 
