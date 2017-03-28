@@ -18,8 +18,8 @@
 
 long _get_loop_limit(op_type my_op_type,int my_levels){
   int loop_limit;
-  /* 
-   * Raising and lowering operators both have 
+  /*
+   * Raising and lowering operators both have
    * one less length in the loop (loop_limit)
    */
   loop_limit = 1;
@@ -27,7 +27,7 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
     /* Number operator needs to loop through the full my_levels*/
     loop_limit = 0;
   } else if (my_op_type==VEC){
-    /* 
+    /*
      * Vec operators have only one value in their subspace,
      * so the loop size is 1 and loop_limit is my_levels-1
      */
@@ -269,7 +269,7 @@ void _add_to_PETSc_kron_ij(Mat matrix,PetscScalar add_to_mat,int i_op,int j_op,
  *       int n_after:            size of I_after
  *       int my_levels:          size of subspace
  * Outputs:
- *       none, but adds to PETSc matrix 
+ *       none, but adds to PETSc matrix
  *
  */
 
@@ -477,7 +477,7 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
   /*
    * We want n_before2 to be the larger of the two,
    * because the kroneckor product only cares about
-   * what order the operators were added. 
+   * what order the operators were added.
    * I.E a' * b' = b' * a', where a' is the full space
    * representation of a.
    * If that is not true, flip them
@@ -683,7 +683,7 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
       val1 = _get_val_in_subspace(i,op_type_op,-1,&i1,&j1);
       /*
        * Since we are taking a cross I cross b, we do
-       * I_n_between cross b below 
+       * I_n_between cross b below
        */
       for (k3=0;k3<n_between*extra_between;k3++){
 
@@ -887,7 +887,7 @@ void _add_to_PETSc_kron_lin_comb(Mat matrix, PetscScalar a,int n_before,int my_l
  *      int n_before:       Hilbert space size before
  *      int my_levels:      number of levels for operator
  * Outputs:
- *      none, but adds to PETSc matrix 
+ *      none, but adds to PETSc matrix
  */
 
 void _add_to_PETSc_kron_lin2_comb(Mat matrix,PetscScalar a,int n_before,int my_levels){
@@ -1257,4 +1257,3 @@ void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type 
 
   return;
 }
-
