@@ -27,7 +27,7 @@ PetscErrorCode _QG_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,voi
 }
 
 /* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
- * to apply that event. 
+ * to apply that event.
 */
 PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
 
@@ -60,7 +60,7 @@ void add_gate(PetscReal time,gate_type my_gate_type,...) {
       exit(0);
     }
   }
-    
+
   // Store arguments in list
   _quantum_gate_list[_num_quantum_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
   _quantum_gate_list[_num_quantum_gates].time = time;
@@ -108,7 +108,7 @@ void _apply_gate(gate_type my_gate_type,int *systems,Vec rho){
 }
 
 
-/*                                              
+/*
  * _construct_gate_mat constructs the matrix needed for the quantum
  * computing gates.
  *
@@ -124,9 +124,9 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
   PetscInt i1,j1,i2,j2,comb_levels,control,moved_system;
   PetscReal    val1,val2;
   PetscScalar add_to_mat;
-  
+
   if (my_gate_type == CNOT) {
-    
+
     /* The controlled NOT gate has two inputs, a target and a control.
      * the target output is equal to the target input if the control is
      * |0> and is flipped if the control input is |1> (Marinescu 146)
@@ -141,7 +141,7 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
 
 
     /* Figure out which system is first in our basis
-     * 0 and 1 is hardcoded because CNOT gates have only 2 qubits */    
+     * 0 and 1 is hardcoded because CNOT gates have only 2 qubits */
     n_before1  = subsystem_list[systems[0]]->n_before;
     n_before2  = subsystem_list[systems[1]]->n_before;
     control    = 0;
@@ -163,22 +163,22 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
       for (k2=0;k2<n_before1;k2++){
         for (i=0;i<4;i++){ //4 is hardcoded because there are only 4 entries
           val1 = _get_val_in_subspace_gate(i,my_gate_type,control,&i1,&j1);
-          
+
           /* Get I_b cross CNOT cross I_a in the temporary basis */
           i1 = i1*n_after + k1 + k2*my_levels*n_after;
           j1 = j1*n_after + k1 + k2*my_levels*n_after;
 
-          /* Permute to computational basis 
+          /* Permute to computational basis
            * To aid in the computation, we generated the matrix in the 'temporary basis',
            * where we exchanged the subsystem immediately after the first qubit with
-           * the second qubit of interest. I.e., doing a CNOT(q3,q7) 
+           * the second qubit of interest. I.e., doing a CNOT(q3,q7)
            * Computational basis: q1 q2 q3 q4 q5 q6 q7 q8 q9 q10
            * Temporary basis:     q1 q2 q3 q7 q5 q6 q4 q8 q9 q10
            * This allows us to calculate CNOT easily - we just need to change
            * the basis back to the computational one.
            *
            * Since the control variable tells us which qubit was the first,
-           * we switched the system immediately before that one with the 
+           * we switched the system immediately before that one with the
            * stored variable moved_system
            */
            _change_basis_ij_pair(&i1,&j1,systems[control]+1,moved_system);
@@ -201,7 +201,7 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
                 MatSetValue(gate_mat,i_mat,j_mat,add_to_mat,ADD_VALUES);
               }
             }
-          }      
+          }
         }
       }
     }
@@ -209,26 +209,26 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
 
     /*
      * The Hadamard gate is a one qubit gate defined as:
-     *    
+     *
      *    H = 1/sqrt(2) 1  1
      *                  1 -1
-     * 
-     * Find the necessary Hilbert space dimensions for constructing the 
+     *
+     * Find the necessary Hilbert space dimensions for constructing the
      * full space matrix.
      */
-    
+
     n_before1  = subsystem_list[systems[0]]->n_before;
     my_levels  = subsystem_list[systems[0]]->my_levels; //Should be 2, because qubit
     n_after   = total_levels/(my_levels*n_before1);
     comb_levels = my_levels*my_levels*n_before1*n_after;
-    
+
     for (k4=0;k4<n_before1*n_after;k4++){
       for (i=0;i<4;i++){
         val1 = _get_val_in_subspace_gate(i,my_gate_type,control,&i1,&j1);
         for (j=0;j<4;j++){
           val2 = _get_val_in_subspace_gate(j,my_gate_type,control,&i2,&j2);
           i2 = i2 + k4*my_levels;
-          j2 = j2 + k4*my_levels;                                
+          j2 = j2 + k4*my_levels;
           /*
            * We need my_levels*n_before*n_after because we are taking
            * H cross (Ia cross Ib cross H), so the the size of the second operator
@@ -242,7 +242,7 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
       }
     }
   }
-  
+
   return;
 
 }
@@ -254,23 +254,23 @@ void _change_basis_ij_pair(PetscInt *i_op,PetscInt *j_op,PetscInt system1,PetscI
 
   /*
    * To apply our change of basis we use the neat trick that the row number
-   * in a given basis can be calculated similar to how a binary number is 
-   * calculated (but generalized in that some bits can have more than two 
+   * in a given basis can be calculated similar to how a binary number is
+   * calculated (but generalized in that some bits can have more than two
    * states. e.g. with three qubits
    *  i(| 0 1 0 >) = 0*4 + 1*2 + 0*1 = 2
    * where i() is the index, in this ordering, of the ket.
    * Another example, with 1 2level, 1 3levels, and 1 4 level system:
    *  i(| 0 1 0 >) = 0*12 + 1*4 + 0*1 = 4
-   * that is, 
-   *  i(| a b c >) = a*n_af^a + b*n_af^b + c*n_af^c 
+   * that is,
+   *  i(| a b c >) = a*n_af^a + b*n_af^b + c*n_af^c
    * where n_af^a is the Hilbert space before system a, etc.
-   * 
-   * Given a specific i, and only switching two systems, 
+   *
+   * Given a specific i, and only switching two systems,
    * we can calculate i's partner in the switched basis
    * by subtracting off the part from the current basis and
    * adding in the part from the desired basis. This leaves everything
    * else the same, but switches the two systems of interest.
-   * 
+   *
    * We need to be able to go from i to a specific subsystem's state.
    * This is accomplished with the formula:
    * (i/n_a % l)
@@ -319,7 +319,7 @@ void _change_basis_ij_pair(PetscInt *i_op,PetscInt *j_op,PetscInt system1,PetscI
 
 
 
-/*                                              
+/*
  * _get_val_in_subspace_gate is a simple function that returns the
  * i_op,j_op pair and val for a given index;
  * Inputs:
@@ -380,11 +380,11 @@ PetscScalar _get_val_in_subspace_gate(int i,gate_type my_gate_type,int control,i
   } else if (my_gate_type == HADAMARD) {
     /*
      * The Hadamard gate is a one qubit gate defined as:
-     *    
+     *
      *    H = 1/sqrt(2) 1  1
      *                  1 -1
-     * 
-     * Find the necessary Hilbert space dimensions for constructing the 
+     *
+     * Find the necessary Hilbert space dimensions for constructing the
      * full space matrix.
      */
     if (i==0){
