@@ -34,12 +34,12 @@ int main(int argc,char **args){
   num_nv     = 1;
 
   /* Get arguments from command line */
-  num_nv     = atoi(args[1]);
-  num_phonon = atoi(args[2]);
-  N_th       = atoi(args[3]);
+  PetscOptionsGetInt(NULL,NULL,"-num_nv",&num_nv,NULL);
+  PetscOptionsGetInt(NULL,NULL,"-num_phonon",&num_phonon,NULL);
+  PetscOptionsGetInt(NULL,NULL,"-n_th",&N_th,NULL);
 
   if (nid==0) printf("Num_phonon: %d N_th %d num_nv: %d\n",num_phonon,N_th,num_nv);
-  lambda_s   = 100*1.06*kHz*2*M_PI;
+  lambda_s   = 500*1.06*kHz*2*M_PI;
 
   nv = malloc(num_nv*sizeof(vec_op));
 

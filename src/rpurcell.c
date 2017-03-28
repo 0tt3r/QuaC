@@ -9,7 +9,7 @@ PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
 int main(int argc,char **args){
   PetscInt N_th,num_phonon,num_nv,init_phonon,steady_state_solve,steps_max;
-  PetscReal time_max,dt,gam_res,gam_eff,gam_dep;
+  PetscReal time_max,dt,gam_res,gam_eff,gam_dep,lambda;
   double w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s,gamma_par,purcell_f,gamma_res,gamma_dep;
   double Q,alpha,kHz,MHz,GHz,THz,Hz,rate;
   operator a,nv;
@@ -35,7 +35,7 @@ int main(int argc,char **args){
   gam_res = 1.0;
   gam_eff = 1.0;
   gam_dep = 0.0;
-    
+  lambda  = 1;    
   /* Get arguments from command line */
   PetscOptionsGetInt(NULL,NULL,"-num_nv",&num_nv,NULL);
   PetscOptionsGetInt(NULL,NULL,"-num_phonon",&num_phonon,NULL);
@@ -45,11 +45,11 @@ int main(int argc,char **args){
   PetscOptionsGetReal(NULL,NULL,"-gam_res",&gam_res,NULL);
   PetscOptionsGetReal(NULL,NULL,"-gam_eff",&gam_eff,NULL);
   PetscOptionsGetReal(NULL,NULL,"-gam_dep",&gam_dep,NULL);
-
+  PetscOptionsGetReal(NULL,NULL,"-lambda",&lambda,NULL);
   if (nid==0) printf("Num_phonon: %d N_th: %d num_nv: %d gam_res: %f gam_eff %f gam_dep %f\n",num_phonon,N_th,num_nv,gam_res,gam_eff,gam_dep);
   /* Define scalars to add to Ham */
   w_m        = 175*MHz*2*M_PI; //Mechanical resonator frequency
-  lambda_s   = 0.1*MHz*2*M_PI;
+  lambda_s   = lambda*0.1*MHz*2*M_PI;
   gamma_eff  = lambda_s*gam_eff;//1*MHz; //Effective dissipation rate
   gamma_res  = lambda_s*gam_res;
   gamma_dep  = lambda_s*gam_dep;
@@ -66,8 +66,8 @@ int main(int argc,char **args){
 
   /* Below 4 terms represent lambda_s (nvt + nv)(at + a) */
   //  add_to_ham_mult2(lambda_s,a->dag,nv->dag); //nvt at
-  add_to_ham_mult2(0*lambda_s,nv->dag,a);  //nvt a
-  add_to_ham_mult2(0*lambda_s,nv,a->dag);  //nv at
+  add_to_ham_mult2(lambda_s,nv->dag,a);  //nvt a
+  add_to_ham_mult2(lambda_s,nv,a->dag);  //nv at
  //  add_to_ham_mult2(lambda_s,nv,a);   //nv a
 
   /* nv center lindblad terms */
@@ -91,10 +91,10 @@ int main(int argc,char **args){
     if(nid==0) printf("Predicted cooling fraction: %f\n",rate);
   } else {
     set_ts_monitor(ts_monitor);
-    //    set_initial_pop(a,init_phonon);
-    //    set_initial_pop(nv,0);
-    //    set_dm_from_initial_pop(rho);
-    steady_state(rho);
+    set_initial_pop(a,init_phonon);
+    set_initial_pop(nv,0);
+    set_dm_from_initial_pop(rho);
+    // steady_state(rho);
     add_to_ham_mult2(lambda_s,nv->dag,a);  //nvt a
     add_to_ham_mult2(lambda_s,nv,a->dag);  //nv at
     time_max  = 15;

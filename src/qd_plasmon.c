@@ -34,7 +34,7 @@ int main(int argc,char **args){
 
   /* Define scalars to add to Ham */
   omega      = 2.05*eV; //natural frequency for plasmon, qd
-  gamma_pi   = 1.0e-7*eV; // qd dephasing
+  gamma_pi   = 0*1.0e-7*eV; // qd dephasing
   gamma_di   = 2.0e-3*eV; // qd decay
   gamma_s    = 1.5e-1*eV; // plasmon decay
   g_couple   = 30e-3*eV; //qd-plasmon coupling

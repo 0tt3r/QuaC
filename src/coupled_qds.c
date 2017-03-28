@@ -5,6 +5,7 @@
 #include "operators.h"
 #include "solver.h"
 #include "dm_utilities.h"
+#include "quantum_gates.h"
 #include "petsc.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);

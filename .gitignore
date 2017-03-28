@@ -4,6 +4,14 @@
 *.obj
 *.elf
 
+# Misc
+*.png
+*.aux
+*.dvi
+*.log
+\#*
+*~
+
 # Precompiled Headers
 *.gch
 *.pch
