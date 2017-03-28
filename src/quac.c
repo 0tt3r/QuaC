@@ -9,9 +9,9 @@ int petsc_initialized = 0;
 int nid;
 int np;
 
-/* 
+/*
  * QuaC_initialize initializes petsc, gets each core's nid, and lets the
- * rest of the program know that it has been initialized. 
+ * rest of the program know that it has been initialized.
  * Inputs:
  *       int argc, char **args - command line input, for PETSc
  */
@@ -30,7 +30,7 @@ void QuaC_initialize(int argc,char **args){
   petsc_initialized = 1;
 }
 
-/* 
+/*
  * QuaC_finalize finalizes petsc and destroys full_A.
  * The user is responsible for freeing all of the objects
  * using destroy_*
@@ -67,7 +67,7 @@ void destroy_op(operator *op){
 void destroy_vec(vec_op *op){
   int num_levels,i;
   num_levels = (*op)[0]->my_levels;
-  
+
   /* Free each up in the array */
   for (i=0;i<num_levels;i++){
     free((*op)[i]);
