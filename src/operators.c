@@ -1,11 +1,11 @@
 #include "kron_p.h" //Includes petscmat.h and operators_p.h
-#include "quac_p.h" 
+#include "quac_p.h"
 #include "operators.h"
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-/* TODO? : 
+/* TODO? :
  * - put wrappers into quac.h
  * - variable number of arguments to add_to_ham and add_to_lin
  * - add_to_ham_mult4 for coupling between two vec subsystems
@@ -36,7 +36,7 @@ void print_dense_ham(){
 
 /*
  * create_op creates a basic set of operators, namely the creation, annihilation, and
- * number operator. 
+ * number operator.
  * Inputs:
  *        int number_of_levels: number of levels for this basic set
  * Outputs:
@@ -88,7 +88,7 @@ void create_op(int number_of_levels,operator *new_op) {
 
 /*
  * create_op creates a basic set of operators, namely the creation, annihilation, and
- * number operator. 
+ * number operator.
  * Inputs:
  *        int number_of_levels: number of levels for this basic set
  * Outputs:
@@ -113,14 +113,14 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
   }
 
   /*
-   * Store the top of the array in vec[0], so we can access it later, 
+   * Store the top of the array in vec[0], so we can access it later,
    * through subsystem_list.
    */
   (*new_vec)[0]->vec_op_list = (*new_vec);
 
   /* Increase total_levels */
   total_levels = total_levels*number_of_levels;
-  /* 
+  /*
    * We store just the first VEC in the subsystem list, since it has
    * enough information to define all others
    */
@@ -139,9 +139,9 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
  *        none
  */
 void add_to_ham_time_dep(double (*time_dep_func)(double),operator op){
-  
+
   _check_initialized_A();
-  
+
   return;
 }
 
@@ -156,7 +156,7 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),operator op){
 void add_to_ham(double a,operator op){
   PetscScalar    mat_scalar;
 
-  
+
   _check_initialized_A();
 
   /*
@@ -207,13 +207,13 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
   int         multiply_vec,n_after;
   _check_initialized_A();
   multiply_vec = _check_op_type2(op1,op2);
-  
+
 
   if (nid==0&&_print_dense_ham){
     /* Add the terms to the dense Hamiltonian */
     if (multiply_vec){
-      /* 
-       * We are multiplying two vec ops. This will only be one value (of 1.0) in the 
+      /*
+       * We are multiplying two vec ops. This will only be one value (of 1.0) in the
        * subspace, at location op1->position, op2->position.
        */
       n_after    = total_levels/(op1->my_levels*op1->n_before);
@@ -225,7 +225,7 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
                               op2->n_before,op2->my_levels,op2->my_op_type,op2->position);
     }
   }
-  
+
   /*
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
@@ -235,8 +235,8 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
 
   mat_scalar = -a*PETSC_i;
   if (multiply_vec){
-    /* 
-     * We are multiplying two vec ops. This will only be one value (of 1.0) in the 
+    /*
+     * We are multiplying two vec ops. This will only be one value (of 1.0) in the
      * subspace, at location op1->position, op2->position.
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
@@ -257,8 +257,8 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
    */
   mat_scalar = a*PETSC_i;
   if (multiply_vec){
-    /* 
-     * We are multiplying two vec ops. This will only be one value (of 1.0) in the 
+    /*
+     * We are multiplying two vec ops. This will only be one value (of 1.0) in the
      * subspace, at location op1->position, op2->position.
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
@@ -277,7 +277,7 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
 
 /*
  * add_to_ham_mult3 adds a*op1*op2*op3 to the hamiltonian
- * currently assumes either (op1,op2) or (op2,op3) is a pair 
+ * currently assumes either (op1,op2) or (op2,op3) is a pair
  * of vector operators
  * Inputs:
  *        double a:     scalar to multiply op(handle1)
@@ -298,17 +298,15 @@ void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
   /* Add to the dense hamiltonian */
   if (nid==0&&_print_dense_ham){
     if (first_pair) {
-      /* The first pair is the vec pair and op3 is the normal op*/  
+      /* The first pair is the vec pair and op3 is the normal op*/
       _add_to_dense_kron_comb_vec(a,op3->n_before,op3->my_levels,
                                   op3->my_op_type,op1->n_before,op1->my_levels,
                                   op1->position,op2->position);
-      
     } else {
-      /* The last pair is the vec pair and op1 is the normal op*/  
+      /* The last pair is the vec pair and op1 is the normal op*/
       _add_to_dense_kron_comb_vec(a,op1->n_before,op1->my_levels,
                                   op1->my_op_type,op2->n_before,op2->my_levels,
                                   op2->position,op3->position);
-      
     }
   }
 
@@ -320,13 +318,13 @@ void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
    */
   mat_scalar  = -a*PETSC_i;
   if (first_pair) {
-    /* The first pair is the vec pair and op3 is the normal op*/  
+    /* The first pair is the vec pair and op3 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op3->n_before,op3->my_levels,
                                 op3->my_op_type,op1->n_before,op1->my_levels,
                                 op1->position,op2->position,total_levels,1,1);
 
   } else {
-    /* The last pair is the vec pair and op1 is the normal op*/  
+    /* The last pair is the vec pair and op1 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op1->n_before,op1->my_levels,
                                 op1->my_op_type,op2->n_before,op2->my_levels,
                                 op2->position,op3->position,total_levels,1,1);
@@ -340,17 +338,15 @@ void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
    */
   mat_scalar  = a*PETSC_i;
   if (first_pair) {
-    /* The first pair is the vec pair and op3 is the normal op*/  
+    /* The first pair is the vec pair and op3 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op3->n_before,op3->my_levels,
                                 op3->my_op_type,op1->n_before,op1->my_levels,
                                 op1->position,op2->position,1,1,total_levels);
-
   } else {
-    /* The last pair is the vec pair and op1 is the normal op*/  
+    /* The last pair is the vec pair and op1 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op1->n_before,op1->my_levels,
                                 op1->my_op_type,op2->n_before,op2->my_levels,
                                 op2->position,op3->position,1,1,total_levels);
-
   }
 
   return;
@@ -431,8 +427,8 @@ void add_lin(double a,operator op){
 void add_lin_mult2(double a,operator op1,operator op2){
   PetscScalar mat_scalar;
   int         k3,i1,j1,i2,j2,i_comb,j_comb,comb_levels;
-  int         multiply_vec,n_after;   
-  
+  int         multiply_vec,n_after;
+
   _check_initialized_A();
   multiply_vec =  _check_op_type2(op1,op2);
 
@@ -471,7 +467,7 @@ void add_lin_mult2(double a,operator op1,operator op2){
     mat_scalar = a;
     for (k3=0;k3<op2->n_before*n_after;k3++){
       /*
-       * Since this is an outer product of VEC ops, there is only 
+       * Since this is an outer product of VEC ops, there is only
        * one entry in C (and it is 1.0); we need not loop over anything.
        */
       i1   = op1->position;
@@ -479,8 +475,8 @@ void add_lin_mult2(double a,operator op1,operator op2){
       i2   = i1 + k3*op1->my_levels;
       j2   = j1 + k3*op1->my_levels;
 
-      /* 
-       * Using the standard Kronecker product formula for 
+      /*
+       * Using the standard Kronecker product formula for
        * A and I cross B, we calculate
        * the i,j pair for handle1 cross I cross handle2.
        * Through we do not use it here, we note that the new
@@ -491,11 +487,11 @@ void add_lin_mult2(double a,operator op1,operator op2){
        */
       i_comb = op1->my_levels*op1->n_before*n_after*i1 + i2;
       j_comb = op1->my_levels*op1->n_before*n_after*j1 + j2;
-    
+
 
       _add_to_PETSc_kron_ij(full_A,mat_scalar,i_comb,j_comb,op1->n_before,
                             n_after,comb_levels);
-    
+
     }
   } else {
     /* Multiply two normal ops */
@@ -526,7 +522,7 @@ void add_lin_mult2(double a,operator op1,operator op2){
      */
     mat_scalar = -0.5*a;
     _add_to_PETSc_kron_lin2(full_A,mat_scalar,op1->n_before,op1->my_levels,total_levels,1);
-    
+
     /*
      * Add (C^t C cross I) to the superoperator matrix, A
      */
@@ -551,7 +547,7 @@ void add_lin_mult2(double a,operator op1,operator op2){
 
 void _check_initialized_op(){
   /* Check to make sure petsc was initialize */
-  if (!petsc_initialized){ 
+  if (!petsc_initialized){
     if (nid==0){
       printf("ERROR! You need to call QuaC_initialize before creating\n");
       printf("       any operators!\n");
@@ -565,7 +561,7 @@ void _check_initialized_op(){
     total_levels   = 1;
     op_initialized = 1;
   }
-    
+
   if (num_subsystems+1>MAX_SUB&&nid==0){
     if (nid==0){
       printf("ERROR! Too many systems for this MAX_SUB\n");
@@ -628,7 +624,7 @@ int _check_op_type2(operator op1,operator op2){
   if (op1->my_op_type!=VEC&&op2->my_op_type!=VEC){
     return_value = 0;
   }
-  
+
   return return_value;
 }
 
@@ -701,7 +697,7 @@ int _check_op_type3(operator op1,operator op2,operator op3){
     }
     return_value = 1;
   }
-  
+
   /* Check to make sure the two VEC subsystems are the same */
   if (op2->my_op_type==VEC&&op3->my_op_type==VEC){
     if (op2->n_before!=op3->n_before){
@@ -718,7 +714,7 @@ int _check_op_type3(operator op1,operator op2,operator op3){
 
 /*
  * _check_initialized_A checks to make sure petsc was initialized,
- * some ops were created, and, on first call, sets up the 
+ * some ops were created, and, on first call, sets up the
  * data structures for the matrices.
  */
 
@@ -728,7 +724,7 @@ void _check_initialized_A(){
   PetscInt       *d_nz,*o_nz;
 
   /* Check to make sure petsc was initialize */
-  if (!petsc_initialized){ 
+  if (!petsc_initialized){
     if (nid==0){
       printf("ERROR! You need to call QuaC_initialize before creating\n");
       printf("       any operators!");
@@ -743,7 +739,7 @@ void _check_initialized_A(){
       exit(0);
     }
   }
-  
+
   if (!op_finalized){
     op_finalized = 1;
     /* Allocate space for (dense) Hamiltonian matrix in operator space
@@ -765,7 +761,7 @@ void _check_initialized_A(){
     //    MatSetType(full_A,MATMPIAIJ);
     MatSetSizes(full_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
     MatSetFromOptions(full_A);
-    
+
     if (nid==0){
       /*
        * Only the first row has extra nonzeros, from the stabilization.
@@ -778,7 +774,7 @@ void _check_initialized_A(){
 
       PetscMalloc1((dim/np)*5,&d_nz); /* malloc array of nnz diagonal elements*/
       PetscMalloc1((dim/np)*5,&o_nz); /* malloc array of nnz off diagonal elements*/
-      /* 
+      /*
        * If the system is small enough, we can just allocate a lot of
        * memory for it. Fixes a bug from PETSc when you try to preallocate bigger
        * the row size
@@ -796,7 +792,7 @@ void _check_initialized_A(){
         for (i=1;i<(dim/np)*5;i++){
           d_nz[i] = MAX_NNZ_PER_ROW;
           o_nz[i] = MAX_NNZ_PER_ROW;
-          
+
         }
       }
       MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
@@ -843,4 +839,3 @@ void set_initial_pop(operator op1,double initial_pop){
 
   return;
 }
-
