@@ -28,7 +28,7 @@ int main(int argc,char **args){
 
   PetscOptionsGetInt(NULL,NULL,"-num_plasmon",&num_plasmon,NULL);
   PetscOptionsGetInt(NULL,NULL,"-num_qd",&num_qd,NULL);
-  
+
   /* Define units, in AU */
   eV = 1/27.21140;
 
@@ -44,15 +44,15 @@ int main(int argc,char **args){
   for (i=0;i<num_qd;i++){
     create_op(2,&qd[i]);
   }
-  create_op(num_plasmon,&a);  
+  create_op(num_plasmon,&a);
   /* Add terms to the hamiltonian */
   add_to_ham(omega,a->n); // omega at a
   for (i=0;i<num_qd;i++){
     add_to_ham(omega,qd[i]->n); // omega qdt qd
-    
+
     add_to_ham_mult2(g_couple,qd[i]->dag,a);  //qdt a
     add_to_ham_mult2(g_couple,qd[i],a->dag);  //qd at
-    
+
     /* qd decay */
     add_lin(gamma_pi/2,qd[i]);
     add_lin(gamma_di,qd[i]->n);
@@ -68,7 +68,7 @@ int main(int argc,char **args){
 
   /* Create a reference dm (the antisym bell state) for fidelity calculations */
   create_dm(&antisym_bell_dm,4);
-  
+
   val = 0.5;
   add_value_to_dm(antisym_bell_dm,1,1,val);
   add_value_to_dm(antisym_bell_dm,2,2,val);
@@ -78,8 +78,8 @@ int main(int argc,char **args){
 
   assemble_dm(antisym_bell_dm);
 
-  /* 
-   * Also create a place to store the partial trace 
+  /*
+   * Also create a place to store the partial trace
    * No assembly is necessary here, as we will be ptracing into this dm
    */
   create_dm(&ptraced_dm,4);
@@ -96,7 +96,7 @@ int main(int argc,char **args){
     f_fid = fopen("fid","w");
     fprintf(f_fid,"#Time Fidelity Concurrence\n");
   }
-  
+
   /* time_step(rho,time_max,dt,steps_max); */
   steady_state(rho);
 
