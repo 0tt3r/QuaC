@@ -17,7 +17,7 @@ static int       matrix_assembled = 0;
 PetscErrorCode _RHS_time_dep_ham(TS,PetscReal,Vec,Mat,Mat,void*); // Move to header?
 
 PetscErrorCode (*_ts_monitor)(TS,PetscInt,PetscReal,Vec,void*) = NULL;
-  
+
 /*
  * steady_state solves for the steady_state of the system
  * that was previously setup using the add_to_ham and add_lin
@@ -87,8 +87,8 @@ void steady_state(Vec x){
       mat_tmp = 0 + 0.*PETSC_i;
       MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
     }
-    
-    
+
+
     /* Tell PETSc to assemble the matrix */
     MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
@@ -119,14 +119,14 @@ void steady_state(Vec x){
    */
   VecSet(b,0.0);
   VecSet(x,0.0);
-  
+
   if(nid==0) {
     row = 0;
     mat_tmp = 1.0 + 0.0*PETSC_i;
     VecSetValue(x,row,mat_tmp,INSERT_VALUES);
     VecSetValue(b,row,mat_tmp,INSERT_VALUES);
   }
-  
+
   /* Assemble x and b */
   VecAssemblyBegin(x);
   VecAssemblyEnd(x);
@@ -148,7 +148,7 @@ void steady_state(Vec x){
    * also serves as the preconditioning matrix.
    */
   KSPSetOperators(ksp,full_A,full_A);
-  
+
   /*
    * Set good default options for solver
    */
@@ -162,7 +162,7 @@ void steady_state(Vec x){
   /* gmres solver with 100 restart*/
   KSPSetType(ksp,KSPGMRES);
   KSPGMRESSetRestart(ksp,default_restart);
-  /* 
+  /*
    * Set runtime options, e.g.,
    *     -ksp_type <type> -pc_type <type> -ksp_monitor -ksp_rtol <rtol>
    */
@@ -179,7 +179,7 @@ void steady_state(Vec x){
   KSPGetIterationNumber(ksp,&its);
 
   PetscPrintf(PETSC_COMM_WORLD,"Iterations %D\n",its);
-  
+
   /* Free work space */
   KSPDestroy(&ksp);
   //  VecDestroy(&x);
@@ -196,7 +196,7 @@ void steady_state(Vec x){
  *
  * Inputs:
  *       Vec     x:       The density matrix, with appropriate inital conditions
- *       double dt:       initial timestep. For certain explicit methods, this timestep 
+ *       double dt:       initial timestep. For certain explicit methods, this timestep
  *                        can be changed, as those methods have adaptive time steps
  *       double time_max: the maximum time to integrate to
  *       int steps_max:   max number of steps to take
@@ -222,7 +222,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
       FILE *fp_ham;
 
       fp_ham = fopen("ham","w");
-      
+
       if (nid==0){
         for (i=0;i<total_levels;i++){
           for (j=0;j<total_levels;j++){
@@ -268,8 +268,8 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     mat_tmp = 0 + 0.*PETSC_i;
     MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
   }
-  
-  
+
+
   /* Tell PETSc to assemble the matrix */
   MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
@@ -280,26 +280,6 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
   MatView(full_A,mat_view);
   PetscViewerDestroy(&mat_view);
-  /*
-   * Create parallel vectors.
-   * - When using VecCreate(), VecSetSizes() and VecSetFromOptions(),
-   * we specify only the vector's global
-   * dimension; the parallel partitioning is determined at runtime.
-   * - Note: We form 1 vector from scratch and then duplicate as needed.
-   */
-  /* VecCreate(PETSC_COMM_WORLD,&x); */
-  /* VecSetSizes(x,PETSC_DECIDE,dim); */
-
-  //  create_dm(&x,total_levels); //Assume 
-  /* VecSetFromOptions(x); */
-
-  /* VecSet(x,0.0); */
-
-  //  _set_initial_density_matrix(x);
-  
-  /* Assemble x and b */
-  //  VecAssemblyBegin(x);
-  //  VecAssemblyEnd(x);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
    *       Create the timestepping solver and set various options       *
@@ -383,7 +363,7 @@ void set_ts_monitor(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*)){
 }
 
 /*
- * _RHS_time_dep_ham adds the (user created) time dependent functions 
+ * _RHS_time_dep_ham adds the (user created) time dependent functions
  * to the time independent hamiltonian. It is used internally by PETSc
  * during time stepping.
  */
@@ -401,26 +381,3 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
   }
   return 0;
 }
-
-
-
-
-/*
- * ts_monitor is the catchall routine which will look at the data
- * at every time step, such as printing observables/populations.
- *
- * Inputs:
- *    ts     - the timestep context
- *    step   - the count of the current step (with 0 meaning the
- *             initial condition)
- *    time   - the current time
- *    u      - the solution at this timestep
- *    ctx    - the user-provided context for this monitoring routine.
- */
-
-/* PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec u,void *ctx) { */
-  
-/*   get_populations(u); */
-/*   PetscFunctionReturn(0); */
-/* } */
-
