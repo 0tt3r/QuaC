@@ -10,13 +10,13 @@ typedef struct operator{
   int     my_levels;
   op_type my_op_type;
   /* For ladder operators only */
-  struct operator *dag; 
-  struct operator *n;   
+  struct operator *dag;
+  struct operator *n;
   /* For vec operators only */
-  int     position; 
+  int     position;
   /* Stores a pointer to the top of the list. Used in vec[0] only*/
   struct operator **vec_op_list;
-  
+
 } *operator;
 typedef operator *vec_op; /* Treat vec_op as an array of operators  */
 
