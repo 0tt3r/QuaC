@@ -24,6 +24,7 @@ typedef operator *vec_op; /* Treat vec_op as an array of operators  */
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
 void add_to_ham(double,operator);
+void add_to_ham_time_dep(double(*pulse)(double),int,...);
 void add_to_ham_mult2(double,operator,operator);
 void add_to_ham_mult3(double,operator,operator,operator);
 int  _check_op_type2(operator,operator);

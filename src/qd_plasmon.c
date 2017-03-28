@@ -8,6 +8,7 @@
 #include "petsc.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
+double pulse(double);
 
 /* Declared globally so that we can access this in ts_monitor */
 FILE *f_fid;
@@ -60,6 +61,8 @@ int main(int argc,char **args){
   /* plasmon decay */
   add_lin(gamma_s,a);
 
+  add_to_ham_time_dep(pulse,2,a,a->dag);
+
   create_full_dm(&rho);
   set_initial_pop(a,0);
   set_initial_pop(qd[0],0);
@@ -90,15 +93,15 @@ int main(int argc,char **args){
   steps_max = 100;
 
   /* Set the ts_monitor to print results at each time step */
-  /* set_ts_monitor(ts_monitor); */
+  set_ts_monitor(ts_monitor);
   /* Open file that we will print to in ts_monitor */
   if (nid==0){
     f_fid = fopen("fid","w");
     fprintf(f_fid,"#Time Fidelity Concurrence\n");
   }
 
-  /* time_step(rho,time_max,dt,steps_max); */
-  steady_state(rho);
+  time_step(rho,time_max,dt,steps_max);
+  /* steady_state(rho); */
 
   destroy_op(&a);
   for (i=0;i<num_qd;i++){
@@ -111,6 +114,16 @@ int main(int argc,char **args){
   if (nid==0) fclose(f_fid);
   QuaC_finalize();
   return 0;
+}
+
+
+double pulse(double time){
+  double pulse_value;
+
+  pulse_value = 1.0;
+
+  return pulse_value;
+
 }
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){

@@ -304,6 +304,10 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
   if(_num_time_dep) {
+    for(i=0;i<_num_time_dep;i++){
+      MatAssemblyBegin(_time_dep_list[i].mat,MAT_FINAL_ASSEMBLY);
+      MatAssemblyEnd  (_time_dep_list[i].mat,MAT_FINAL_ASSEMBLY);
+    }
     MatDuplicate(full_A,MAT_COPY_VALUES,&AA);
     TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham,NULL);
   } else {
@@ -372,7 +376,9 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
   PetscReal time_dep_scalar;
   int i;
   /* Copy the time independent H over */
-  MatCopy(full_A,AA,SAME_NONZERO_PATTERN);
+  //  MatDuplicate(full_A,MAT_COPY_VALUES,&AA);
+  MatCopy(full_A,AA,DIFFERENT_NONZERO_PATTERN);
+
   /* Add the time dependent parts of H */
   for (i=0;i<_num_time_dep;i++){
     time_dep_scalar = _time_dep_list[i].time_dep_func(t);
