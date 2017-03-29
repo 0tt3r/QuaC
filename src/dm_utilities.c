@@ -32,9 +32,9 @@ void print_dm(Vec rho,int h_dim){
  *                        if starting with an already traced DM
  *     int number_of_ops: number of ops in list to trace over
  *     <list of ops>: A list of operators which are to be traced over
- * 
+ *
  * Outpus:
- *     Vec ptraced_dm: the result of the partial trace is stored here. 
+ *     Vec ptraced_dm: the result of the partial trace is stored here.
  *                     Note: Assumed to already be allocated via create_dm()
  */
 
@@ -44,7 +44,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   operator op;
   PetscInt i,j,current_total_levels,*nbef_prev,*nop_prev,dm_size,nbef,naf,previous_total_levels;
   va_start(ap,number_of_ops);
-  
+
   /* Check that the full_dm is of size total_levels */
 
   VecGetSize(full_dm,&dm_size);
@@ -56,7 +56,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
       exit(0);
     }
   }
-  
+
   PetscMalloc1(number_of_ops,&nbef_prev);
   PetscMalloc1(number_of_ops,&nop_prev);
   current_total_levels = total_levels;
@@ -83,7 +83,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
           exit(0);
         }
       }
-      /* 
+      /*
        * If the current operator was before a previous in the ordering of the
        * Hilbert spaces, we decrease nbef. If it was after, we decrease
        * naf
@@ -140,11 +140,11 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   return;
 }
 
-/* 
- * void create_dm creates a new density matrix object 
+/*
+ * void create_dm creates a new density matrix object
  * and initializes it to 0
  *
- * Inputs: 
+ * Inputs:
  *        Vec* new_dm   - where the new density matrix will be stored
  *        PetscInt size - size of the Hilbert space (N if the matrix is NxN)
  * Outpus:
@@ -159,11 +159,11 @@ void create_dm(Vec* new_dm,PetscInt size){
   /* Set all elements to 0 */
   VecSet(*new_dm,0.0);
 }
-/* 
- * void create_dm creates a new density matrix object 
+/*
+ * void create_dm creates a new density matrix object
  * and initializes it to 0
  *
- * Inputs: 
+ * Inputs:
  *        Vec* new_dm   - where the new density matrix will be stored
  *        PetscInt size - size of the Hilbert space (N if the matrix is NxN)
  * Outpus:
@@ -200,7 +200,7 @@ void set_dm_from_initial_pop(Vec x){
   MatScalar   *rho_mat_array;
   PetscReal   vec_pop;
 
-  /* 
+  /*
    * See if there are any vec operators
    */
 
@@ -211,11 +211,11 @@ void set_dm_from_initial_pop(Vec x){
   }
 
   if (nid==0&&simple_init_pop==1){
-    /* 
+    /*
      * We can only use this simpler initialization if all of the operators
      * are ladder operators, and the user hasn't used any special initialization routine
      */
-    for (i=0;i<num_subsystems;i++){ 
+    for (i=0;i<num_subsystems;i++){
       n_after   = total_levels/(subsystem_list[i]->my_levels*subsystem_list[i]->n_before);
       init_row_op += ((int)subsystem_list[i]->initial_pop)*n_after;
       //      init_row_op += ((int)subsystem_list[i]->initial_pop)*subsystem_list[i]->n_before;
@@ -242,9 +242,9 @@ void set_dm_from_initial_pop(Vec x){
     MatSetType(rho_mat,MATSEQDENSE);
     MatSetSizes(rho_mat,total_levels,total_levels,total_levels,total_levels);
     MatSetUp(rho_mat);
-    /* 
+    /*
      * Set initial density matrix to the identity matrix, because
-     * A' cross B' cross C' = I (A cross I_b cross I_c) (I_a cross B cross I_c) 
+     * A' cross B' cross C' = I (A cross I_b cross I_c) (I_a cross B cross I_c)
      */
     for (i=0;i<total_levels;i++){
       MatSetValue(rho_mat,i,i,1.0,INSERT_VALUES);
@@ -252,11 +252,11 @@ void set_dm_from_initial_pop(Vec x){
     MatAssemblyBegin(rho_mat,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(rho_mat,MAT_FINAL_ASSEMBLY);
     /* Loop through subsystems */
-    for (i=0;i<num_subsystems;i++){ 
+    for (i=0;i<num_subsystems;i++){
       n_after = total_levels/(subsystem_list[i]->my_levels*subsystem_list[i]->n_before);
       //      n_before = subsystem_list[i]->n_before;
-      /* 
-       * If the subsystem is a ladder operator, the population will be just on a 
+      /*
+       * If the subsystem is a ladder operator, the population will be just on a
        * diagonal element within the subspace.
        * LOWER is in the if because that is the op in the subsystem list for ladder operators
        */
@@ -298,7 +298,7 @@ void set_dm_from_initial_pop(Vec x){
           _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,0,0,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
           //          _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,0,0,n_after,n_before,subsystem_list[i]->my_levels);
         }
-        /* 
+        /*
          * Now that the subspace_dm is fully constructed, we multiply it into the full
          * initial DM
          */
@@ -328,11 +328,11 @@ void set_dm_from_initial_pop(Vec x){
   return;
 }
 
-/* 
- * void get_dm_element gets a specific i,j element from the 
+/*
+ * void get_dm_element gets a specific i,j element from the
  * input density matrix.
  *
- * Inputs: 
+ * Inputs:
  *        Vec new_dm   - density matrix from which to get element
  *        PetscInt row - i location of requested element
  *        PetscInt col - j location of requested element
@@ -352,10 +352,10 @@ void get_dm_element(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
 }
 
 
-/* 
+/*
  * void destroy_dm frees the memory from a previously created dm object
  *
- * Inputs: 
+ * Inputs:
  *         Vec dm - memory to free
  * Outpus:
  *         None, but frees the memory from dm
@@ -367,10 +367,10 @@ void destroy_dm(Vec dm){
   VecDestroy(&dm);
 }
 
-/* 
+/*
  * void add_value_to_dm adds the specified value to the density matrix
  *
- * Inputs: 
+ * Inputs:
  *         Vec dm - dm to add to
  *         PetscInt row - row location of value
  *         PetscInt col - column location of value
@@ -395,11 +395,11 @@ void add_value_to_dm(Vec dm,PetscInt row,PetscInt col,PetscScalar val){
   }
 }
 
-/* 
- * void assemble_dm puts all the cached values in the right place and 
+/*
+ * void assemble_dm puts all the cached values in the right place and
  * allows for the dm to be used
  *
- * Inputs: 
+ * Inputs:
  *         Vec dm - dm to assemble
  * Outpus:
  *         None, but assembles the dm
@@ -417,7 +417,7 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
 
   /* Get the full_dm information */
   VecGetOwnershipRange(full_dm,&full_low,&full_high);
-  VecGetArrayRead(full_dm,&full_dm_array); 
+  VecGetArrayRead(full_dm,&full_dm_array);
 
   for (ibef=0;ibef<nbef;ibef++){
     for (jbef=0;jbef<nbef;jbef++){
@@ -426,7 +426,7 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
           for (iop=0;iop<nop;iop++){
             /* Location in full hilbert space */
             loc_full = cur_levels*(naf*nop*ibef+naf*iop+iaf) + naf*nop*jbef+naf*iop+jaf;
-            
+
             /* Only partial trace a processor's own values */
             if (loc_full>=full_low&&loc_full<full_high) {
               val     = full_dm_array[loc_full-full_low]; //Offset because we need local location
@@ -451,13 +451,13 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
   VecAssemblyEnd(ptraced_dm);
 }
 
-/* 
+/*
  * void get_populations calculates the populations of all operators previously declared
  * and prints it to a file
  * For normal operators, this is Tr(C^\dagger C rho). For vec_op's, we instead calculate
- * the probability of each level, i.e. Tr(|i><i| rho) for i=0,num_levels. 
+ * the probability of each level, i.e. Tr(|i><i| rho) for i=0,num_levels.
  *
- * Inputs: 
+ * Inputs:
  *         Vec x   - density matrix with which to find the populations
  *                    Note: Must represent the full density matrix, with all states
  *         PetscReal time - the current time of the timestep, or negative to print to stdout
@@ -484,10 +484,10 @@ void get_populations(Vec x,PetscReal time) {
   }
 
   VecGetOwnershipRange(x,&x_low,&x_high);
-  VecGetArrayRead(x,&xa); 
+  VecGetArrayRead(x,&xa);
 
   /*
-   * Loop through operators to see how many populations we need to 
+   * Loop through operators to see how many populations we need to
    * calculate, because VEC need a population for each level.
    * We also set an array that translates i_subsystem to i_pop for normal ops.
    */
@@ -499,7 +499,7 @@ void get_populations(Vec x,PetscReal time) {
       num_pop += subsystem_list[i]->my_levels;
     } else {
       i_sub_to_i_pop[i] = num_pop;
-      num_pop += 1;      
+      num_pop += 1;
     }
   }
 
@@ -517,7 +517,7 @@ void get_populations(Vec x,PetscReal time) {
       //      printf("%e \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
       for(j=0;j<num_subsystems;j++){
         /*
-         * We want to calculate the populations. To do that, we need 
+         * We want to calculate the populations. To do that, we need
          * to know what the state of the number operator for a specific
          * subsystem is for a given i. To accomplish this, we make use
          * of the fact that we can take the diagonal index i from the
@@ -533,17 +533,17 @@ void get_populations(Vec x,PetscReal time) {
         if (subsystem_list[j]->my_op_type==VEC){
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          cur_state = ((int)floor(i/n_after)%(n_after));
+          cur_state = ((int)floor(i/n_after)%(my_levels));
           populations[i_sub_to_i_pop[j]+cur_state] += tmp_real;
         } else {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
-          cur_state = ((int)floor(i/n_after)%(n_after));
+          cur_state = ((int)floor(i/n_after)%(my_levels));
           populations[i_sub_to_i_pop[j]] += tmp_real*cur_state;
         }
       }
     }
-  } 
+  }
 
   /* Reduce results across cores */
   if(nid==0) {
@@ -583,7 +583,7 @@ void get_populations(Vec x,PetscReal time) {
     }
   }
 
-  
+
   /* Put the array back in Petsc's hands */
   VecRestoreArrayRead(x,&xa);
   /* Vec ptraced_dm; */
@@ -617,7 +617,7 @@ void get_populations(Vec x,PetscReal time) {
 }
 
 
-/* 
+/*
  * void get_bipartite_concurrence calculates the bipartite concurrence of a density matrix
  * bipartite concurrence is defined as:
  *              C(rho) = max(0,lamba_1 - lambda_2 - lambda_3 - lambda_4)
@@ -625,7 +625,7 @@ void get_populations(Vec x,PetscReal time) {
  *              rho*(sigma_y cross sigma_y)*conj(rho)*(sigma_y cross sigma_y)
  * where sigma_y is the y pauli spin matrix
  *
- * Inputs: 
+ * Inputs:
  *         Vec dm   - density matrix with which to find the concurrence
  *                    Note: Must represent a 4x4 density matrix!
  * Outputs:
@@ -646,9 +646,9 @@ void get_bipartite_concurrence(Vec dm,double *concurrence) {
   PetscBLASInt idummy,lwork,lierr,nb;
 
   levels = 4;//4 is hardcoded because this is bipartite concurrence
-  
+
   VecGetSize(dm,&dm_size);
-  if (dm_size!=levels*levels){ 
+  if (dm_size!=levels*levels){
     if (nid==0){
       printf("ERROR! The input density matrix is not 4x4!\n");
       printf("       Concurrence cannot be calculated.\n");
@@ -664,7 +664,7 @@ void get_bipartite_concurrence(Vec dm,double *concurrence) {
   /* Rank 0 now has a local copy of the matrices, so it does the calculations */
   if (nid==0){
     levels = sqrt(dm_size);
-    /* 
+    /*
      * We want to work with the density matrices as matrices directly,
      * so that we can get eigenvalues, etc.
      */
@@ -683,10 +683,10 @@ void get_bipartite_concurrence(Vec dm,double *concurrence) {
     MatAssemblyBegin(sigy_sigy,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(sigy_sigy,MAT_FINAL_ASSEMBLY);
     MatDuplicate(dm_mat,MAT_COPY_VALUES,&dm_tilde);
-    
+
     /* Calculate conjugate of dm */
     MatConjugate(dm_tilde);
-    
+
     /* Calculate dm_tilde = (sigy cross sigy) conj(dm) (sigy cross sigy)*/
     MatMatMult(sigy_sigy,dm_tilde,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
     MatMatMult(result_mat,sigy_sigy,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_tilde);
@@ -704,7 +704,7 @@ void get_bipartite_concurrence(Vec dm,double *concurrence) {
     PetscMalloc1(2*levels,&rwork);
     PetscMalloc1(levels,&eigs);
     PetscBLASIntCast(levels,&nb);
-    
+
     /* Call LAPACK through PETSc to ensure portability */
     LAPACKgeev_("N","N",&nb,array,&nb,eigs,&sdummy,&idummy,&sdummy,&idummy,work,&lwork,rwork,&lierr);
     /*
@@ -743,14 +743,14 @@ void get_bipartite_concurrence(Vec dm,double *concurrence) {
   VecScatterDestroy(&ctx_dm);
 }
 
-/* 
+/*
  * void get_fidelity calculates the fidelity between two matrices,
  * where the fidelity is defined as:
  *         F = Tr(sqrt(sqrt(rho) sigma sqrt(rho)))
- * where rho, sigma are the density matrices to calculate the 
+ * where rho, sigma are the density matrices to calculate the
  * fidelity between
  *
- * Inputs: 
+ * Inputs:
  *         Vec dm   - one density matrix with which to find the fidelity
  *         Vec dm_r - the other density matrix
  * Outpus:
@@ -792,7 +792,7 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
   /* Rank 0 now has a local copy of the matrices, so it does the calculations */
   if (nid==0){
     levels = sqrt(dm_size);
-    /* 
+    /*
      * We want to work with the density matrices as matrices directly,
      * so that we can get eigenvalues, etc.
      */
@@ -810,11 +810,11 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
     /* MatView(dm_mat,PETSC_VIEWER_STDOUT_SELF);     */
     /* calculate sqrt(dm_mat)*dm_mat_r */
     MatMatMult(dm_mat,dm_mat_r,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
-    /* 
+    /*
      * calculate (sqrt(dm_mat)*dm_mat_r)*sqrt(dm_mat)
      * we reuse dm_mat_r as our result to save memory, since we are done with
      * that data
-     */ 
+     */
     MatMatMult(result_mat,dm_mat,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_mat_r);
 
 
@@ -831,8 +831,8 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
     LAPACKgeev_("N","N",&nb,dm_r_a,&nb,eigs,&sdummy,&idummy,&sdummy,&idummy,work,&lwork,rwork,&lierr);
     *fidelity = 0;
     for (i=0;i<levels;i++){
-      /* 
-       * Only positive values because sometimes we get small, negative eigenvalues 
+      /*
+       * Only positive values because sometimes we get small, negative eigenvalues
        * Also, we take the real part, because of small, imaginary parts
        */
       if (PetscRealPart(eigs[i])>0){
@@ -848,14 +848,14 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
     PetscFree(work);
     PetscFree(rwork);
     PetscFree(eigs);
-  } 
+  }
 
   /* Broadcast the value to all cores */
   MPI_Bcast(fidelity,1,MPI_DOUBLE,0,PETSC_COMM_WORLD);
 
   VecDestroy(&dm_local);
   VecDestroy(&dm_r_local);
- 
+
   VecScatterDestroy(&ctx_dm);
   VecScatterDestroy(&ctx_dm_r);
 
@@ -863,10 +863,10 @@ void get_fidelity(Vec dm,Vec dm_r,double *fidelity) {
   return;
 }
 
-/* 
- * void sqrt_mat takes the square root of square, hermitian matrix 
+/*
+ * void sqrt_mat takes the square root of square, hermitian matrix
  *
- * Inputs: 
+ * Inputs:
  *         Mat dm_mat - matrix to take square root of
  * Outpus:
  *         None, but does square root in place
@@ -888,7 +888,7 @@ void sqrt_mat(Mat dm_mat){
     }
   }
 
-  
+
   /* We need the actual array so that we can pass it to lapack */
   MatDenseGetArray(dm_mat,&array);
 
@@ -900,7 +900,7 @@ void sqrt_mat(Mat dm_mat){
   PetscMalloc1(rows*rows,&evec);
   PetscMalloc1(rows,&eigs);
   PetscBLASIntCast(rows,&nb);
-  
+
   /* Call LAPACK through PETSc to ensure portability */
   LAPACKgeev_("N","V",&nb,array,&nb,eigs,&sdummy,&idummy,evec,&nb,work,&lwork,rwork,&lierr);
   /* Create matrices to store eigenvectors / values */
