@@ -161,12 +161,14 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
   MatSetUp(_time_dep_list[_num_time_dep].mat);
 
   _time_dep_list[_num_time_dep].time_dep_func = time_dep_func;
-
+  _time_dep_list[_num_time_dep].num_ops       = num_ops;
+  _time_dep_list[_num_time_dep].ops = malloc(num_ops*sizeof(operator));
   mat_scalar = 1.0;
   //Add the expanded op to the matrix
   va_start(ap,num_ops);
   for (i=0;i<num_ops;i++){
     op = va_arg(ap,operator);
+    _time_dep_list[_num_time_dep].ops[i] = op;
     _add_to_PETSc_kron(_time_dep_list[_num_time_dep].mat,mat_scalar,op->n_before,op->my_levels,
                        op->my_op_type,op->position,total_levels,1);
   }

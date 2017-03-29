@@ -269,17 +269,10 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
   }
 
-
   /* Tell PETSc to assemble the matrix */
   MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
   if (nid==0) printf("Matrix Assembled.\n");
-
-  /* Print information about the matrix. */
-  PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
-  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  MatView(full_A,mat_view);
-  PetscViewerDestroy(&mat_view);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
    *       Create the timestepping solver and set various options       *
@@ -307,12 +300,35 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     for(i=0;i<_num_time_dep;i++){
       MatAssemblyBegin(_time_dep_list[i].mat,MAT_FINAL_ASSEMBLY);
       MatAssemblyEnd  (_time_dep_list[i].mat,MAT_FINAL_ASSEMBLY);
+      mat_tmp = 0 + 0.*PETSC_i;
+      MatAXPY(full_A,mat_tmp,_time_dep_list[i].mat,DIFFERENT_NONZERO_PATTERN);
     }
+
+    MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+
     MatDuplicate(full_A,MAT_COPY_VALUES,&AA);
+    MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
+
     TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham,NULL);
   } else {
     TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL);
   }
+  /*
+   * Moved matrix information print down so that we can see the information
+   * on the extra zeros we added
+   * to full_A to make copying into AA for time dependent runs
+   * more efficient.
+   */
+
+  /* Print information about the matrix. */
+  PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
+  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  MatView(full_A,mat_view);
+    PetscViewerDestroy(&mat_view);
+
+
   TSSetInitialTimeStep(ts,0.0,dt);
 
   /*
@@ -346,6 +362,9 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
   /* Free work space */
   TSDestroy(&ts);
+  if(_num_time_dep){
+    MatDestroy(&AA);
+  }
   //  destroy_dm(x);
   /* VecDestroy(&x); */
 
@@ -373,17 +392,39 @@ void set_ts_monitor(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*)){
  */
 
 PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx){
-  PetscReal time_dep_scalar;
-  int i;
-  /* Copy the time independent H over */
-  //  MatDuplicate(full_A,MAT_COPY_VALUES,&AA);
-  MatCopy(full_A,AA,DIFFERENT_NONZERO_PATTERN);
+  double time_dep_val;
+  PetscScalar time_dep_scalar;
+  int i,j;
+  operator op;
 
-  /* Add the time dependent parts of H */
+  MatZeroEntries(BB);
+
+  MatCopy(full_A,BB,SAME_NONZERO_PATTERN);
+
   for (i=0;i<_num_time_dep;i++){
-    time_dep_scalar = _time_dep_list[i].time_dep_func(t);
-    MatAXPY(AA,time_dep_scalar,_time_dep_list[i].mat,DIFFERENT_NONZERO_PATTERN);
+    time_dep_val = _time_dep_list[i].time_dep_func(t);
+    for(j=0;j<_time_dep_list[i].num_ops;j++){
+      op = _time_dep_list[i].ops[j];
+
+      /* Add -i *(I cross H(t)) */
+      time_dep_scalar = 0 - time_dep_val*PETSC_i;
+      _add_to_PETSc_kron(BB,time_dep_scalar,op->n_before,op->my_levels,
+                         op->my_op_type,op->position,total_levels,1);
+
+      /* Add i *(H(t) cross I) */
+      time_dep_scalar = 0 + time_dep_val*PETSC_i;
+      _add_to_PETSc_kron(BB,time_dep_scalar,op->n_before,op->my_levels,
+                         op->my_op_type,op->position,1,total_levels);
+
+    }
     /* Consider putting _time_dep_func and _time_dep_mats in *ctx? */
+  }
+
+  MatAssemblyBegin(BB,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(BB,MAT_FINAL_ASSEMBLY);
+  if(AA!=BB) {
+    MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
   }
   return 0;
 }

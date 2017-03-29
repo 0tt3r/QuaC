@@ -21,7 +21,7 @@ int main(int argc,char **args){
   PetscReal time_max,dt;
   PetscScalar val;
   PetscInt  steps_max;
-  PetscInt num_plasmon=10,num_qd=2,i;
+  PetscInt num_plasmon=2,num_qd=2,i;
   Vec      rho;
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
@@ -61,7 +61,9 @@ int main(int argc,char **args){
   /* plasmon decay */
   add_lin(gamma_s,a);
 
-  add_to_ham_time_dep(pulse,2,a,a->dag);
+  /* add_to_ham(gamma_di,a->n); */
+  /* add_to_ham(gamma_di,a->dag); */
+  add_to_ham_time_dep(pulse,1,a->n);
 
   create_full_dm(&rho);
   set_initial_pop(a,0);
@@ -118,9 +120,14 @@ int main(int argc,char **args){
 
 
 double pulse(double time){
-  double pulse_value;
+  double pulse_value,eV,gamma_di;
+  /* Define units, in AU */
+  eV = 1/27.21140;
 
-  pulse_value = 1.0;
+  /* Define scalars to add to Ham */
+  gamma_di   = 2.0e-3*eV; // qd decay
+
+  pulse_value = gamma_di;
 
   return pulse_value;
 
