@@ -1,11 +1,14 @@
 compiler:
-  - clang
   - gcc
 
 language: c
 
+before_install:
+  - sudo apt-get install gfortran
+  
 install:
   - |
+
     git clone -b maint https://bitbucket.org/petsc/petsc petsc
     cd petsc/
     export PETSC_DIR=`pwd`
