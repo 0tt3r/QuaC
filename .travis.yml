@@ -5,7 +5,7 @@ language: c
 
 cache:
   directories:
-    -$HOME/petsc
+    - petsc
 
 before_install:
   - sudo apt-get install gfortran
@@ -20,5 +20,5 @@ install:
     make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
     cd ..
 
-script: make dm_utilities_tests
+script: make
 
