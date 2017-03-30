@@ -32,6 +32,8 @@ void steady_state(Vec x){
   PetscInt       row,col,its,j,i,Istart,Iend;
   PetscScalar    mat_tmp;
   long           dim;
+  int            num_pop;
+  double         *populations;
 
   dim = total_levels*total_levels;
 
@@ -173,8 +175,17 @@ void steady_state(Vec x){
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
   if (nid==0) printf("KSP set. Solving for steady state...\n");
   KSPSolve(ksp,b,x);
-  /* Pass -1.0 to flag the routine to print the final populations to stdout */
-  get_populations(x,-1.0);
+
+  num_pop = get_num_populations();
+  populations = malloc(num_pop*sizeof(double));
+  get_populations(x,&populations);
+  if(nid==0){
+    printf("Final populations: ");
+    for(i=0;i<num_pop;i++){
+      printf(" %e ",populations[i]);
+    }
+    printf("\n");
+  }
 
   KSPGetIterationNumber(ksp,&its);
 
@@ -211,6 +222,8 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   PetscInt       nevents,direction;
   PetscBool      terminate;
   operator       op;
+  int            num_pop;
+  double         *populations;
   /* long           dim; */
 
   /* dim = total_levels*total_levels; */
@@ -366,8 +379,16 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   TSSolve(ts,x);
   TSGetTimeStepNumber(ts,&steps);
 
-  /* Pass -1.0 to flag the routine to print the final populations to stdout */
-  get_populations(x,-1.0);
+  num_pop = get_num_populations();
+  populations = malloc(num_pop*sizeof(double));
+  get_populations(x,&populations);
+  if(nid==0){
+    printf("Final populations: ");
+    for(i=0;i<num_pop;i++){
+      printf(" %e ",populations[i]);
+    }
+    printf("\n");
+  }
 
   PetscPrintf(PETSC_COMM_WORLD,"Steps %D\n",steps);
 
@@ -376,8 +397,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   if(_num_time_dep){
     MatDestroy(&AA);
   }
-  //  destroy_dm(x);
-  /* VecDestroy(&x); */
+  free(populations);
 
   return;
 }

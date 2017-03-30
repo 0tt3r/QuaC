@@ -13,16 +13,15 @@ PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 /* Declared globally so that we can access this in ts_monitor */
 operator *qubits;
 Vec rho_init,rho_tmp;
-
-
+FILE *f_pop;
 
 
 int main(int argc,char **args){
   PetscReal time_max,dt,*gamma_1,*omega,gate_time_step;
   PetscInt  steps_max;
   Vec rho;
-  int num_qubits,i,j,h_dim,system; 
- 
+  int num_qubits,i,j,h_dim,system;
+
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -61,6 +60,11 @@ int main(int argc,char **args){
 
   /* Set the ts_monitor to print results at each time step */
   set_ts_monitor(ts_monitor);
+  /* Open file that we will print to in ts_monitor */
+  if (nid==0){
+    f_pop = fopen("pop","w");
+    fprintf(f_pop,"#Time Populations\n");
+  }
 
   create_full_dm(&rho);
 
@@ -80,7 +84,7 @@ int main(int argc,char **args){
   system = 0;
   _apply_gate(HADAMARD,&system,rho); //Hadamard on 0 for superposed starting state
 
- 
+
   partial_trace_over(rho,rho_init,2,qubits[1],qubits[2]);
 
   //  print_dm(rho,hdim); //Print starting state
@@ -94,14 +98,14 @@ int main(int argc,char **args){
   //  print_dm(rho,h_dim);
 
   //  systems[0]=0; systems[1]=1;
-  //  _apply_gate(CNOT,systems,rho); //CNOT 
+  //  _apply_gate(CNOT,systems,rho); //CNOT
   //  print_dm(rho,h_dim);
 
   //  _apply_gate(HADAMARD,systems,rho); //Hadamard on 0
   //  print_dm(rho,h_dim);
 
   //  systems[0]=1; systems[1]=2;
-  //  _apply_gate(CNOT,systems,rho); //CNOT 
+  //  _apply_gate(CNOT,systems,rho); //CNOT
   //  print_dm(rho,h_dim);
 
   //  systems[0] = 2;
@@ -109,7 +113,7 @@ int main(int argc,char **args){
   //  print_dm(rho,h_dim);
 
   //  systems[0]=0; systems[1]=2;
-  //  _apply_gate(CNOT,systems,rho); //CNOT 
+  //  _apply_gate(CNOT,systems,rho); //CNOT
   //  print_dm(rho,h_dim);
 
   //  systems[0] = 2;
@@ -126,8 +130,6 @@ int main(int argc,char **args){
   add_gate(7*gate_time_step,CNOT,0,2); //CNOT(0,2)
   add_gate(8*gate_time_step,HADAMARD,2); //Hadamard on 2
 
-
-  
   time_step(rho,time_max,dt,steps_max);
   //  steady_state(rho);
 
@@ -146,13 +148,25 @@ int main(int argc,char **args){
 }
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec rho,void *ctx){
-  double fidelity;
-  /* get_populations prints to pop file */
-  get_populations(rho,time);
+  double fidelity,*populations;
+  int num_pop,i;
+
+  num_pop = get_num_populations();
+  populations = malloc(num_pop*sizeof(double));
+  get_populations(rho,&populations);
+  if (nid==0){
+    /* Print populations to file */
+    fprintf(f_pop,"%e",time);
+    for(i=0;i<num_pop;i++){
+      fprintf(f_pop," %e ",populations[i]);
+    }
+    fprintf(f_pop,"\n");
+  }
+
   partial_trace_over(rho,rho_tmp,2,qubits[0],qubits[1]);
   get_fidelity(rho_init,rho_tmp,&fidelity);
   if(nid==0) printf("%f %f\n",time,fidelity);
-  
+
   //  print_dm(dm,2);
   PetscFunctionReturn(0);
 

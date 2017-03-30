@@ -11,7 +11,7 @@ PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 double pulse(double);
 
 /* Declared globally so that we can access this in ts_monitor */
-FILE *f_fid;
+FILE *f_fid,*f_pop;
 operator a,*qd;
 Vec antisym_bell_dm,ptraced_dm;
 
@@ -100,6 +100,8 @@ int main(int argc,char **args){
   if (nid==0){
     f_fid = fopen("fid","w");
     fprintf(f_fid,"#Time Fidelity Concurrence\n");
+    f_pop = fopen("pop","w");
+    fprintf(f_pop,"#Time Populations\n");
   }
 
   time_step(rho,time_max,dt,steps_max);
@@ -134,11 +136,22 @@ double pulse(double time){
 }
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
-  double fidelity,concurrence;
+  double fidelity,concurrence,*populations;
+  int num_pop,i;
 
-  /* get_populations prints to pop file */
+  num_pop = get_num_populations();
+  populations = malloc(num_pop*sizeof(double));
+  get_populations(dm,&populations);
 
-  get_populations(dm,time);
+  if (nid==0){
+    /* Print populations to file */
+    fprintf(f_pop,"%e",time);
+    for(i=0;i<num_pop;i++){
+      fprintf(f_pop," %e ",populations[i]);
+    }
+    fprintf(f_pop,"\n");
+  }
+
   /* Partial trace away the oscillator */
 
   partial_trace_over(dm,ptraced_dm,1,a);

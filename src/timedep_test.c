@@ -9,18 +9,16 @@
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 double pulse(double);
-
+FILE *f_pop;
 /* Declared globally so that we can access this in ts_monitor */
 
-int main(int argc,char **args){
+void timedep_test(double **final_populations,int *num_pop){
   operator a,b;
   int n1,n2;
   double g,kappa1,kappa2;
   PetscReal time_max,dt;
   PetscInt steps_max;
   Vec rho;
-  /* Initialize QuaC */
-  QuaC_initialize(argc,args);
   n1 = 2;
   n2 = 3;
   create_op(n1,&b);
@@ -48,16 +46,40 @@ int main(int argc,char **args){
   dt = 0.1;
   steps_max = 300;
   set_ts_monitor(ts_monitor);
+  /* Open file that we will print to in ts_monitor */
+  if (nid==0){
+    f_pop = fopen("pop","w");
+    fprintf(f_pop,"#Time Populations\n");
+  }
 
   time_step(rho,time_max,dt,steps_max);
-
+  *num_pop = get_num_populations();
+  (*final_populations) = malloc((*num_pop)*sizeof(double));
+  get_populations(rho,&(*final_populations));
   destroy_op(&a);
   destroy_op(&b);
   destroy_dm(rho);
-  QuaC_finalize();
-  return 0;
+
+  return;
 }
 
+#ifndef UNIT_TEST
+int main(int argc,char **args){
+  double *populations;
+  int num_pop,i;
+  /* Initialize QuaC */
+  QuaC_initialize(argc,args);
+  timedep_test(&populations,&num_pop);
+  printf("Final Populations: ");
+  for(i=0;i<num_pop;i++){
+    printf(" %e ",populations[i]);
+  }
+  printf("\n");
+  QuaC_finalize();
+  return 0;
+
+}
+#endif
 
 double pulse(double time){
   double pulse_value;
@@ -67,9 +89,24 @@ double pulse(double time){
 }
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
-  double pulse_value;
+  double pulse_value,*populations;
+  int num_pop,i;
+
+  num_pop = get_num_populations();
+  populations = malloc(num_pop*sizeof(double));
+  get_populations(dm,&populations);
+
+  if (nid==0){
+    /* Print populations to file */
+    fprintf(f_pop,"%e",time);
+    for(i=0;i<num_pop;i++){
+      fprintf(f_pop," %e ",populations[i]);
+    }
+    fprintf(f_pop,"\n");
+  }
+
   pulse_value = pulse(time);
   printf("%f %f \n",time,pulse_value);
-  get_populations(dm,time);
+
   PetscFunctionReturn(0);
 }

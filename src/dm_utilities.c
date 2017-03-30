@@ -451,27 +451,50 @@ void partial_trace_over_one(Vec full_dm,Vec ptraced_dm,PetscInt nbef,PetscInt no
   VecAssemblyEnd(ptraced_dm);
 }
 
+
+/*
+ * int get_num_populations calculates the number of populations of all operators previously declared
+  * Inputs:
+  *        None
+  * Returns:
+ *         int num_pop - Number of populations = number of regular operators + num vec levels
+ */
+int get_num_populations() {
+  int               num_pop,i;
+  /*
+   * Loop through operators to see how many populations we need to
+   * calculate, because VEC need a population for each level.
+   * We also set an array that translates i_subsystem to i_pop for normal ops.
+   */
+  num_pop = 0;
+  for (i=0;i<num_subsystems;i++){
+    if (subsystem_list[i]->my_op_type==VEC){
+      num_pop += subsystem_list[i]->my_levels;
+    } else {
+      num_pop += 1;
+    }
+  }
+  return num_pop;
+}
+
 /*
  * void get_populations calculates the populations of all operators previously declared
- * and prints it to a file
+ * and returns the number of populations and the populations
  * For normal operators, this is Tr(C^\dagger C rho). For vec_op's, we instead calculate
  * the probability of each level, i.e. Tr(|i><i| rho) for i=0,num_levels.
  *
  * Inputs:
  *         Vec x   - density matrix with which to find the populations
  *                    Note: Must represent the full density matrix, with all states
- *         PetscReal time - the current time of the timestep, or negative to print to stdout
- * Outputs:
- *         None, but prints to file or stdout
+  * Outputs:
+ *         double **populations - an array of those populations
  */
-
-void get_populations(Vec x,PetscReal time) {
+void get_populations(Vec x,double **populations) {
   int               j,my_levels,n_after,cur_state,num_pop;
   int               *i_sub_to_i_pop;
   PetscInt          x_low,x_high,i,dm_size;
   const PetscScalar *xa;
   PetscReal         tmp_real;
-  double            *populations;
 
   VecGetSize(x,&dm_size);
 
@@ -504,9 +527,8 @@ void get_populations(Vec x,PetscReal time) {
   }
 
   /* Initialize population arrays */
-  populations = malloc(num_pop*sizeof(double));
   for (i=0;i<num_pop;i++){
-    populations[i] = 0.0;
+    (*populations)[i] = 0.0;
   }
 
 
@@ -534,12 +556,12 @@ void get_populations(Vec x,PetscReal time) {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
           cur_state = ((int)floor(i/n_after)%(my_levels));
-          populations[i_sub_to_i_pop[j]+cur_state] += tmp_real;
+          (*populations)[i_sub_to_i_pop[j]+cur_state] += tmp_real;
         } else {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
           cur_state = ((int)floor(i/n_after)%(my_levels));
-          populations[i_sub_to_i_pop[j]] += tmp_real*cur_state;
+          (*populations)[i_sub_to_i_pop[j]] += tmp_real*cur_state;
         }
       }
     }
@@ -547,41 +569,40 @@ void get_populations(Vec x,PetscReal time) {
 
   /* Reduce results across cores */
   if(nid==0) {
-    MPI_Reduce(MPI_IN_PLACE,populations,num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+    MPI_Reduce(MPI_IN_PLACE,(*populations),num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
   } else {
-    MPI_Reduce(populations,populations,num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+    MPI_Reduce((*populations),(*populations),num_pop,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
   }
 
   /* Print results */
-  /* FIXME? Possibly move the printing to user? */
-  if(nid==0) {
-    /* A negative time means we were called from steadystate, so print to stdout*/
-    if (time<0){
-      printf("Final populations: ");
-      for(i=0;i<num_pop;i++){
-        printf(" %e ",populations[i]);
-      }
-      printf("\n");
-    } else if (time==0){
-      /* If time is 0, we should overwrite the old file */
-      FILE *f = fopen("pop","w");
-      fprintf(f,"%e ",time);
-      for(i=0;i<num_pop;i++){
-        fprintf(f," %e ",populations[i]);
-      }
-      fprintf(f,"\n");
-      fclose(f);
-    } else {
-      /* Normal printing, append to file */
-      FILE *f = fopen("pop","a");
-      fprintf(f,"%e ",time);
-      for(i=0;i<num_pop;i++){
-        fprintf(f," %e ",populations[i]);
-      }
-      fprintf(f,"\n");
-      fclose(f);
-    }
-  }
+  /* if(nid==0) { */
+  /*   /\* A negative time means we were called from steadystate, so print to stdout*\/ */
+  /*   if (time<0){ */
+  /*     printf("Final (*populations): "); */
+  /*     for(i=0;i<num_pop;i++){ */
+  /*       printf(" %e ",(*populations)[i]); */
+  /*     } */
+  /*     printf("\n"); */
+  /*   } else if (time==0){ */
+  /*     /\* If time is 0, we should overwrite the old file *\/ */
+  /*     FILE *f = fopen("pop","w"); */
+  /*     fprintf(f,"%e ",time); */
+  /*     for(i=0;i<num_pop;i++){ */
+  /*       fprintf(f," %e ",(*populations)[i]); */
+  /*     } */
+  /*     fprintf(f,"\n"); */
+  /*     fclose(f); */
+  /*   } else { */
+  /*     /\* Normal printing, append to file *\/ */
+  /*     FILE *f = fopen("pop","a"); */
+  /*     fprintf(f,"%e ",time); */
+  /*     for(i=0;i<num_pop;i++){ */
+  /*       fprintf(f," %e ",(*populations)[i]); */
+  /*     } */
+  /*     fprintf(f,"\n"); */
+  /*     fclose(f); */
+  /*   } */
+  /* } */
 
 
   /* Put the array back in Petsc's hands */
@@ -612,7 +633,6 @@ void get_populations(Vec x,PetscReal time) {
 
   /* Free memory */
   free(i_sub_to_i_pop);
-  free(populations);
   return;
 }
 

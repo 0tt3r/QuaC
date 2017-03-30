@@ -7,7 +7,7 @@
 #include "dm_utilities.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
-
+FILE *f_pop;
 operator a;
 
 int main(int argc,char **args){
@@ -20,11 +20,11 @@ int main(int argc,char **args){
   Vec      rho;
 
   enum STATE {gp=0,g0,gm};
-  
+
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
-  
+
   /* Define units, in AU */
   GHz = 1.519827e-7;
   MHz = 1;//GHz*1e-3;
@@ -69,11 +69,11 @@ int main(int argc,char **args){
   add_lin_mult2(rate,nv[gp],nv[gp]); //L gp gp
   add_lin_mult2(rate,nv[gm],nv[gm]); //L gm gm
 
-  
+
   /* Below 4 terms represent coupling  */
   add_to_ham_mult3(lambda,nv[gm],nv[gp],a->dag); // |e-><e+| at
   add_to_ham_mult3(lambda,nv[gp],nv[gm],a); // |e+><e-| a
-  
+
   /* phonon bath thermal terms */
   rate = gamma_mech*(n_th+1);
   add_lin(rate,a);
@@ -91,10 +91,16 @@ int main(int argc,char **args){
   set_initial_pop(nv[g0],1.);
   set_dm_from_initial_pop(rho);
 
-  /* What units are these?! */
   time_max  = 10000000;
   dt        = 0.1;
   steps_max = 10;
+
+  /* Open file that we will print to in ts_monitor */
+  if (nid==0){
+    f_pop = fopen("pop","w");
+    fprintf(f_pop,"#Time Populations\n");
+  }
+
   set_ts_monitor(ts_monitor);
   time_step(rho,time_max,dt,steps_max);
   /* steady_state(); */
@@ -110,11 +116,23 @@ int main(int argc,char **args){
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
   Vec ptraced_dm;
-  double fidelity;
+  double fidelity,*populations;
   PetscScalar dm_element;
+  int num_pop,i;
+
+  num_pop = get_num_populations();
+  populations = malloc(num_pop*sizeof(double));
+  get_populations(dm,&populations);
+  if (nid==0){
+    /* Print populations to file */
+    fprintf(f_pop,"%e",time);
+    for(i=0;i<num_pop;i++){
+      fprintf(f_pop," %e ",populations[i]);
+    }
+    fprintf(f_pop,"\n");
+  }
+
   create_dm(&ptraced_dm,3);
-  /* get_populations prints to pop file */
-  get_populations(dm,time);
   /* Partial trace away the oscillator */
   partial_trace_over(dm,ptraced_dm,1,a);
 
@@ -122,7 +140,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
   get_fidelity(ptraced_dm,ptraced_dm,&fidelity);
 
   get_dm_element(ptraced_dm,0,0,&dm_element);
-  
+
   if (nid==0) printf("dm_element: %f\n",PetscRealPart(dm_element));
   if (nid==0) printf("fidelity: %f\n",fidelity);
   destroy_dm(ptraced_dm);

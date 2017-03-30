@@ -6,6 +6,7 @@
 #include "petsc.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
+FILE *f_pop;
 
 int main(int argc,char **args){
   PetscInt N_th,num_phonon,N_th2,num_phonon2,init_phonon,steady_state_solve,steps_max;
@@ -15,11 +16,11 @@ int main(int argc,char **args){
   operator a,nv;
   Vec      rho;
 
-  
+
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
-  
+
   /* Define units */
   GHz = 1e3;
   MHz = GHz*1e-3;
@@ -36,7 +37,7 @@ int main(int argc,char **args){
   gam_res = 1.0;
   gam_eff = 1.0;
   gam_dep = 0.0;
-    
+
   /* Get arguments from command line */
   PetscOptionsGetInt(NULL,NULL,"-num_phonon",&num_phonon,NULL);
   PetscOptionsGetInt(NULL,NULL,"-n_th",&N_th,NULL);
@@ -58,12 +59,12 @@ int main(int argc,char **args){
 
   print_dense_ham();
 
-  create_op(num_phonon,&a);  
+  create_op(num_phonon,&a);
   create_op(num_phonon2,&nv);
 
   /* Add terms to the hamiltonian */
   add_to_ham(w_m,a->n); // w_m at a
-  
+
   add_to_ham(w_m,nv->n); // w_m nvt n
 
   /* Below 4 terms represent lambda_s (nvt + nv)(at + a) */
@@ -85,7 +86,7 @@ int main(int argc,char **args){
 
   rate = gamma_res*(N_th);
   add_lin(rate,a->dag);
-  
+
   create_full_dm(&rho);
 
   if (steady_state_solve==1) {
@@ -95,6 +96,11 @@ int main(int argc,char **args){
     if(nid==0) printf("Predicted cooling fraction: %f\n",rate);
   } else {
     set_ts_monitor(ts_monitor);
+    if (nid==0){
+      f_pop = fopen("pop","w");
+      fprintf(f_pop,"#Time Populations\n");
+    }
+
     set_initial_pop(a,init_phonon);
     set_initial_pop(nv,init_phonon);
     set_dm_from_initial_pop(rho);
@@ -111,11 +117,24 @@ int main(int argc,char **args){
   return 0;
 }
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
-  /* get_populations prints to pop file */
-  double hbar;
+  double hbar,*populations;
   hbar = 6.58211e-7;
-  get_populations(dm,time*hbar);
- 
+  int num_pop,i;
+
+  num_pop = get_num_populations();
+  populations = malloc(num_pop*sizeof(double));
+  get_populations(dm,&populations);
+
+  if (nid==0){
+    /* Print populations to file */
+    fprintf(f_pop,"%e",time);
+    for(i=0;i<num_pop;i++){
+      fprintf(f_pop," %e ",populations[i]);
+    }
+    fprintf(f_pop,"\n");
+  }
+
+
   PetscFunctionReturn(0);
 
 }
