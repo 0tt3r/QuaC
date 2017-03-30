@@ -152,33 +152,17 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
    * Create the new PETSc matrix.
    * These matrices are incredibly sparse (1 to 2 per row)
    */
-  dim = total_levels*total_levels;
-  MatCreate(PETSC_COMM_WORLD,&_time_dep_list[_num_time_dep].mat);
-  MatSetSizes(  _time_dep_list[_num_time_dep].mat,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
-  MatSetFromOptions(_time_dep_list[_num_time_dep].mat);
-  nnz = 1 + num_ops*2; //1 for the diagonal, 2 for each op
-  MatMPIAIJSetPreallocation(_time_dep_list[_num_time_dep].mat,nnz,NULL,nnz,NULL);
-  MatSetUp(_time_dep_list[_num_time_dep].mat);
 
   _time_dep_list[_num_time_dep].time_dep_func = time_dep_func;
   _time_dep_list[_num_time_dep].num_ops       = num_ops;
   _time_dep_list[_num_time_dep].ops = malloc(num_ops*sizeof(operator));
-  mat_scalar = 1.0;
+
   //Add the expanded op to the matrix
   va_start(ap,num_ops);
   for (i=0;i<num_ops;i++){
     op = va_arg(ap,operator);
     _time_dep_list[_num_time_dep].ops[i] = op;
-    _add_to_PETSc_kron(_time_dep_list[_num_time_dep].mat,mat_scalar,op->n_before,op->my_levels,
-                       op->my_op_type,op->position,total_levels,1);
   }
-
-  //Add 0 to the diagonal
-  mat_scalar = 0.0;
-  for (i=0;i<dim;i++){
-    MatSetValue(_time_dep_list[_num_time_dep].mat,i,i,mat_scalar,ADD_VALUES);
-  }
-
   _num_time_dep = _num_time_dep + 1;
   return;
 }

@@ -210,7 +210,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   Mat            AA;
   PetscInt       nevents,direction;
   PetscBool      terminate;
-
+  operator       op;
   /* long           dim; */
 
   /* dim = total_levels*total_levels; */
@@ -269,10 +269,6 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
   }
 
-  /* Tell PETSc to assemble the matrix */
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
-  if (nid==0) printf("Matrix Assembled.\n");
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
    *       Create the timestepping solver and set various options       *
@@ -298,14 +294,24 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
   if(_num_time_dep) {
     for(i=0;i<_num_time_dep;i++){
-      MatAssemblyBegin(_time_dep_list[i].mat,MAT_FINAL_ASSEMBLY);
-      MatAssemblyEnd  (_time_dep_list[i].mat,MAT_FINAL_ASSEMBLY);
-      mat_tmp = 0 + 0.*PETSC_i;
-      MatAXPY(full_A,mat_tmp,_time_dep_list[i].mat,DIFFERENT_NONZERO_PATTERN);
+      for(j=0;j<_time_dep_list[i].num_ops;j++){
+        op = _time_dep_list[i].ops[j];
+        /* Add -i *(I cross H(t)) */
+        mat_tmp = 0.0 + 0.0*PETSC_i;
+        printf("before kron1\n");
+        _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
+                         op->my_op_type,op->position,total_levels,1);
+        printf("afterq kron1\n");
+        /* Add i *(H(t) cross I) */
+        mat_tmp = 0.0 + 0.0*PETSC_i;
+        _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
+                           op->my_op_type,op->position,1,total_levels);
+      }
     }
-
+    /* Tell PETSc to assemble the matrix */
     MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+    if (nid==0) printf("Matrix Assembled.\n");
 
     MatDuplicate(full_A,MAT_COPY_VALUES,&AA);
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
@@ -313,6 +319,11 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
     TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham,NULL);
   } else {
+    /* Tell PETSc to assemble the matrix */
+    MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+    if (nid==0) printf("Matrix Assembled.\n");
+
     TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL);
   }
   /*
