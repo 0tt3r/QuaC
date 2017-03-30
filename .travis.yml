@@ -16,6 +16,7 @@ install:
   - |
     make --version
     cd petsc/
+    ls linux-gnu-c-complex/lib
     export PETSC_DIR=`pwd`
     export PETSC_ARCH=linux-gnu-c-complex
     cd ..
