@@ -1,11 +1,9 @@
 CFLAGS =
 
-TESTS=integration_tests dm_utilities_tests
+TESTS=dm_utilities_tests integration_tests
 ODIR=obj
 SRCDIR=src
 TESTDIR=tests
-UNITYDIR=external/Unity/src
-CPPFLAGS= -isystem $(UNITYDIR)
 CPPFLAGS += -isystem $(SRCDIR)
 
 
@@ -30,31 +28,39 @@ $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 
 $(ODIR)/%.o: $(TESTDIR)/%.c $(DEPS) $(TEST_DEPS)
 	@mkdir -p $(@D)
-	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} $(CPPFLAGS)
-
-$(ODIR)/%.o: $(UNITYDIR)/%.c
-	@mkdir -p $(@D)
-	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} $(CPPFLAGS)
-
+	@${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} $(CPPFLAGS)
 
 all: coupled_qds quant_tele nv_cooling_7state nv_mech_polarization qd_plasmon nv_cooling_2state_tc_test rpurcell_osci rpurcell nv_cooling_2state simple_jc_test simple_jc_test_vec timedep_test
 
 dm_utilities_tests: CFLAGS += -DUNIT_TEST
 dm_utilities_tests: $(ODIR)/dm_utilities_tests.o $(OBJ) $(TEST_OBJ)
-	-${CLINKER} -o $@ $^ $(CFLAGS) $(CPPFLAGS) ${PETSC_KSP_LIB}
-	-./$@
+	@-${CLINKER} -o $@ $^ $(CFLAGS) $(CPPFLAGS) ${PETSC_KSP_LIB}
+	@-./$@ > tmp_test_results
+	@echo 'running dm_utilities_tests'
+	-@grep FAIL tmp_test_results || true
+	@cat tmp_test_results >> test_results
+	@rm tmp_test_results
 
-.PHONY: clean_test test
+.PHONY: clean_test test count_fails
+
+count_fails:
+	@grep FAIL test_results || true
 
 clean_test:
 	rm -f $(TEST_OBJ)
+	rm -f test_results
+	touch test_results
 
 integration_tests: CFLAGS += -DUNIT_TEST
 integration_tests: $(ODIR)/integration_tests.o $(OBJ) $(TEST_OBJ)
-	-${CLINKER} -o $@ $^ $(CFLAGS) $(CPPFLAGS) ${PETSC_KSP_LIB}
-	-./$@
+	@-${CLINKER} -o $@ $^ $(CFLAGS) $(CPPFLAGS) ${PETSC_KSP_LIB}
+	@-./$@ > tmp_test_results
+	@echo 'running integration_tests'
+	-@grep FAIL tmp_test_results || true
+	@cat tmp_test_results >> test_results
+	@rm tmp_test_results
 
-test: clean_test $(TESTS)
+test: clean_test $(TESTS) count_fails
 
 
 nv_cooling_7state: $(ODIR)/nv_cooling_7state.o $(OBJ)

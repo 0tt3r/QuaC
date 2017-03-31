@@ -82,7 +82,7 @@ void test_bipartite_bell(void)
 
   get_bipartite_concurrence(bell_dm,&concurrence);
   destroy_dm(bell_dm);
-  TEST_ASSERT_EQUAL_FLOAT(concurrence,1.25);
+  TEST_ASSERT_EQUAL_FLOAT(concurrence,1.00);
 }
 
 
