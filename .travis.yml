@@ -20,8 +20,5 @@ install:
     export PETSC_ARCH=linux-gnu-c-complex
     cd ..
 
-script:
-  - make
-  - make test
-  - cat test_results
-  - ! grep FAIL test_results
+script: ./travis_test.sh
+
