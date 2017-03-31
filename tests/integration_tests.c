@@ -9,8 +9,6 @@
 #include "petsc.h"
 #include "tests.h"
 
-#define UNIT_TEST
-
 void test_timedep(void)
 {
   double *populations;
@@ -19,7 +17,7 @@ void test_timedep(void)
 
   timedep_test(&populations,&num_pop);
 
-  TEST_ASSERT_EQUAL_FLOAT(populations[0],-1.487990e-04);
+  TEST_ASSERT_EQUAL_FLOAT(populations[0],-1.487990e-02);
   TEST_ASSERT_EQUAL_FLOAT(populations[1],1.799424e-04);
 }
 
