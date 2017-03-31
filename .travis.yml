@@ -20,5 +20,5 @@ install:
     export PETSC_ARCH=linux-gnu-c-complex
     cd ..
 
-script: ./travis_test.sh
+script: tests/travis_test.sh
 
