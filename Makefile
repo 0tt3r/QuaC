@@ -41,7 +41,7 @@ examples: clean_test $(EXAMPLES)
 
 $(TESTS) : CFLAGS += -DUNIT_TEST
 $(TESTS) : % : $(ODIR)/%.o $(OBJ) $(TEST_OBJ)
-	@-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+	@${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 	@-./$@ > tmp_test_results
 	@echo 'running '$@
 	-@grep FAIL tmp_test_results || true
@@ -62,7 +62,7 @@ test: clean_test $(TESTS) count_fails
 
 
 $(EXAMPLES) : % : $(ODIR)/%.o $(OBJ)
-	-${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 
 .PHONY: clean
 
