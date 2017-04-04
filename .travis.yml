@@ -14,10 +14,12 @@ addons:
 
 install:
   - |
+    git clone -b maint https://bitbucket.org/petsc/petsc petsc
     cd petsc/
     ls linux-gnu-c-complex/lib
     export PETSC_DIR=`pwd`
     export PETSC_ARCH=linux-gnu-c-complex
+    ./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-fblaslapack --download-mpich --with-scalar-type=complex
     cd ..
 
 script: tests/travis_test.sh
