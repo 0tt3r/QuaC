@@ -20,6 +20,7 @@ install:
     export PETSC_DIR=`pwd`
     export PETSC_ARCH=linux-gnu-c-complex
     ./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-fblaslapack --download-mpich --with-scalar-type=complex
+    make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
     cd ..
 
 script: tests/travis_test.sh
