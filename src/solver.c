@@ -311,10 +311,8 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
         op = _time_dep_list[i].ops[j];
         /* Add -i *(I cross H(t)) */
         mat_tmp = 0.0 + 0.0*PETSC_i;
-        printf("before kron1\n");
         _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
                          op->my_op_type,op->position,total_levels,1);
-        printf("afterq kron1\n");
         /* Add i *(H(t) cross I) */
         mat_tmp = 0.0 + 0.0*PETSC_i;
         _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
