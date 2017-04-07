@@ -5,7 +5,10 @@ git clone -b maint https://bitbucket.org/petsc/petsc petsc
 cd petsc/
 export PETSC_DIR=dir/soft/petsc
 export PETSC_ARCH=linux-gnu-c-complex
-./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-fblaslapack --download-mpich --with-scalar-type=complex
+##If you do not have blas/lapack or mpich, use below.
+#./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-fblaslapack --download-mpich --with-scalar-type=complex
+##If you are on an HPC cluster where MPI is already configured, use:
+#./configure --with-scalar-type=complex
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} test
 
