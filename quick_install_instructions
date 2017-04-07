@@ -1,11 +1,12 @@
+#For example, if you wanted to install PETSc into dir/soft
 mkdir soft
 cd soft
 git clone -b maint https://bitbucket.org/petsc/petsc petsc
 cd petsc/
-export PETSC_DIR=<dir/soft/petsc>
-export PETSC_ARCH=linux-gnu-c
-./configure PETSC_ARCH=linux-gnu-c PETSC_DIR=/Users/gray/soft/petsc --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-fblaslapack --download-mpich --with-scalar-type=complex
-make PETSC_DIR=/Users/gray/soft/petsc PETSC_ARCH=linux-gnu-c all
-make PETSC_DIR=/Users/gray/soft/petsc PETSC_ARCH=linux-gnu-c test
+export PETSC_DIR=dir/soft/petsc
+export PETSC_ARCH=linux-gnu-c-complex
+./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-cc=gcc --with-cxx=g++ --with-fc=gfortran --download-fblaslapack --download-mpich --with-scalar-type=complex
+make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
+make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} test
 
-#Note, you should set PETSC_DIR=<dir/soft/petsc> and PETSC_ARCH=linux-gnu-c in your bashrc
+#Note, you should set PETSC_DIR=<dir/soft/petsc> and PETSC_ARCH=linux-gnu-c-soft in your bashrc
