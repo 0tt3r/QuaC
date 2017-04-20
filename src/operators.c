@@ -170,12 +170,12 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
 /*
  * add_to_ham adds a*op to the hamiltonian
  * Inputs:
- *        double a:    scalar to multiply op
+ *        PetscScalar a:    scalar to multiply op
  *        operator op: operator to add
  * Outputs:
  *        none
  */
-void add_to_ham(double a,operator op){
+void add_to_ham(PetscScalar a,operator op){
   PetscScalar    mat_scalar;
 
 
@@ -218,13 +218,13 @@ void add_to_ham(double a,operator op){
 /*
  * add_to_ham_mult2 adds a*op(handle1)*op(handle2) to the hamiltonian
  * Inputs:
- *        double a:     scalar to multiply op(handle1)
+ *        PetscScalar a:     scalar to multiply op(handle1)
  *        operator op1: the first operator
  *        operator op2: the second operator
  * Outputs:
  *        none
  */
-void add_to_ham_mult2(double a,operator op1,operator op2){
+void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
   PetscScalar mat_scalar;
   int         multiply_vec,n_after;
   _check_initialized_A();
@@ -310,7 +310,7 @@ void add_to_ham_mult2(double a,operator op1,operator op2){
  *        none
  */
 
-void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
+void add_to_ham_mult3(PetscScalar a,operator op1,operator op2,operator op3){
   PetscScalar mat_scalar;
   int         first_pair;
   _check_initialized_A();
@@ -381,13 +381,13 @@ void add_to_ham_mult3(double a,operator op1,operator op2,operator op3){
  * Lp    = C cross C - 1/2(C^t C cross I + I cross C^t C) p
  *
  * Inputs:
- *        double a:    scalar to multiply L term (note: Full term, not sqrt())
+ *        PetscScalar a:    scalar to multiply L term (note: Full term, not sqrt())
  *        operator op: op to make L(C) of
  * Outputs:
  *        none
  */
 
-void add_lin(double a,operator op){
+void add_lin(PetscScalar a,operator op){
   PetscScalar    mat_scalar;
 
   _check_initialized_A();
@@ -439,14 +439,14 @@ void add_lin(double a,operator op){
  *
  * where C is the outer product of two VECs
  * Inputs:
- *        double a:     scalar to multiply L term (note: Full term, not sqrt())
+ *        PetscScalar a:     scalar to multiply L term (note: Full term, not sqrt())
  *        operator op1: VEC 1
  *        operator op2: VEC 2
  * Outputs:
  *        none
  */
 
-void add_lin_mult2(double a,operator op1,operator op2){
+void add_lin_mult2(PetscScalar a,operator op1,operator op2){
   PetscScalar mat_scalar;
   int         k3,i1,j1,i2,j2,i_comb,j_comb,comb_levels;
   int         multiply_vec,n_after;

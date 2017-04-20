@@ -30,14 +30,14 @@ typedef struct time_dep_struct{
 
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
-void add_to_ham(double,operator);
+void add_to_ham(PetscScalar,operator);
 void add_to_ham_time_dep(double(*pulse)(double),int,...);
-void add_to_ham_mult2(double,operator,operator);
-void add_to_ham_mult3(double,operator,operator,operator);
+void add_to_ham_mult2(PetscScalar,operator,operator);
+void add_to_ham_mult3(PetscScalar,operator,operator,operator);
 int  _check_op_type2(operator,operator);
 int  _check_op_type3(operator,operator,operator);
-void add_lin(double,operator);
-void add_lin_mult2(double,operator,operator);
+void add_lin(PetscScalar,operator);
+void add_lin_mult2(PetscScalar,operator,operator);
 void print_dense_ham();
 void set_initial_pop(operator,double);
 extern int nid; /* a ranks id */
