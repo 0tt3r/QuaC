@@ -200,17 +200,6 @@ void add_to_ham(PetscScalar a,operator op){
                      op->my_op_type,op->position,1,1);
 
   /*
-   * Add i * (H cross I) to the superoperator matrix, A
-   * Since this is an additional I after, we simply
-   * pass total_levels as extra_after.
-   * We pass a*PETSC_i to get the imaginary part correct.
-   */
-
-  mat_scalar = a*PETSC_i;
-  _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,1,total_levels);
-
-  /*
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
    * pass total_levels as extra_before
