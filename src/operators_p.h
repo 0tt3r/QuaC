@@ -16,7 +16,9 @@ void _check_initialized_op();
 
 extern int  _num_time_dep;
 extern Mat  full_A;
+extern Mat  ham_A;
 extern int  op_finalized;
+extern int  _lindblad_terms;
 extern PetscInt total_levels;
 extern int  num_subsystems;
 extern double **_hamiltonian;

@@ -34,9 +34,23 @@ void steady_state(Vec x){
   long           dim;
   int            num_pop;
   double         *populations;
+  Mat            solve_A;
 
-  dim = total_levels*total_levels;
-
+  if (_lindblad_terms) {
+    dim = total_levels*total_levels;
+    solve_A = full_A;
+    if (nid==0) {
+      printf("Lindblad terms found, using Lindblad solver.");
+    }
+  } else {
+    if (nid==0) {
+      printf("Warning! Steady state not supported for Schrodinger.\n")
+      printf("         Defaulting to (less efficient) Lindblad Solver\n");
+      exit(0);
+    }
+    dim = total_levels*total_levels;
+    solve_A = ham_A;
+  }
   if (!stab_added){
     if (nid==0) printf("Adding stabilization...\n");
     /*
@@ -224,9 +238,19 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   operator       op;
   int            num_pop;
   double         *populations;
-  /* long           dim; */
+  Mat            solve_A;
 
-  /* dim = total_levels*total_levels; */
+  if (_lindblad_terms) {
+    if (nid==0) {
+      printf("Lindblad terms found, using Lindblad solver.");
+    }
+    solve_A = full_A;
+  } else {
+    if (nid==0) {
+      printf("No Lindblad terms found, using (more efficient) Schrodinger solver.");
+    }
+    solve_A = ham_A;
+  }
 
   /* Possibly print dense ham. No stabilization is needed? */
   if (nid==0) {
@@ -270,7 +294,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     }
   }
 
-  MatGetOwnershipRange(full_A,&Istart,&Iend);
+  MatGetOwnershipRange(solve_A,&Istart,&Iend);
   /*
    * Explicitly add 0.0 to all diagonal elements;
    * this fixes a 'matrix in wrong state' message that PETSc
@@ -309,14 +333,24 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     for(i=0;i<_num_time_dep;i++){
       for(j=0;j<_time_dep_list[i].num_ops;j++){
         op = _time_dep_list[i].ops[j];
-        /* Add -i *(I cross H(t)) */
-        mat_tmp = 0.0 + 0.0*PETSC_i;
-        _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
-                         op->my_op_type,op->position,total_levels,1);
-        /* Add i *(H(t) cross I) */
-        mat_tmp = 0.0 + 0.0*PETSC_i;
-        _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
-                           op->my_op_type,op->position,1,total_levels);
+        if (_lindblad_terms) {
+          /*
+           * Add 0 terms to the hamiltonian where the time dependent
+           * H terms will be. This allows PETSc to be more efficient later
+           */
+          /* Add -i *(I cross H(t)) */
+          mat_tmp = 0.0 + 0.0*PETSC_i;
+          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
+                             op->my_op_type,op->position,total_levels,1);
+          /* Add i *(H(t) cross I) */
+          mat_tmp = 0.0 + 0.0*PETSC_i;
+          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
+                             op->my_op_type,op->position,1,total_levels);
+        } else {
+          mat_tmp = 0.0 + 0.0*PETSC_i;
+          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
+                             op->my_op_type,op->position,1,1);
+        }
       }
     }
     /* Tell PETSc to assemble the matrix */

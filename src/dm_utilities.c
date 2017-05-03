@@ -533,9 +533,15 @@ void get_populations(Vec x,double **populations) {
 
 
   for (i=0;i<total_levels;i++){
-    if ((i*total_levels+i)>=x_low&&(i*total_levels+i)<x_high) {
+    if (_lindblad_terms) {
+      diag_index = i*total_levels+i;
+    } else {
+      /* If we are using the schrodinger solver, then i is the diag index */
+      diag_index = i;
+    }
+    if (diag_index>=x_low&&diag_index<x_high) {
       /* Get the diagonal entry of rho */
-      tmp_real = (double)PetscRealPart(xa[i*(total_levels)+i-x_low]);
+      tmp_real = (double)PetscRealPart(xa[diag_index-x_low]);
       //      printf("%e \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
       for(j=0;j<num_subsystems;j++){
         /*

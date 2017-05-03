@@ -9,7 +9,7 @@
 
 /* TODO? :
  * - put wrappers into quac.h
- * - variable number of arguments to add_to_ham and add_to_lin
+ * - variable number of arguments to add_to_ham and add_lin
  * - add_to_ham_mult4 for coupling between two vec subsystems
  * - add PetscLog for getting setup time
  * - check if input DM is a valid DM (trace, hermitian, etc)
@@ -20,6 +20,7 @@
 static int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
 int op_finalized;
+int _lindblad_terms;
 Mat full_A;
 PetscInt total_levels;
 int num_subsystems;
@@ -190,6 +191,25 @@ void add_to_ham(PetscScalar a,operator op){
   }
 
   /*
+   * Add to the Hamiltonian matrix, ham_A
+   */
+
+  mat_scalar = a;
+  _add_to_PETSc_kron(ham_A,mat_scalar,op->n_before,op->my_levels,
+                     op->my_op_type,op->position,1,1);
+
+  /*
+   * Add i * (H cross I) to the superoperator matrix, A
+   * Since this is an additional I after, we simply
+   * pass total_levels as extra_after.
+   * We pass a*PETSC_i to get the imaginary part correct.
+   */
+
+  mat_scalar = a*PETSC_i;
+  _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
+                     op->my_op_type,op->position,1,total_levels);
+
+  /*
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
    * pass total_levels as extra_before
@@ -262,10 +282,20 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
      * subspace, at location op1->position, op2->position.
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
+    /* Add to the Hamiltonian matrix, ham_A */
+    _add_to_PETSc_kron_ij(ham_A,a,op1->position,op2->position,op1->n_before,
+                          n_after,op1->my_levels);
+    /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_ij(full_A,mat_scalar,op1->position,op2->position,op1->n_before*total_levels,
                           n_after,op1->my_levels);
   } else {
+    /* Add to the Hamiltonian matrix, ham_A */
+    _add_to_PETSc_kron_comb(ham_A,a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                            op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
+                            1,1,1);
+
     /* We are multiplying two normal ops and have to do a little more work. */
+    /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                             total_levels,1,1);
@@ -284,10 +314,22 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
      * subspace, at location op1->position, op2->position.
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
+
+    /* Add to the Hamiltonian matrix, ham_A */
+    _add_to_PETSc_kron_ij(ham_A,a,op1->position,op2->position,op1->n_before,
+                          n_after,op1->my_levels);
+
+    /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_ij(full_A,mat_scalar,op1->position,op2->position,op1->n_before,
                           n_after*total_levels,op1->my_levels);
   } else {
+    /* Add to the Hamiltonian matrix, ham_A */
+    _add_to_PETSc_kron_comb(ham_A,a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                            op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
+                            1,1,1);
+
     /* We are multiplying two normal ops and have to do a little more work. */
+    /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                             1,1,total_levels);
@@ -391,7 +433,7 @@ void add_lin(PetscScalar a,operator op){
   PetscScalar    mat_scalar;
 
   _check_initialized_A();
-
+  _lindblad_terms = 1;
   /*
    * Add (I cross C^t C) to the superoperator matrix, A
    * Which is (I_total cross I_before cross C^t C cross I_after)
@@ -452,6 +494,7 @@ void add_lin_mult2(PetscScalar a,operator op1,operator op2){
   int         multiply_vec,n_after;
 
   _check_initialized_A();
+  _lindblad_terms = 1;
   multiply_vec =  _check_op_type2(op1,op2);
 
   if (multiply_vec){
@@ -564,7 +607,7 @@ void add_lin_mult2(PetscScalar a,operator op1,operator op2){
 /*
  * _check_initialized_op checks if petsc was initialized and sets up variables
  * for op creation. It also errors if there are too many subsystems or
- * if add_to_ham or add_to_lin was called.
+ * if add_to_ham or add_lin was called.
  */
 
 void _check_initialized_op(){
@@ -580,6 +623,7 @@ void _check_initialized_op(){
   /* Set up counters on first call */
   if (!op_initialized){
     op_finalized   = 0;
+    _lindblad_terms = 0;
     total_levels   = 1;
     op_initialized = 1;
   }
@@ -594,7 +638,7 @@ void _check_initialized_op(){
   if (op_finalized){
     if (nid==0){
       printf("ERROR! You cannot add more operators after\n");
-      printf("       calling add_to_ham or add_to_lin!\n");
+      printf("       calling add_to_ham or add_lin!\n");
       exit(0);
     }
   }
@@ -779,10 +823,13 @@ void _check_initialized_A(){
 
     dim = total_levels*total_levels;
     /* Setup petsc matrix */
+    MatCreate(PETSC_COMM_WORLD,&ham_A);
     MatCreate(PETSC_COMM_WORLD,&full_A);
     //    MatSetType(full_A,MATMPIAIJ);
     MatSetSizes(full_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+    MatSetSizes(ham_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
     MatSetFromOptions(full_A);
+    MatSetFromOptions(ham_A);
 
     if (nid==0){
       /*
@@ -819,6 +866,11 @@ void _check_initialized_A(){
       }
       MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
       MatSeqAIJSetPreallocation(full_A,0,d_nz);
+
+      /* Allocate the same amount of space for ham_A, may change later */
+      MatMPIAIJSetPreallocation(ham_A,0,d_nz,0,o_nz);
+      MatSeqAIJSetPreallocation(ham_A,0,d_nz);
+
       PetscFree(d_nz);
       PetscFree(o_nz);
 
