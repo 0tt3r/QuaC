@@ -22,6 +22,7 @@ static int              op_initialized = 0;
 int op_finalized;
 int _lindblad_terms;
 Mat full_A;
+Mat ham_A;
 PetscInt total_levels;
 int num_subsystems;
 operator subsystem_list[MAX_SUB];
@@ -194,7 +195,7 @@ void add_to_ham(PetscScalar a,operator op){
    * Add to the Hamiltonian matrix, ham_A
    */
 
-  mat_scalar = a;
+  mat_scalar = -a*PETSC_i;
   _add_to_PETSc_kron(ham_A,mat_scalar,op->n_before,op->my_levels,
                      op->my_op_type,op->position,1,1);
 
@@ -282,15 +283,15 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
      * subspace, at location op1->position, op2->position.
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
-    /* Add to the Hamiltonian matrix, ham_A */
-    _add_to_PETSc_kron_ij(ham_A,a,op1->position,op2->position,op1->n_before,
+    /* Add to the Hamiltonian matrix, -i*ham_A */
+    _add_to_PETSc_kron_ij(ham_A,mat_scalar,op1->position,op2->position,op1->n_before,
                           n_after,op1->my_levels);
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_ij(full_A,mat_scalar,op1->position,op2->position,op1->n_before*total_levels,
                           n_after,op1->my_levels);
   } else {
-    /* Add to the Hamiltonian matrix, ham_A */
-    _add_to_PETSc_kron_comb(ham_A,a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+    /* Add to the Hamiltonian matrix, -i*ham_A */
+    _add_to_PETSc_kron_comb(ham_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                             1,1,1);
 
@@ -315,19 +316,10 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
      */
     n_after    = total_levels/(op1->my_levels*op1->n_before);
 
-    /* Add to the Hamiltonian matrix, ham_A */
-    _add_to_PETSc_kron_ij(ham_A,a,op1->position,op2->position,op1->n_before,
-                          n_after,op1->my_levels);
-
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_ij(full_A,mat_scalar,op1->position,op2->position,op1->n_before,
                           n_after*total_levels,op1->my_levels);
   } else {
-    /* Add to the Hamiltonian matrix, ham_A */
-    _add_to_PETSc_kron_comb(ham_A,a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
-                            op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
-                            1,1,1);
-
     /* We are multiplying two normal ops and have to do a little more work. */
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
@@ -787,7 +779,7 @@ int _check_op_type3(operator op1,operator op2,operator op3){
 void _check_initialized_A(){
   int            i;
   long           dim;
-  PetscInt       *d_nz,*o_nz;
+  PetscInt       *d_nz,*o_nz,*o_nz_ham,*d_nz_ham;
 
   /* Check to make sure petsc was initialize */
   if (!petsc_initialized){
@@ -843,6 +835,10 @@ void _check_initialized_A(){
 
       PetscMalloc1((dim/np)*5,&d_nz); /* malloc array of nnz diagonal elements*/
       PetscMalloc1((dim/np)*5,&o_nz); /* malloc array of nnz off diagonal elements*/
+
+      PetscMalloc1((total_levels/np)*5,&d_nz_ham); /* malloc array of nnz diagonal elements*/
+      PetscMalloc1((total_levels/np)*5,&o_nz_ham); /* malloc array of nnz off diagonal elements*/
+
       /*
        * If the system is small enough, we can just allocate a lot of
        * memory for it. Fixes a bug from PETSc when you try to preallocate bigger
@@ -855,24 +851,39 @@ void _check_initialized_A(){
           d_nz[i] = total_levels*total_levels;
           o_nz[i] = total_levels*total_levels;
         }
+        d_nz_ham[0] = total_levels;
+        o_nz_ham[0] = total_levels;
+        for (i=1;i<(total_levels/np)*5;i++){
+          d_nz_ham[i] = total_levels;
+          o_nz_ham[i] = total_levels;
+        }
+
       } else {
         d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
         o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
         for (i=1;i<(dim/np)*5;i++){
           d_nz[i] = MAX_NNZ_PER_ROW;
           o_nz[i] = MAX_NNZ_PER_ROW;
+        }
 
+        d_nz_ham[0] = MAX_NNZ_PER_ROW + ceil(ceil(total_levels/np)/total_levels)+5;
+        o_nz_ham[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(total_levels/np)/total_levels))+5;
+        for (i=1;i<(total_levels/np)*5;i++){
+          d_nz_ham[i] = MAX_NNZ_PER_ROW;
+          o_nz_ham[i] = MAX_NNZ_PER_ROW;
         }
       }
       MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
       MatSeqAIJSetPreallocation(full_A,0,d_nz);
 
-      /* Allocate the same amount of space for ham_A, may change later */
-      MatMPIAIJSetPreallocation(ham_A,0,d_nz,0,o_nz);
-      MatSeqAIJSetPreallocation(ham_A,0,d_nz);
+      MatMPIAIJSetPreallocation(ham_A,0,d_nz_ham,0,o_nz_ham);
+      MatSeqAIJSetPreallocation(ham_A,0,d_nz_ham);
 
       PetscFree(d_nz);
       PetscFree(o_nz);
+
+      PetscFree(d_nz_ham);
+      PetscFree(o_nz_ham);
 
     } else {
       MatMPIAIJSetPreallocation(full_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);

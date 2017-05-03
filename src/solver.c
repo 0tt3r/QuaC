@@ -44,7 +44,7 @@ void steady_state(Vec x){
     }
   } else {
     if (nid==0) {
-      printf("Warning! Steady state not supported for Schrodinger.\n")
+      printf("Warning! Steady state not supported for Schrodinger.\n");
       printf("         Defaulting to (less efficient) Lindblad Solver\n");
       exit(0);
     }
@@ -242,12 +242,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
   if (_lindblad_terms) {
     if (nid==0) {
-      printf("Lindblad terms found, using Lindblad solver.");
+      printf("Lindblad terms found, using Lindblad solver.\n");
     }
     solve_A = full_A;
   } else {
     if (nid==0) {
-      printf("No Lindblad terms found, using (more efficient) Schrodinger solver.");
+      printf("No Lindblad terms found, using (more efficient) Schrodinger solver.\n");
     }
     solve_A = ham_A;
   }
@@ -303,7 +303,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   if (nid==0) printf("Adding 0 to diagonal elements...\n");
   for (i=Istart;i<Iend;i++){
     mat_tmp = 0 + 0.*PETSC_i;
-    MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
+    MatSetValue(solve_A,i,i,mat_tmp,ADD_VALUES);
   }
 
 
@@ -354,35 +354,37 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
       }
     }
     /* Tell PETSc to assemble the matrix */
-    MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
     if (nid==0) printf("Matrix Assembled.\n");
 
-    MatDuplicate(full_A,MAT_COPY_VALUES,&AA);
+    MatDuplicate(solve_A,MAT_COPY_VALUES,&AA);
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
 
     TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham,NULL);
   } else {
     /* Tell PETSc to assemble the matrix */
-    MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
     if (nid==0) printf("Matrix Assembled.\n");
 
-    TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL);
+    TSSetRHSJacobian(ts,solve_A,solve_A,TSComputeRHSJacobianConstant,NULL);
   }
   /*
    * Moved matrix information print down so that we can see the information
    * on the extra zeros we added
-   * to full_A to make copying into AA for time dependent runs
+   * to solve_A to make copying into AA for time dependent runs
    * more efficient.
    */
 
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  MatView(full_A,mat_view);
-    PetscViewerDestroy(&mat_view);
+  //PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_DENSE);
+
+  MatView(solve_A,mat_view);
+  PetscViewerDestroy(&mat_view);
 
 
   TSSetInitialTimeStep(ts,0.0,dt);

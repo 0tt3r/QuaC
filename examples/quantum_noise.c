@@ -4,6 +4,7 @@
 #include "operators.h"
 #include "solver.h"
 #include "petsc.h"
+#include "dm_utilities.h"
 
 /*
  * This simple test adds several operators, combines them in ways
@@ -19,7 +20,7 @@ FILE *f_pop;
 
 int main(int argc,char **args){
   double w0,wtls,wtls_base,GHz,MHz,g,g_mult,dt,time_max;
-  PetscInt num_cavity,i,num_tls,steps_max,init_cavity;
+  PetscInt num_cavity,i,num_tls,steps_max,init_cavity,levels;
   operator a,*tls;
   Vec      rho;
 
@@ -51,16 +52,21 @@ int main(int argc,char **args){
   /* Setup simple JC-like Hamiltonian */
   add_to_ham(w0,a->n); //w0 * (at*a)
   for (i=0;i<num_tls;i++){
-    wtls = i*5 + wtls_base;
+    wtls = i*5*MHz + wtls_base;
     add_to_ham(wtls,tls[i]->n); //wtls * (tls^t*tls)
     add_to_ham_mult2(g,a->dag,tls[i]); //g * (a^t*tls)
     add_to_ham_mult2(g,a,tls[i]->dag); //g * (a*tls^t)
   }
-
+  g = 1.0*GHz;
+  add_lin(g,a->dag);
   create_full_dm(&rho);
 
   set_initial_pop(a,init_cavity);
   set_dm_from_initial_pop(rho);
+  printf("before psi\n");
+  levels = num_cavity * pow(2,num_tls);
+  print_psi(rho,levels);
+  printf("after psi\n");
 
   /* Open file that we will print to in ts_monitor */
   if (nid==0){
@@ -69,13 +75,17 @@ int main(int argc,char **args){
   }
 
   time_max = 10; //Units of 1/MHz = microseconds
-  dt       = 0.1;
+  dt       = 0.0001;
   steps_max = 1000;
 
   set_ts_monitor(ts_monitor);
   //  steady_state(rho);
   time_step(rho,time_max,dt,steps_max);
-
+  printf("before psi\n");
+  levels = num_cavity * pow(2,num_tls);
+  print_psi(rho,levels);
+  print_dm(rho,levels);
+  printf("after psi\n");
   for (i=0;i<num_tls;i++){
     destroy_op(&tls[i]);
   }
@@ -90,12 +100,15 @@ int main(int argc,char **args){
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
   double *populations;
+  PetscReal norm;
   int num_pop,i;
 
   num_pop = get_num_populations();
 
   populations = malloc(num_pop*sizeof(double));
-
+  /* VecNorm(dm,NORM_2,&norm); */
+  /* printf("new step: %f norm: %f",time,norm); */
+  print_dm(dm,3);
   get_populations(dm,&populations);
 
   if (nid==0){

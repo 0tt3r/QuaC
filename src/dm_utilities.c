@@ -5,13 +5,13 @@
 
 
 
-/* Print the DM as a matrix.
+/*
+ * Print the DM as a matrix.
  * Not recommended for large matrices.
  */
 void print_dm(Vec rho,int h_dim){
   PetscScalar val;
   int i,j;
-
   for (i=0;i<h_dim;i++){
     for (j=0;j<h_dim;j++){
       get_dm_element(rho,i,j,&val);
@@ -20,6 +20,24 @@ void print_dm(Vec rho,int h_dim){
     PetscPrintf(PETSC_COMM_WORLD,"\n");
   }
     PetscPrintf(PETSC_COMM_WORLD,"\n");
+}
+
+/*
+ * Print psi
+ * Not recommended for large systems
+ */
+
+void print_psi(Vec rho,int h_dim){
+  PetscScalar val_array[1];
+  PetscInt location[1];
+  int i;
+
+  for (i=0;i<h_dim;i++){
+    location[0] = i;
+    VecGetValues(rho,1,location,val_array);
+    PetscPrintf(PETSC_COMM_WORLD,"%f\n",val_array[0]);
+  }
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
 }
 
 /*
@@ -178,7 +196,11 @@ void create_full_dm(Vec* new_dm){
   /* Create the dm, partition with PETSc */
   VecCreate(PETSC_COMM_WORLD,new_dm);
   VecSetType(*new_dm,VECMPI);
-  VecSetSizes(*new_dm,PETSC_DECIDE,pow(size,2));
+  if (_lindblad_terms) {
+    VecSetSizes(*new_dm,PETSC_DECIDE,pow(size,2));
+  } else {
+    VecSetSizes(*new_dm,PETSC_DECIDE,size);
+  }
   /* Set all elements to 0 */
   VecSet(*new_dm,0.0);
 }
@@ -221,7 +243,11 @@ void set_dm_from_initial_pop(Vec x){
       //      init_row_op += ((int)subsystem_list[i]->initial_pop)*subsystem_list[i]->n_before;
     }
 
-    init_row_op = total_levels*init_row_op + init_row_op;
+    if(_lindblad_terms) {
+      init_row_op = total_levels*init_row_op + init_row_op;
+    } else {
+      init_row_op = init_row_op;
+    }
     mat_tmp_val = 1. + 0.0*PETSC_i;
     VecSetValue(x,init_row_op,mat_tmp_val,INSERT_VALUES);
 
@@ -492,13 +518,17 @@ int get_num_populations() {
 void get_populations(Vec x,double **populations) {
   int               j,my_levels,n_after,cur_state,num_pop;
   int               *i_sub_to_i_pop;
-  PetscInt          x_low,x_high,i,dm_size;
+  PetscInt          x_low,x_high,i,dm_size,diag_index,dim;
   const PetscScalar *xa;
   PetscReal         tmp_real;
-
+  if(_lindblad_terms) {
+    dim = total_levels*total_levels;
+  } else {
+    dim = total_levels;
+  }
   VecGetSize(x,&dm_size);
 
-  if (dm_size!=total_levels*total_levels){
+  if (dm_size!=dim){
     if (nid==0){
       printf("ERROR! The input density matrix does not seem to be the full one!\n");
       printf("       Populations cannot be calculated.\n");
