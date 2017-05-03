@@ -1,6 +1,6 @@
 CFLAGS =
 
-EXAMPLES= coupled_qds quant_tele nv_cooling_7state nv_mech_polarization qd_plasmon nv_cooling_2state_tc_test rpurcell_osci rpurcell nv_cooling_2state simple_jc_test simple_jc_test_vec timedep_test
+EXAMPLES= coupled_qds quant_tele nv_cooling_7state nv_mech_polarization qd_plasmon nv_cooling_2state_tc_test rpurcell_osci rpurcell nv_cooling_2state simple_jc_test simple_jc_test_vec timedep_test quantum_noise
 TESTS=dm_utilities_tests integration_tests
 ODIR=obj
 SRCDIR=src
