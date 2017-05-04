@@ -3,8 +3,6 @@
 #include <stdio.h>
 #include <petscblaslapack.h>
 
-
-
 /*
  * Print the DM as a matrix.
  * Not recommended for large matrices.
@@ -15,7 +13,8 @@ void print_dm(Vec rho,int h_dim){
   for (i=0;i<h_dim;i++){
     for (j=0;j<h_dim;j++){
       get_dm_element(rho,i,j,&val);
-      PetscPrintf(PETSC_COMM_WORLD,"%f ",val);
+      PetscPrintf(PETSC_COMM_WORLD,"%f + %f i",PetscRealPart(val),
+                  PetscImaginaryPart(val));
     }
     PetscPrintf(PETSC_COMM_WORLD,"\n");
   }
@@ -35,7 +34,8 @@ void print_psi(Vec rho,int h_dim){
   for (i=0;i<h_dim;i++){
     location[0] = i;
     VecGetValues(rho,1,location,val_array);
-    PetscPrintf(PETSC_COMM_WORLD,"%f\n",val_array[0]);
+    PetscPrintf(PETSC_COMM_WORLD,"%f + %f i\n",PetscRealPart(val_array[0]),
+                PetscImaginaryPart(val_array[0]));
   }
   PetscPrintf(PETSC_COMM_WORLD,"\n");
 }
@@ -520,7 +520,7 @@ void get_populations(Vec x,double **populations) {
   int               *i_sub_to_i_pop;
   PetscInt          x_low,x_high,i,dm_size,diag_index,dim;
   const PetscScalar *xa;
-  PetscReal         tmp_real;
+  PetscReal         tmp_real,tmp_imag;
   if(_lindblad_terms) {
     dim = total_levels*total_levels;
   } else {
@@ -572,6 +572,7 @@ void get_populations(Vec x,double **populations) {
     if (diag_index>=x_low&&diag_index<x_high) {
       /* Get the diagonal entry of rho */
       tmp_real = (double)PetscRealPart(xa[diag_index-x_low]);
+      tmp_imag = (double)PetscImaginaryPart(xa[diag_index-x_low]);
       //      printf("%e \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
       for(j=0;j<num_subsystems;j++){
         /*
@@ -592,12 +593,24 @@ void get_populations(Vec x,double **populations) {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
           cur_state = ((int)floor(i/n_after)%(my_levels));
-          (*populations)[i_sub_to_i_pop[j]+cur_state] += tmp_real;
+          if (_lindblad_terms) {
+            (*populations)[i_sub_to_i_pop[j]+cur_state] += tmp_real;
+          } else {
+            // If we are using the Schrodinger solver, we need to use
+            // a^* a (that is, complex conjugate of a times a)
+            (*populations)[i_sub_to_i_pop[j]+cur_state] += tmp_real*tmp_real + tmp_imag*tmp_imag;
+          }
         } else {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
           cur_state = ((int)floor(i/n_after)%(my_levels));
-          (*populations)[i_sub_to_i_pop[j]] += tmp_real*cur_state;
+          if (_lindblad_terms) {
+            (*populations)[i_sub_to_i_pop[j]] += tmp_real*cur_state;
+          } else {
+            // If we are using the Schrodinger solver, we need to use
+            // a^* a (that is, complex conjugate of a times a)
+            (*populations)[i_sub_to_i_pop[j]] += cur_state * (tmp_real*tmp_real + tmp_imag*tmp_imag);
+          }
         }
       }
     }

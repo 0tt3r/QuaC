@@ -228,7 +228,6 @@ void steady_state(Vec x){
  */
 void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   PetscViewer    mat_view;
-  //  Vec            x;
   TS             ts; /* timestepping context */
   PetscInt       i,j,Istart,Iend,steps,row,col;
   PetscScalar    mat_tmp;
