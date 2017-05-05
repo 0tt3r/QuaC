@@ -15,10 +15,11 @@ void _check_initialized_A();
 void _check_initialized_op();
 
 extern int  _num_time_dep;
-extern Mat  full_A;
-extern Mat  ham_A;
+extern Mat  full_A,full_stiff_A;
+extern Mat  ham_A,ham_stiff_A;
 extern int  op_finalized;
 extern int  _lindblad_terms;
+extern int  _stiff_solver;
 extern PetscInt total_levels;
 extern int  num_subsystems;
 extern double **_hamiltonian;

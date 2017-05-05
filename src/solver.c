@@ -239,18 +239,27 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   operator       op;
   int            num_pop;
   double         *populations;
-  Mat            solve_A;
+  Mat            solve_A,solve_stiff_A;
 
   if (_lindblad_terms) {
     if (nid==0) {
       printf("Lindblad terms found, using Lindblad solver.\n");
     }
     solve_A = full_A;
+    if (_stiff_solver) {
+      if(nid==0) printf("ERROR! Lindblad-stiff solver untested.");
+      exit(0);
+    }
   } else {
     if (nid==0) {
       printf("No Lindblad terms found, using (more efficient) Schrodinger solver.\n");
     }
     solve_A = ham_A;
+    solve_stiff_A = ham_stiff_A;
+    if (_num_time_dep&&_stiff_solver) {
+      if(nid==0) printf("ERROR! Schrodinger-stiff + timedep solver untested.");
+      exit(0);
+    }
   }
 
   /* Possibly print dense ham. No stabilization is needed? */
@@ -306,6 +315,14 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     mat_tmp = 0 + 0.*PETSC_i;
     MatSetValue(solve_A,i,i,mat_tmp,ADD_VALUES);
   }
+  if(_stiff_solver){
+    MatGetOwnershipRange(solve_stiff_A,&Istart,&Iend);
+    for (i=Istart;i<Iend;i++){
+      mat_tmp = 0 + 0.*PETSC_i;
+      MatSetValue(solve_stiff_A,i,i,mat_tmp,ADD_VALUES);
+    }
+
+  }
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
    *       Create the timestepping solver and set various options       *
@@ -329,6 +346,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
    */
 
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+
+  if(_stiff_solver) {
+    TSSetIFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+    if(nid==0) printf("Using stiff solver - TSROSW\n");
+  }
+
   if(_num_time_dep) {
     for(i=0;i<_num_time_dep;i++){
       for(j=0;j<_time_dep_list[i].num_ops;j++){
@@ -367,8 +390,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     /* Tell PETSc to assemble the matrix */
     MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
+    if (_stiff_solver){
+      MatAssemblyBegin(solve_stiff_A,MAT_FINAL_ASSEMBLY);
+      MatAssemblyEnd(solve_stiff_A,MAT_FINAL_ASSEMBLY);
+      TSSetIJacobian(ts,solve_stiff_A,solve_stiff_A,TSComputeRHSJacobianConstant,NULL);
+    }
     if (nid==0) printf("Matrix Assembled.\n");
-
     TSSetRHSJacobian(ts,solve_A,solve_A,TSComputeRHSJacobianConstant,NULL);
   }
   /*
@@ -380,10 +407,13 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
-  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  //PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_DENSE);
+  //PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_DENSE);
 
   MatView(solve_A,mat_view);
+  if(_stiff_solver){
+    MatView(solve_stiff_A,mat_view);
+  }
   PetscViewerDestroy(&mat_view);
 
 
@@ -395,8 +425,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
   TSSetDuration(ts,steps_max,time_max);
   TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
-  TSSetType(ts,TSRK);
-  TSRKSetType(ts,TSRK3BS);
+  if (_stiff_solver) {
+    TSSetType(ts,TSROSW);
+  } else {
+    TSSetType(ts,TSRK);
+    TSRKSetType(ts,TSRK3BS);
+  }
 
   /* If we have gates to apply, set up the event handler. */
   if (_num_quantum_gates > 0) {

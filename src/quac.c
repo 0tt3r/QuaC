@@ -41,6 +41,8 @@ void QuaC_finalize(){
   /* Destroy Matrix */
   MatDestroy(&full_A);
   MatDestroy(&ham_A);
+  MatDestroy(&full_stiff_A);
+  MatDestroy(&ham_stiff_A);
 
   for (i=0;i<_num_time_dep;i++){
     MatDestroy(&_time_dep_list[i].mat);

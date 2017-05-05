@@ -32,7 +32,7 @@ int main(int argc,char **args){
   g_mult     = 1;
 
   init_cavity = 5;
-  num_cavity = 15;
+  num_cavity = 6;
   num_tls    = 2;
   QuaC_initialize(argc,args);
 
@@ -53,9 +53,9 @@ int main(int argc,char **args){
   add_to_ham(w0,a->n); //w0 * (at*a)
   for (i=0;i<num_tls;i++){
     wtls = i*50*MHz + wtls_base;
-    add_to_ham(wtls,tls[i]->n); //wtls * (tls^t*tls)
-    add_to_ham_mult2(g,a->dag,tls[i]); //g * (a^t*tls)
-    add_to_ham_mult2(g,a,tls[i]->dag); //g * (a*tls^t)
+    add_to_ham_stiff(wtls,tls[i]->n); //wtls * (tls^t*tls)
+    add_to_ham_stiff_mult2(g,a->dag,tls[i]); //g * (a^t*tls)
+    add_to_ham_stiff_mult2(g,a,tls[i]->dag); //g * (a*tls^t)
   }
   /* g = 1.0*GHz*0; */
   /* add_lin(g,a); */
