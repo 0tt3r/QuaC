@@ -20,9 +20,10 @@
 static int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
 int op_finalized;
+int _stiff_solver;
 int _lindblad_terms;
-Mat full_A;
-Mat ham_A;
+Mat full_A,full_stiff_A;
+Mat ham_A,ham_stiff_A;
 PetscInt total_levels;
 int num_subsystems;
 operator subsystem_list[MAX_SUB];
@@ -224,6 +225,61 @@ void add_to_ham(PetscScalar a,operator op){
 }
 
 
+/*
+ * add_to_ham_stiff adds a*op to the stiff part of the hamiltonian
+ * Inputs:
+ *        PetscScalar a:    scalar to multiply op
+ *        operator op: operator to add
+ * Outputs:
+ *        none
+ */
+void add_to_ham_stiff(PetscScalar a,operator op){
+  PetscScalar    mat_scalar;
+
+
+  _check_initialized_A();
+  _stiff_solver = 1;
+  /*
+   * Construct the dense Hamiltonian only on the master node
+   */
+  if (nid==0&&_print_dense_ham) {
+    mat_scalar = a;
+    _add_to_dense_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,op->position);
+  }
+
+  /*
+   * Add to the Hamiltonian matrix, ham_A
+   */
+
+  mat_scalar = -a*PETSC_i;
+  _add_to_PETSc_kron(ham_stiff_A,mat_scalar,op->n_before,op->my_levels,
+                     op->my_op_type,op->position,1,1);
+
+  /*
+   * Add -i * (I cross H) to the superoperator matrix, A
+   * Since this is an additional I before, we simply
+   * pass total_levels as extra_before
+   * We pass the -a*PETSC_i to get the sign and imaginary part correct.
+   */
+
+  mat_scalar = -a*PETSC_i;
+  _add_to_PETSc_kron(full_stiff_A,mat_scalar,op->n_before,op->my_levels,
+                     op->my_op_type,op->position,total_levels,1);
+
+  /*
+   * Add i * (H cross I) to the superoperator matrix, A
+   * Since this is an additional I after, we simply
+   * pass total_levels as extra_after.
+   * We pass a*PETSC_i to get the imaginary part correct.
+   */
+
+  mat_scalar = a*PETSC_i;
+  _add_to_PETSc_kron(full_stiff_A,mat_scalar,op->n_before,op->my_levels,
+                     op->my_op_type,op->position,1,total_levels);
+  return;
+}
+
+
 
 /*
  * add_to_ham_mult2 adds a*op(handle1)*op(handle2) to the hamiltonian
@@ -312,6 +368,103 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
     /* We are multiplying two normal ops and have to do a little more work. */
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                            op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
+                            1,1,total_levels);
+  }
+
+  return;
+}
+
+/*
+ * add_to_ham_stiff_mult2 adds a*op(handle1)*op(handle2) to the stiff hamiltonian
+ * Inputs:
+ *        PetscScalar a:     scalar to multiply op(handle1)
+ *        operator op1: the first operator
+ *        operator op2: the second operator
+ * Outputs:
+ *        none
+ */
+void add_to_ham_stiff_mult2(PetscScalar a,operator op1,operator op2){
+  PetscScalar mat_scalar;
+  int         multiply_vec,n_after;
+  _check_initialized_A();
+
+  _stiff_solver = 1;
+
+  multiply_vec = _check_op_type2(op1,op2);
+
+
+  if (nid==0&&_print_dense_ham){
+    /* Add the terms to the dense Hamiltonian */
+    if (multiply_vec){
+      /*
+       * We are multiplying two vec ops. This will only be one value (of 1.0) in the
+       * subspace, at location op1->position, op2->position.
+       */
+      n_after    = total_levels/(op1->my_levels*op1->n_before);
+      _add_to_dense_kron_ij(a,op1->position,op2->position,op1->n_before,
+                          n_after,op1->my_levels);
+    } else {
+      /* We are multiplying two normal ops and have to do a little more work. */
+      _add_to_dense_kron_comb(a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                              op2->n_before,op2->my_levels,op2->my_op_type,op2->position);
+    }
+  }
+
+  /*
+   * Add -i * (I cross H) to the superoperator matrix, A
+   * Since this is an additional I before, we simply
+   * pass total_levels as extra_before
+   * We pass the -a*PETSC_i to get the sign and imaginary part correct.
+   */
+
+  mat_scalar = -a*PETSC_i;
+  if (multiply_vec){
+    /*
+     * We are multiplying two vec ops. This will only be one value (of 1.0) in the
+     * subspace, at location op1->position, op2->position.
+     */
+    n_after    = total_levels/(op1->my_levels*op1->n_before);
+    /* Add to the Hamiltonian matrix, -i*ham_A */
+    _add_to_PETSc_kron_ij(ham_stiff_A,mat_scalar,op1->position,op2->position,op1->n_before,
+                          n_after,op1->my_levels);
+    /* Add to the superoperator matrix, full_A */
+    _add_to_PETSc_kron_ij(full_stiff_A,mat_scalar,op1->position,op2->position,op1->n_before*total_levels,
+                          n_after,op1->my_levels);
+  } else {
+    /* Add to the Hamiltonian matrix, -i*ham_A */
+    _add_to_PETSc_kron_comb(ham_stiff_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                            op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
+                            1,1,1);
+
+    /* We are multiplying two normal ops and have to do a little more work. */
+    /* Add to the superoperator matrix, full_A */
+    _add_to_PETSc_kron_comb(full_stiff_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+                            op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
+                            total_levels,1,1);
+  }
+
+  /*
+   * Add i * (H cross I) to the superoperator matrix, A
+   * Since this is an additional I after, we simply
+   * pass total_levels as extra_after.
+   * We pass a*PETSC_i to get the imaginary part correct.
+   */
+  mat_scalar = a*PETSC_i;
+  if (multiply_vec){
+    /*
+     * We are multiplying two vec ops. This will only be one value (of 1.0) in the
+     * subspace, at location op1->position, op2->position.
+     */
+    n_after    = total_levels/(op1->my_levels*op1->n_before);
+
+    /* Add to the superoperator matrix, full_A */
+    _add_to_PETSc_kron_ij(full_stiff_A,mat_scalar,op1->position,op2->position,op1->n_before,
+                          n_after*total_levels,op1->my_levels);
+  } else {
+    /* We are multiplying two normal ops and have to do a little more work. */
+    /* Add to the superoperator matrix, full_A */
+    _add_to_PETSc_kron_comb(full_stiff_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
                             1,1,total_levels);
   }
@@ -605,6 +758,7 @@ void _check_initialized_op(){
   if (!op_initialized){
     op_finalized   = 0;
     _lindblad_terms = 0;
+    _stiff_solver   = 0;
     total_levels   = 1;
     op_initialized = 1;
   }
@@ -847,10 +1001,6 @@ void _check_initialized_A(){
 
       MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
       MatSeqAIJSetPreallocation(full_A,0,d_nz);
-
-      PetscFree(d_nz);
-      PetscFree(o_nz);
-
     } else {
       if (MAX_NNZ_PER_ROW>total_levels*total_levels) {
         MatMPIAIJSetPreallocation(full_A,total_levels,NULL,total_levels,NULL);
@@ -869,6 +1019,67 @@ void _check_initialized_A(){
 
     MatSetUp(full_A); // This might not be necessary?
 
+    MatCreate(PETSC_COMM_WORLD,&full_stiff_A);
+    MatSetType(full_stiff_A,MATMPIAIJ);
+    MatSetSizes(full_stiff_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+    MatSetFromOptions(full_stiff_A);
+
+
+    if (nid==0){
+      /*
+       * Only the first row has extra nonzeros, from the stabilization.
+       * We want to allocate extra memory for that row, but not for any others.
+       * Since we put total_levels extra elements (spread evenly), we
+       * add a fraction to the diagonal part and the remaining to the
+       * off diagonal part. We assume that core 0 owns roughly dim/np
+       * rows.
+       */
+      /*
+       * If the system is small enough, we can just allocate a lot of
+       * memory for it. Fixes a bug from PETSc when you try to preallocate bigger
+       * the row size
+       */
+      if (total_levels<MAX_NNZ_PER_ROW) {
+        d_nz[0] = total_levels;
+        o_nz[0] = total_levels;
+        for (i=1;i<(dim/np)*5;i++){
+          d_nz[i] = total_levels;
+          o_nz[i] = total_levels;
+        }
+      } else {
+        d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
+        o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
+        for (i=1;i<(dim/np)*5;i++){
+          d_nz[i] = MAX_NNZ_PER_ROW;
+          o_nz[i] = MAX_NNZ_PER_ROW;
+        }
+      }
+
+      MatMPIAIJSetPreallocation(full_stiff_A,0,d_nz,0,o_nz);
+      MatSeqAIJSetPreallocation(full_stiff_A,0,d_nz);
+
+      PetscFree(d_nz);
+      PetscFree(o_nz);
+
+    } else {
+      if (MAX_NNZ_PER_ROW>total_levels*total_levels) {
+        MatMPIAIJSetPreallocation(full_stiff_A,total_levels,NULL,total_levels,NULL);
+      } else {
+        MatMPIAIJSetPreallocation(full_stiff_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
+      }
+    }
+
+    /* if (nid==0){ */
+    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
+    /*                       ,NULL,,NULL,&full_stiff_A);CHKERRQ(ierr); */
+    /* } else { */
+    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
+    /*                       10,NULL,10,NULL,&full_stiff_A);CHKERRQ(ierr); */
+    /* } */
+
+    MatSetUp(full_stiff_A); // This might not be necessary?
+
+
     /* Setup ham_A matrix */
     MatCreate(PETSC_COMM_WORLD,&ham_A);
     MatSetType(ham_A,MATMPIAIJ);
@@ -880,6 +1091,19 @@ void _check_initialized_A(){
       MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
     }
     MatSetUp(ham_A); // This might not be necessary?
+
+    /* Setup ham_stiff_A matrix */
+    MatCreate(PETSC_COMM_WORLD,&ham_stiff_A);
+    MatSetType(ham_stiff_A,MATMPIAIJ);
+    MatSetSizes(ham_stiff_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
+    MatSetFromOptions(ham_stiff_A);
+    if (MAX_NNZ_PER_ROW>total_levels/2) {
+      MatMPIAIJSetPreallocation(ham_stiff_A,total_levels/2,NULL,total_levels/2,NULL);
+    } else {
+      MatMPIAIJSetPreallocation(ham_stiff_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
+    }
+    MatSetUp(ham_stiff_A); // This might not be necessary?
+
   }
 
   return;
