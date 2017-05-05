@@ -24,12 +24,12 @@ int main(int argc,char **args){
   operator a,*tls;
   Vec      rho;
 
-  MHz        = 1000;
-  GHz        = 1;
+  MHz        = 1;
+  GHz        = .001;
 
-  w0         = 7*GHz;
+  w0         = 5*GHz;
   wtls_base  = 10*MHz;
-  g_mult     = 0.1;
+  g_mult     = 1;
 
   init_cavity = 5;
   num_cavity = 15;
@@ -52,40 +52,32 @@ int main(int argc,char **args){
   /* Setup simple JC-like Hamiltonian */
   add_to_ham(w0,a->n); //w0 * (at*a)
   for (i=0;i<num_tls;i++){
-    wtls = i*5*MHz + wtls_base;
+    wtls = i*50*MHz + wtls_base;
     add_to_ham(wtls,tls[i]->n); //wtls * (tls^t*tls)
     add_to_ham_mult2(g,a->dag,tls[i]); //g * (a^t*tls)
     add_to_ham_mult2(g,a,tls[i]->dag); //g * (a*tls^t)
   }
-  g = 1.0*GHz;
-  add_lin(g,a->dag);
+  /* g = 1.0*GHz*0; */
+  /* add_lin(g,a); */
   create_full_dm(&rho);
 
   set_initial_pop(a,init_cavity);
   set_dm_from_initial_pop(rho);
-  printf("before psi\n");
-  levels = num_cavity * pow(2,num_tls);
-  print_psi(rho,levels);
-  printf("after psi\n");
 
   /* Open file that we will print to in ts_monitor */
   if (nid==0){
     f_pop = fopen("pop","w");
-    fprintf(f_pop,"#Time Populations\n");
+    fprintf(f_pop,"#Time (us) Populations\n");
   }
 
-  time_max = 10; //Units of 1/MHz = microseconds
+  time_max = 10; //Units of MHz (in eV) / hbar = 0.1592 microseconds
   dt       = 0.0001;
   steps_max = 1000;
 
   set_ts_monitor(ts_monitor);
   //  steady_state(rho);
   time_step(rho,time_max,dt,steps_max);
-  printf("before psi\n");
-  levels = num_cavity * pow(2,num_tls);
-  print_psi(rho,levels);
-  print_dm(rho,levels);
-  printf("after psi\n");
+
   for (i=0;i<num_tls;i++){
     destroy_op(&tls[i]);
   }
@@ -100,20 +92,19 @@ int main(int argc,char **args){
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
   double *populations;
-  PetscReal norm;
+  PetscReal norm, time_us;
   int num_pop,i;
 
   num_pop = get_num_populations();
 
   populations = malloc(num_pop*sizeof(double));
-  /* VecNorm(dm,NORM_2,&norm); */
-  /* printf("new step: %f norm: %f",time,norm); */
-  print_dm(dm,3);
+  VecNorm(dm,NORM_2,&norm);
+  //print_psi(dm,3);
   get_populations(dm,&populations);
-
+  time_us = time*0.1592; // Based on MHz (in eV) / hbar
   if (nid==0){
     /* Print populations to file */
-    fprintf(f_pop,"%e",time);
+    fprintf(f_pop,"%e",time_us);
     for(i=0;i<num_pop;i++){
       fprintf(f_pop," %e ",populations[i]);
     }

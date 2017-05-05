@@ -125,7 +125,6 @@ void _add_to_PETSc_kron_ij(Mat matrix,PetscScalar add_to_mat,int i_op,int j_op,
 
   MatGetOwnershipRange(matrix,&Istart,&Iend); //FIXME: Make these library global?
 
-
   for (k1=0;k1<n_after;k1++){ /* n_after loop */
     for (k2=0;k2<n_before;k2++){ /* n_before loop */
       /*

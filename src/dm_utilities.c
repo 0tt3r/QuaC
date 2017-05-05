@@ -194,13 +194,19 @@ void create_full_dm(Vec* new_dm){
   _check_initialized_A();
 
   /* Create the dm, partition with PETSc */
-  VecCreate(PETSC_COMM_WORLD,new_dm);
-  VecSetType(*new_dm,VECMPI);
+  /* VecCreate(PETSC_COMM_WORLD,new_dm); */
+  /* VecSetType(*new_dm,VECMPI); */
+  /* if (_lindblad_terms) { */
+  /*   VecSetSizes(*new_dm,PETSC_DECIDE,pow(size,2)); */
+  /* } else { */
+  /*   VecSetSizes(*new_dm,PETSC_DECIDE,size); */
+  /* } */
   if (_lindblad_terms) {
-    VecSetSizes(*new_dm,PETSC_DECIDE,pow(size,2));
+    MatCreateVecs(full_A,new_dm,NULL);
   } else {
-    VecSetSizes(*new_dm,PETSC_DECIDE,size);
+    MatCreateVecs(ham_A,new_dm,NULL);
   }
+
   /* Set all elements to 0 */
   VecSet(*new_dm,0.0);
 }

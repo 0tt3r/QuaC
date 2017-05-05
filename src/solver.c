@@ -18,6 +18,8 @@ PetscErrorCode _RHS_time_dep_ham(TS,PetscReal,Vec,Mat,Mat,void*); // Move to hea
 
 PetscErrorCode (*_ts_monitor)(TS,PetscInt,PetscReal,Vec,void*) = NULL;
 
+PetscErrorCode _Normalize_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
+PetscErrorCode _Normalize_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,void*);
 /*
  * steady_state solves for the steady_state of the system
  * that was previously setup using the add_to_ham and add_lin
@@ -305,7 +307,6 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     MatSetValue(solve_A,i,i,mat_tmp,ADD_VALUES);
   }
 
-
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
    *       Create the timestepping solver and set various options       *
    *- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -407,7 +408,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
      */
     TSSetEventHandler(ts,nevents,&direction,&terminate,_QG_EventFunction,_QG_PostEventFunction,NULL);
   }
-
+  if (_lindblad_terms) {
+    nevents   =  1; //Only one event for now (did we cross a gate?)
+    direction =  0; //We only want to count an event if we go from positive to negative
+    terminate = PETSC_FALSE; //Keep time stepping after we passed our event
+    TSSetEventHandler(ts,nevents,&direction,&terminate,_Normalize_EventFunction,_Normalize_PostEventFunction,NULL);
+  }
   TSSetFromOptions(ts);
   TSSolve(ts,x);
   TSGetTimeStepNumber(ts,&steps);
@@ -491,4 +497,25 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
   }
   return 0;
+}
+
+/*
+ * EventFunction is one step in Petsc to apply some action if a statement is true.
+ * This function ALWAYS triggers,
+ */
+PetscErrorCode _Normalize_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
+  /* Return 0 to mean we want to trigger this event*/
+  fvalue[0] = 0;
+  return(0);
+}
+
+/*
+ * PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
+ * to apply that event, which, in this case, normalizes the vector.
+*/
+PetscErrorCode _Normalize_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+  PetscErrorCode  ierr;
+  ierr = VecNormalize(U,NULL);CHKERRQ(ierr);
+  TSSetSolution(ts,U);
+  return(0);
 }
