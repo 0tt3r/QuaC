@@ -984,11 +984,11 @@ void _check_initialized_A(){
        * the row size
        */
       if (total_levels<MAX_NNZ_PER_ROW) {
-        d_nz[0] = total_levels;
-        o_nz[0] = total_levels;
+        d_nz[0] = total_levels*total_levels/np;
+        o_nz[0] = total_levels*total_levels/np;
         for (i=1;i<(dim/np)*5;i++){
-          d_nz[i] = total_levels;
-          o_nz[i] = total_levels;
+          d_nz[i] = total_levels*total_levels/np;
+          o_nz[i] = total_levels*total_levels/np;
         }
       } else {
         d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
