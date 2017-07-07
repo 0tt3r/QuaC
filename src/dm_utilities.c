@@ -73,7 +73,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
       printf("       partial_trace_over!\n");
       exit(0);
     }
-  }pp
+  }
 
   PetscMalloc1(number_of_ops,&nbef_prev);
   PetscMalloc1(number_of_ops,&nop_prev);
