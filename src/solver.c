@@ -407,8 +407,8 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
-  //PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_DENSE);
+  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_DENSE); */
 
   MatView(solve_A,mat_view);
   if(_stiff_solver){
