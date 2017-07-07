@@ -70,10 +70,10 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   if (dm_size!=pow(total_levels,2)){
     if (nid==0){
       printf("ERROR! You need to use the full Hilbert space sized DM in \n");
-      printf("       partial_trace_over!");
+      printf("       partial_trace_over!\n");
       exit(0);
     }
-  }
+  }pp
 
   PetscMalloc1(number_of_ops,&nbef_prev);
   PetscMalloc1(number_of_ops,&nop_prev);
@@ -97,7 +97,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
     for (j=0;j<i;j++) {
       if (nbef_prev[j]==op->n_before){
         if (nid==0){
-          printf("ERROR! Partial tracing the same operator twice does not make sense!");
+          printf("ERROR! Partial tracing the same operator twice does not make sense!\n");
           exit(0);
         }
       }
