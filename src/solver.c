@@ -77,7 +77,7 @@ void steady_state(Vec x){
         if (nid==0){
           for (i=0;i<total_levels;i++){
             for (j=0;j<total_levels;j++){
-              fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
+              fprintf(fp_ham,"%e %e ",PetscRealPart(_hamiltonian[i][j]),PetscImaginaryPart(_hamiltonian[i][j]));
             }
             fprintf(fp_ham,"\n");
           }
@@ -267,13 +267,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     /* Print dense ham, if it was asked for */
     if (_print_dense_ham){
       FILE *fp_ham;
-
       fp_ham = fopen("ham","w");
 
       if (nid==0){
         for (i=0;i<total_levels;i++){
           for (j=0;j<total_levels;j++){
-            fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
+            fprintf(fp_ham,"%e %e ",PetscRealPart(_hamiltonian[i][j]),PetscImaginaryPart(_hamiltonian[i][j]));
           }
           fprintf(fp_ham,"\n");
         }
@@ -408,7 +407,6 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_DENSE); */
 
   MatView(solve_A,mat_view);
   if(_stiff_solver){
