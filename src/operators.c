@@ -327,7 +327,6 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
    * pass total_levels as extra_before
    * We pass the -a*PETSC_i to get the sign and imaginary part correct.
    */
-
   mat_scalar = -a*PETSC_i;
   if (multiply_vec){
     /*
@@ -345,17 +344,17 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
     /* Add to the Hamiltonian matrix, -i*ham_A */
     _add_to_PETSc_kron_comb(ham_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
-                            1,1,1);
+                            1,1,1,0);
 
     /* We are multiplying two normal ops and have to do a little more work. */
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
-                            total_levels,1,1);
+                            total_levels,1,1,0);
   }
 
   /*
-   * Add i * (H cross I) to the superoperator matrix, A
+   * Add i * (H^T cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
    * pass total_levels as extra_after.
    * We pass a*PETSC_i to get the imaginary part correct.
@@ -369,14 +368,15 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
     n_after    = total_levels/(op1->my_levels*op1->n_before);
 
     /* Add to the superoperator matrix, full_A */
-    _add_to_PETSc_kron_ij(full_A,mat_scalar,op1->position,op2->position,op1->n_before,
+    /* Flip op1 and op2 positions because we need the transpose */
+    _add_to_PETSc_kron_ij(full_A,mat_scalar,op2->position,op1->position,op1->n_before,
                           n_after*total_levels,op1->my_levels);
   } else {
     /* We are multiplying two normal ops and have to do a little more work. */
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
-                            1,1,total_levels);
+                            1,1,total_levels,1);
   }
 
   return;
@@ -442,17 +442,17 @@ void add_to_ham_stiff_mult2(PetscScalar a,operator op1,operator op2){
     /* Add to the Hamiltonian matrix, -i*ham_A */
     _add_to_PETSc_kron_comb(ham_stiff_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
-                            1,1,1);
+                            1,1,1,0);
 
     /* We are multiplying two normal ops and have to do a little more work. */
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_stiff_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
-                            total_levels,1,1);
+                            total_levels,1,1,0);
   }
 
   /*
-   * Add i * (H cross I) to the superoperator matrix, A
+   * Add i * (H^T cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
    * pass total_levels as extra_after.
    * We pass a*PETSC_i to get the imaginary part correct.
@@ -466,14 +466,15 @@ void add_to_ham_stiff_mult2(PetscScalar a,operator op1,operator op2){
     n_after    = total_levels/(op1->my_levels*op1->n_before);
 
     /* Add to the superoperator matrix, full_A */
-    _add_to_PETSc_kron_ij(full_stiff_A,mat_scalar,op1->position,op2->position,op1->n_before,
+    /* We switch op1 and op2 positions to get the transpose */
+    _add_to_PETSc_kron_ij(full_stiff_A,mat_scalar,op2->position,op1->position,op1->n_before,
                           n_after*total_levels,op1->my_levels);
   } else {
     /* We are multiplying two normal ops and have to do a little more work. */
     /* Add to the superoperator matrix, full_A */
     _add_to_PETSc_kron_comb(full_stiff_A,mat_scalar,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                             op2->n_before,op2->my_levels,op2->my_op_type,op2->position,
-                            1,1,total_levels);
+                            1,1,total_levels,1);
   }
 
   return;
@@ -526,13 +527,13 @@ void add_to_ham_mult3(PetscScalar a,operator op1,operator op2,operator op3){
     /* The first pair is the vec pair and op3 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op3->n_before,op3->my_levels,
                                 op3->my_op_type,op1->n_before,op1->my_levels,
-                                op1->position,op2->position,total_levels,1,1);
+                                op1->position,op2->position,total_levels,1,1,0);
 
   } else {
     /* The last pair is the vec pair and op1 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op1->n_before,op1->my_levels,
                                 op1->my_op_type,op2->n_before,op2->my_levels,
-                                op2->position,op3->position,total_levels,1,1);
+                                op2->position,op3->position,total_levels,1,1,0);
 
   }
   /*
@@ -546,12 +547,12 @@ void add_to_ham_mult3(PetscScalar a,operator op1,operator op2,operator op3){
     /* The first pair is the vec pair and op3 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op3->n_before,op3->my_levels,
                                 op3->my_op_type,op1->n_before,op1->my_levels,
-                                op1->position,op2->position,1,1,total_levels);
+                                op1->position,op2->position,1,1,total_levels,1);
   } else {
     /* The last pair is the vec pair and op1 is the normal op*/
     _add_to_PETSc_kron_comb_vec(full_A,mat_scalar,op1->n_before,op1->my_levels,
                                 op1->my_op_type,op2->n_before,op2->my_levels,
-                                op2->position,op3->position,1,1,total_levels);
+                                op2->position,op3->position,1,1,total_levels,1);
   }
 
   return;

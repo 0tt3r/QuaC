@@ -457,13 +457,15 @@ void _add_to_PETSc_kron(Mat matrix, PetscScalar a,int n_before,int my_levels,
  *      int extra_before:  extra Hilbert space size before
  *      int extra_between: extra Hilbert space size between
  *      int extra_after:   extra Hilbert space size after
+ *      int transpose:     whether or not to take the transpose
  * Outputs:
  *      none, but adds to full_A
  */
 
 void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,op_type op_type1,int position1,
                              int n_before2,int levels2,op_type op_type2,int position2,
-                             int extra_before,int extra_between,int extra_after){
+                             int extra_before,int extra_between,int extra_after,
+                             int transpose){
   long loop_limit1,loop_limit2,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,tmp_switch,i_comb,j_comb;
   double val1,val2;
@@ -557,8 +559,18 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
          * a cross (I cross b), so the the size of the second operator
          * is n_between*levels2
          */
-        i_comb = levels2*n_between*i1 + i2;
-        j_comb = levels2*n_between*j1 + j2;
+        if (transpose) {
+          /*
+           * We can transpose the combined operators because
+           * the transpose of Kronecker products is the
+           * kronecker product of the transposes
+           */
+          j_comb = levels2*n_between*i1 + i2;
+          i_comb = levels2*n_between*j1 + j2;
+        } else {
+          i_comb = levels2*n_between*i1 + i2;
+          j_comb = levels2*n_between*j1 + j2;
+        }
         add_to_mat = a*val1*val2;
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
                               n_after*extra_after,my_levels);
@@ -568,7 +580,6 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
 
   return;
 }
-
 
 /*
  * _add_to_PETSc_kron_comb_vec expands a*vec*vec*op or a*op*vec*vec
@@ -586,13 +597,15 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
  *      int extra_before:  extra Hilbert space size before
  *      int extra_between: extra Hilbert space size between
  *      int extra_after:   extra Hilbert space size after
+ *      int transpose:     whether or not to take the transpose
  * Outputs:
  *      none, but adds to full_A
  */
 
 void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int levels_op,op_type op_type_op,
                                  int n_before_vec,int levels_vec,int i_vec,int j_vec,
-                                 int extra_before,int extra_between,int extra_after){
+                                 int extra_before,int extra_between,int extra_after,
+                                 int transpose){
   long loop_limit_op,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,i_comb,j_comb;
   double val1,val2;
@@ -650,8 +663,18 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
          * a cross (I cross b), so the the size of the second operator
          * is n_between*levels2
          */
-        i_comb = levels_op*n_between*i1 + i2;
-        j_comb = levels_op*n_between*j1 + j2;
+        if (transpose) {
+          /*
+           * We can transpose the combined operators because
+           * the transpose of Kronecker products is the
+           * kronecker product of the transposes
+           */
+          j_comb = levels_op*n_between*i1 + i2;
+          i_comb = levels_op*n_between*j1 + j2;
+        } else {
+          i_comb = levels_op*n_between*i1 + i2;
+          j_comb = levels_op*n_between*j1 + j2;
+        }
         add_to_mat = a*val1*val2;
 
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
@@ -704,8 +727,18 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
          * a cross (I cross b), so the the size of the second operator
          * is n_between*levels2
          */
-        i_comb = levels_vec*n_between*i1 + i2;
-        j_comb = levels_vec*n_between*j1 + j2;
+        if (transpose) {
+          /*
+           * We can transpose the combined operators because
+           * the transpose of Kronecker products is the
+           * kronecker product of the transposes
+           */
+          j_comb = levels_vec*n_between*i1 + i2;
+          i_comb = levels_vec*n_between*j1 + j2;
+        } else {
+          i_comb = levels_vec*n_between*i1 + i2;
+          j_comb = levels_vec*n_between*j1 + j2;
+        }
         add_to_mat = a*val1*val2;
 
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
