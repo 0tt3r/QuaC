@@ -3,6 +3,7 @@
 
 void QuaC_initialize(int,char**);
 void QuaC_finalize();
+void QuaC_clear();
 void destroy_op();
 void destroy_vec();
 

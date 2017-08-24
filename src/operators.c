@@ -17,7 +17,7 @@
 
 #define MAX_NNZ_PER_ROW 50
 
-static int              op_initialized = 0;
+int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
 int op_finalized;
 int _stiff_solver;
@@ -769,6 +769,7 @@ void _check_initialized_op(){
     _stiff_solver   = 0;
     total_levels   = 1;
     op_initialized = 1;
+    num_subsystems = 0;
   }
 
   if (num_subsystems+1>MAX_SUB&&nid==0){

@@ -22,6 +22,7 @@ extern int  _lindblad_terms;
 extern int  _stiff_solver;
 extern PetscInt total_levels;
 extern int  num_subsystems;
+extern int  op_initialized;
 extern PetscScalar **_hamiltonian;
 extern int _print_dense_ham;
 #endif
