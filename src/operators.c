@@ -30,12 +30,19 @@ operator subsystem_list[MAX_SUB];
 int _print_dense_ham = 0;
 int _num_time_dep = 0;
 time_dep_struct _time_dep_list[MAX_SUB];
-double **_hamiltonian;
+PetscScalar **_hamiltonian;
 
 /*
  * print_dense_ham tells the program to print the dense hamiltonian when it is constructed.
  */
 void print_dense_ham(){
+  if (op_finalized) {
+    if (nid==0){
+      printf("ERROR! You need to call print_dense_ham before adding anything to the hamiltonian!");
+      exit(0);
+    }
+  }
+  printf("Printing dense Hamiltonian in file 'ham'.\n");
   _print_dense_ham = 1;
 }
 
@@ -309,7 +316,7 @@ void add_to_ham_mult2(PetscScalar a,operator op1,operator op2){
                           n_after,op1->my_levels);
     } else {
       /* We are multiplying two normal ops and have to do a little more work. */
-      _add_to_dense_kron_comb(a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
+        _add_to_dense_kron_comb(a,op1->n_before,op1->my_levels,op1->my_op_type,op1->position,
                               op2->n_before,op2->my_levels,op2->my_op_type,op2->position);
     }
   }
@@ -949,9 +956,9 @@ void _check_initialized_A(){
     if (nid==0) {
       printf("Operators created. Total Hilbert space size: %ld\n",total_levels);
       if (_print_dense_ham){
-        _hamiltonian = malloc(total_levels*sizeof(double*));
+        _hamiltonian = malloc(total_levels*sizeof(PetscScalar*));
         for (i=0;i<total_levels;i++){
-          _hamiltonian[i] = malloc(total_levels*sizeof(double));
+          _hamiltonian[i] = malloc(total_levels*sizeof(PetscScalar));
         }
       }
     }
