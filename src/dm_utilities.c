@@ -996,9 +996,8 @@ void sqrt_mat(Mat dm_mat){
   MatAssemblyEnd(sqrt_D,MAT_FINAL_ASSEMBLY);
   /* Calculate V*sqrt(D) */
   MatMatMult(V,sqrt_D,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
-
   /* Calculate V^\dagger */
-  MatHermitianTranspose(V,MAT_REUSE_MATRIX,&V);
+  MatHermitianTranspose(V,MAT_INPLACE_MATRIX,&V);
   MatDenseRestoreArray(dm_mat,&array);
   /* Calculate (V*sqrt(D))*V^\dagger, store in dm_mat */
   MatMatMult(result_mat,V,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_mat);
