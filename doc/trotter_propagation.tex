@@ -1,0 +1,99 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\begin{document}
+
+\title{Notes on the Trotter Breakup for Jaynes-Cummings Hamiltonians}
+\author{Matthew Otten}
+
+\maketitle
+
+\begin{abstract}
+  Basic notes on utilizing the trotter breakup for the Jaynes-Cummings Hamiltonian.
+\end{abstract}
+
+\section{Hamiltonian}
+The Jaynes-Cummings model describeds the dynamics of
+a two level system coupled to an oscillator mode (be it a mechanical resonator, a
+plasmonic system, or an electromagnetic field):
+\begin{equation}\label{jc_ham}
+  H =  \omega_a a^\dagger a +  \omega_\sigma \sigma^\dagger \sigma +
+   g (\sigma + \sigma^\dagger ) ( a + a^\dagger),
+\end{equation}
+where $a^\dagger$ is the creation operator of the oscillator, $\omega_s$ is the frequency
+of the oscillator, $\sigma^\dagger$ is the creation operator of the two level system,
+$\omega_\sigma$ is the transition frequency of the two level sistem, and $g$ is the
+coupling strength between the two systems. We are using units such that $\hbar = 1$.
+This Hamiltonian can be extended to many two level systems, which is sometimes
+called the Tavis-Cummings Hamiltonian:
+\begin{equation}\label{tc_ham}
+  H =  \omega_a a^\dagger a +  \sum_i^{N_{tls}}\omega_i \sigma_i^\dagger \sigma_i +
+   g_i ( \sigma_i + \sigma_i^\dagger) ( a + a^\dagger),
+\end{equation}
+which is just equation~\ref{jc_ham}, but with multiple two level systems,
+$\sigma_i$. Using either of these Hamiltonians, we can solve for the time
+dynamics of the system using the time-dependent Schrodinger equation,
+
+\begin{equation}\label{schrod}
+  \dot{\psi} = -i H \psi,
+\end{equation}
+which has the solution
+
+\begin{equation}\label{solution}
+  \psi (t) = \exp(-i H t) \psi (0).
+\end{equation}
+If the exponential of $H$ can be calculated efficiently, then the problem is
+solved.
+
+\section{Trotter Breakup}
+Taking the exponential of a matrix is, generally, difficult. One avenue is using
+the symmetric Trotter breakup to split $H$ into two parts: the diagonal
+oscillator terms ($A = \omega_a a^\dagger a + \sum_i^{N_{tls}}\omega_i
+\sigma_i^\dagger \sigma_i$) and the off diagonal coupling terms ($B =
+\sum_i^{N_{tls}} g_i ( \sigma_i \sigma_i^\dagger) ( a + a^\dagger),$). The
+symmetric Trotter breakup states that
+\begin{equation} \label{trotter}
+  \exp(-i(A+B)\Delta t) \approx \exp(-i A \Delta t/2) \exp(-i B \Delta t) \exp(-i A \Delta t/2) + \mathcal{O} (\Delta t ^3).
+\end{equation}
+The exponential of a diagonal matrix, such as $A$, is trivially the exponential
+of the diagonal elements. If the exponential of $B$ can be found with similar
+ease, the explicit propagator can be constructed and time stepping becomes a
+matrix vector product with $2^{nd}$ order accuracy. One way of finding the
+exponential of a matrix is by diagonalizing that matrix.
+
+\section{Eigenvectors of Kronecker Products}
+Luckily, $B$ is a matrix of high structure. In the one two level system case,
+explicitly including the tensor products
+\begin{equation}\label{explicit_b}
+  B = (a + a^\dagger) \otimes (\sigma + \sigma^\dagger ).
+\end{equation}
+In the multiple two level system case, there are additional Kronecker products.
+The eigenvectors of the Kronecker product of two matrices turns
+out to be the Kronecker product of the eigenvectors of the two matrices, and the
+eigenvalues of the Kronecker product are the product of the eigenvalues of the
+two matrices. This can be simply shown,
+\begin{equation}\label{kron_ev}
+  (C\otimes D) (v_c \otimes v_d) = (C v_c ) \otimes (D v_d) = (\lambda_c v_c) \otimes (\lambda_d v_d) = \lambda_c \lambda_d (v_c \otimes v_d).
+\end{equation}
+
+Since our $B$ deals with the tensor product of many small matrices,
+equation~\ref{kron_ev} shows that we can build the eigensystems
+of huge matrices ($2^{30}$) using the eigensystems of the small matrices ($<\mathcal{O}
+(10)$). One issue is that if $C = D$, the eigenvectors obtained via
+equation~\ref{kron_ev} are actually a linear combination of the basic
+eigenvectors (at least in the case where $C = \sigma + \sigma^\dagger$). I am
+not sure exactly how to deal with this in the general case, but I found an
+empirical way of getting the eigenvectors of $C \otimes C \otimes C \otimes ...
+\otimes C$ when $C = \sigma + \sigma^\dagger$, which is good enough for now.
+Then, by construction, I can get the eigenvectors and eigenvalues of $B$
+(without any need to do explicit diagonalization). Using this, and the Trotter
+breakup of equation~\ref{trotter}, we can create the explicit propagator:
+\begin{equation}\label{propagator}
+  P = \exp(-i A \Delta t/2) U \exp(-i V \Delta t) U^\dagger \exp(-i A \Delta t/2),
+\end{equation}
+where $U$ is the matrix of eigenvectors of $B$ and $V$ is the diagonal matrix of
+eigenvalues of $B$. With $P$, we can do the time propagation efficiently - each
+timestep is a single matrix - vector product, and the method is stable with any
+timestep, with second order accuracy.
+
+\end{document}
