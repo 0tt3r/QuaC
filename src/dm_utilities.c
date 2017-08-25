@@ -3,23 +3,41 @@
 #include <stdio.h>
 #include <petscblaslapack.h>
 
-
-
-/* Print the DM as a matrix.
+/*
+ * Print the DM as a matrix.
  * Not recommended for large matrices.
  */
 void print_dm(Vec rho,int h_dim){
   PetscScalar val;
   int i,j;
-
   for (i=0;i<h_dim;i++){
     for (j=0;j<h_dim;j++){
       get_dm_element(rho,i,j,&val);
-      PetscPrintf(PETSC_COMM_WORLD,"%f ",val);
+      PetscPrintf(PETSC_COMM_WORLD,"%f + %f i",PetscRealPart(val),
+                  PetscImaginaryPart(val));
     }
     PetscPrintf(PETSC_COMM_WORLD,"\n");
   }
     PetscPrintf(PETSC_COMM_WORLD,"\n");
+}
+
+/*
+ * Print psi
+ * Not recommended for large systems
+ */
+
+void print_psi(Vec rho,int h_dim){
+  PetscScalar val_array[1];
+  PetscInt location[1];
+  int i;
+
+  for (i=0;i<h_dim;i++){
+    location[0] = i;
+    VecGetValues(rho,1,location,val_array);
+    PetscPrintf(PETSC_COMM_WORLD,"%f + %f i\n",PetscRealPart(val_array[0]),
+                PetscImaginaryPart(val_array[0]));
+  }
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
 }
 
 /*
@@ -52,7 +70,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   if (dm_size!=pow(total_levels,2)){
     if (nid==0){
       printf("ERROR! You need to use the full Hilbert space sized DM in \n");
-      printf("       partial_trace_over!");
+      printf("       partial_trace_over!\n");
       exit(0);
     }
   }
@@ -79,7 +97,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
     for (j=0;j<i;j++) {
       if (nbef_prev[j]==op->n_before){
         if (nid==0){
-          printf("ERROR! Partial tracing the same operator twice does not make sense!");
+          printf("ERROR! Partial tracing the same operator twice does not make sense!\n");
           exit(0);
         }
       }
@@ -176,9 +194,19 @@ void create_full_dm(Vec* new_dm){
   _check_initialized_A();
 
   /* Create the dm, partition with PETSc */
-  VecCreate(PETSC_COMM_WORLD,new_dm);
-  VecSetType(*new_dm,VECMPI);
-  VecSetSizes(*new_dm,PETSC_DECIDE,pow(size,2));
+  /* VecCreate(PETSC_COMM_WORLD,new_dm); */
+  /* VecSetType(*new_dm,VECMPI); */
+  /* if (_lindblad_terms) { */
+  /*   VecSetSizes(*new_dm,PETSC_DECIDE,pow(size,2)); */
+  /* } else { */
+  /*   VecSetSizes(*new_dm,PETSC_DECIDE,size); */
+  /* } */
+  if (_lindblad_terms) {
+    MatCreateVecs(full_A,new_dm,NULL);
+  } else {
+    MatCreateVecs(ham_A,new_dm,NULL);
+  }
+
   /* Set all elements to 0 */
   VecSet(*new_dm,0.0);
 }
@@ -221,7 +249,11 @@ void set_dm_from_initial_pop(Vec x){
       //      init_row_op += ((int)subsystem_list[i]->initial_pop)*subsystem_list[i]->n_before;
     }
 
-    init_row_op = total_levels*init_row_op + init_row_op;
+    if(_lindblad_terms) {
+      init_row_op = total_levels*init_row_op + init_row_op;
+    } else {
+      init_row_op = init_row_op;
+    }
     mat_tmp_val = 1. + 0.0*PETSC_i;
     VecSetValue(x,init_row_op,mat_tmp_val,INSERT_VALUES);
 
@@ -492,13 +524,17 @@ int get_num_populations() {
 void get_populations(Vec x,double **populations) {
   int               j,my_levels,n_after,cur_state,num_pop;
   int               *i_sub_to_i_pop;
-  PetscInt          x_low,x_high,i,dm_size;
+  PetscInt          x_low,x_high,i,dm_size,diag_index,dim;
   const PetscScalar *xa;
-  PetscReal         tmp_real;
-
+  PetscReal         tmp_real,tmp_imag;
+  if(_lindblad_terms) {
+    dim = total_levels*total_levels;
+  } else {
+    dim = total_levels;
+  }
   VecGetSize(x,&dm_size);
 
-  if (dm_size!=total_levels*total_levels){
+  if (dm_size!=dim){
     if (nid==0){
       printf("ERROR! The input density matrix does not seem to be the full one!\n");
       printf("       Populations cannot be calculated.\n");
@@ -533,9 +569,16 @@ void get_populations(Vec x,double **populations) {
 
 
   for (i=0;i<total_levels;i++){
-    if ((i*total_levels+i)>=x_low&&(i*total_levels+i)<x_high) {
+    if (_lindblad_terms) {
+      diag_index = i*total_levels+i;
+    } else {
+      /* If we are using the schrodinger solver, then i is the diag index */
+      diag_index = i;
+    }
+    if (diag_index>=x_low&&diag_index<x_high) {
       /* Get the diagonal entry of rho */
-      tmp_real = (double)PetscRealPart(xa[i*(total_levels)+i-x_low]);
+      tmp_real = (double)PetscRealPart(xa[diag_index-x_low]);
+      tmp_imag = (double)PetscImaginaryPart(xa[diag_index-x_low]);
       //      printf("%e \n",(double)PetscRealPart(xa[i*(total_levels)+i-x_low]));
       for(j=0;j<num_subsystems;j++){
         /*
@@ -556,12 +599,24 @@ void get_populations(Vec x,double **populations) {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
           cur_state = ((int)floor(i/n_after)%(my_levels));
-          (*populations)[i_sub_to_i_pop[j]+cur_state] += tmp_real;
+          if (_lindblad_terms) {
+            (*populations)[i_sub_to_i_pop[j]+cur_state] += tmp_real;
+          } else {
+            // If we are using the Schrodinger solver, we need to use
+            // a^* a (that is, complex conjugate of a times a)
+            (*populations)[i_sub_to_i_pop[j]+cur_state] += tmp_real*tmp_real + tmp_imag*tmp_imag;
+          }
         } else {
           my_levels = subsystem_list[j]->my_levels;
           n_after   = total_levels/(my_levels*subsystem_list[j]->n_before);
           cur_state = ((int)floor(i/n_after)%(my_levels));
-          (*populations)[i_sub_to_i_pop[j]] += tmp_real*cur_state;
+          if (_lindblad_terms) {
+            (*populations)[i_sub_to_i_pop[j]] += tmp_real*cur_state;
+          } else {
+            // If we are using the Schrodinger solver, we need to use
+            // a^* a (that is, complex conjugate of a times a)
+            (*populations)[i_sub_to_i_pop[j]] += cur_state * (tmp_real*tmp_real + tmp_imag*tmp_imag);
+          }
         }
       }
     }
@@ -941,9 +996,8 @@ void sqrt_mat(Mat dm_mat){
   MatAssemblyEnd(sqrt_D,MAT_FINAL_ASSEMBLY);
   /* Calculate V*sqrt(D) */
   MatMatMult(V,sqrt_D,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
-
   /* Calculate V^\dagger */
-  MatHermitianTranspose(V,MAT_REUSE_MATRIX,&V);
+  MatHermitianTranspose(V,MAT_INPLACE_MATRIX,&V);
   MatDenseRestoreArray(dm_mat,&array);
   /* Calculate (V*sqrt(D))*V^\dagger, store in dm_mat */
   MatMatMult(result_mat,V,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_mat);

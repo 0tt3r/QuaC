@@ -31,8 +31,10 @@ typedef struct time_dep_struct{
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
 void add_to_ham(PetscScalar,operator);
+void add_to_ham_stiff(PetscScalar,operator);
 void add_to_ham_time_dep(double(*pulse)(double),int,...);
 void add_to_ham_mult2(PetscScalar,operator,operator);
+void add_to_ham_stiff_mult2(PetscScalar,operator,operator);
 void add_to_ham_mult3(PetscScalar,operator,operator,operator);
 int  _check_op_type2(operator,operator);
 int  _check_op_type3(operator,operator,operator);

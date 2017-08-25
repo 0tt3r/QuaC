@@ -125,7 +125,6 @@ void _add_to_PETSc_kron_ij(Mat matrix,PetscScalar add_to_mat,int i_op,int j_op,
 
   MatGetOwnershipRange(matrix,&Istart,&Iend); //FIXME: Make these library global?
 
-
   for (k1=0;k1<n_after;k1++){ /* n_after loop */
     for (k2=0;k2<n_before;k2++){ /* n_before loop */
       /*
@@ -351,7 +350,7 @@ void _mult_PETSc_init_DM(Mat subspace_dm,Mat rho_mat,double trace){
  * then needs to be expanded to the larger space, defined by
  * the Kronecker product with I_before and with I_after
  * Inputs:
- *       double a:               value to add
+ *       PetscScalar a:               value to add
  *       int i_op:               i of the subspace
  *       int j_op:               j of the subspace
  *       int n_before:           size of I_before
@@ -362,7 +361,7 @@ void _mult_PETSc_init_DM(Mat subspace_dm,Mat rho_mat,double trace){
  *
  */
 
-void _add_to_dense_kron_ij(double a,int i_op,int j_op,
+void _add_to_dense_kron_ij(PetscScalar a,int i_op,int j_op,
                            int n_before,int n_after,int my_levels){
   long k1,k2,i_ham,j_ham;
 
@@ -458,13 +457,15 @@ void _add_to_PETSc_kron(Mat matrix, PetscScalar a,int n_before,int my_levels,
  *      int extra_before:  extra Hilbert space size before
  *      int extra_between: extra Hilbert space size between
  *      int extra_after:   extra Hilbert space size after
+ *      int transpose:     whether or not to take the transpose
  * Outputs:
  *      none, but adds to full_A
  */
 
 void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,op_type op_type1,int position1,
                              int n_before2,int levels2,op_type op_type2,int position2,
-                             int extra_before,int extra_between,int extra_after){
+                             int extra_before,int extra_between,int extra_after,
+                             int transpose){
   long loop_limit1,loop_limit2,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,tmp_switch,i_comb,j_comb;
   double val1,val2;
@@ -558,8 +559,18 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
          * a cross (I cross b), so the the size of the second operator
          * is n_between*levels2
          */
-        i_comb = levels2*n_between*i1 + i2;
-        j_comb = levels2*n_between*j1 + j2;
+        if (transpose) {
+          /*
+           * We can transpose the combined operators because
+           * the transpose of Kronecker products is the
+           * kronecker product of the transposes
+           */
+          j_comb = levels2*n_between*i1 + i2;
+          i_comb = levels2*n_between*j1 + j2;
+        } else {
+          i_comb = levels2*n_between*i1 + i2;
+          j_comb = levels2*n_between*j1 + j2;
+        }
         add_to_mat = a*val1*val2;
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
                               n_after*extra_after,my_levels);
@@ -569,7 +580,6 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
 
   return;
 }
-
 
 /*
  * _add_to_PETSc_kron_comb_vec expands a*vec*vec*op or a*op*vec*vec
@@ -587,13 +597,15 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
  *      int extra_before:  extra Hilbert space size before
  *      int extra_between: extra Hilbert space size between
  *      int extra_after:   extra Hilbert space size after
+ *      int transpose:     whether or not to take the transpose
  * Outputs:
  *      none, but adds to full_A
  */
 
 void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int levels_op,op_type op_type_op,
                                  int n_before_vec,int levels_vec,int i_vec,int j_vec,
-                                 int extra_before,int extra_between,int extra_after){
+                                 int extra_before,int extra_between,int extra_after,
+                                 int transpose){
   long loop_limit_op,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,i_comb,j_comb;
   double val1,val2;
@@ -651,8 +663,18 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
          * a cross (I cross b), so the the size of the second operator
          * is n_between*levels2
          */
-        i_comb = levels_op*n_between*i1 + i2;
-        j_comb = levels_op*n_between*j1 + j2;
+        if (transpose) {
+          /*
+           * We can transpose the combined operators because
+           * the transpose of Kronecker products is the
+           * kronecker product of the transposes
+           */
+          j_comb = levels_op*n_between*i1 + i2;
+          i_comb = levels_op*n_between*j1 + j2;
+        } else {
+          i_comb = levels_op*n_between*i1 + i2;
+          j_comb = levels_op*n_between*j1 + j2;
+        }
         add_to_mat = a*val1*val2;
 
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
@@ -705,8 +727,18 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
          * a cross (I cross b), so the the size of the second operator
          * is n_between*levels2
          */
-        i_comb = levels_vec*n_between*i1 + i2;
-        j_comb = levels_vec*n_between*j1 + j2;
+        if (transpose) {
+          /*
+           * We can transpose the combined operators because
+           * the transpose of Kronecker products is the
+           * kronecker product of the transposes
+           */
+          j_comb = levels_vec*n_between*i1 + i2;
+          i_comb = levels_vec*n_between*j1 + j2;
+        } else {
+          i_comb = levels_vec*n_between*i1 + i2;
+          j_comb = levels_vec*n_between*j1 + j2;
+        }
         add_to_mat = a*val1*val2;
 
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
@@ -956,7 +988,7 @@ void _add_to_PETSc_kron_lin2_comb(Mat matrix,PetscScalar a,int n_before,int my_l
  * before and after and adds that to the dense Hamiltonian
  *
  * Inputs:
- *      double a:           scalar to multiply operator (can be complex)
+ *      PetscScalar a:           scalar to multiply operator (can be complex)
  *      int n_before:       Hilbert space size before
  *      int my_levels:      number of levels for operator
  *      op_type my_op_type: operator type
@@ -965,7 +997,7 @@ void _add_to_PETSc_kron_lin2_comb(Mat matrix,PetscScalar a,int n_before,int my_l
  *      none, but adds to dense hamiltonian
  */
 
-void _add_to_dense_kron(double a,int n_before,int my_levels,
+void _add_to_dense_kron(PetscScalar a,int n_before,int my_levels,
                         op_type my_op_type,int position){
   long loop_limit,i,i_op,j_op,n_after;
   PetscReal    val;
@@ -1006,12 +1038,12 @@ void _add_to_dense_kron(double a,int n_before,int my_levels,
  *      none, but adds to dense Hamiltonian
  */
 
-void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1,int position1,
+void _add_to_dense_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_type1,int position1,
                              int n_before2,int levels2,op_type op_type2,int position2){
   long loop_limit1,loop_limit2,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,tmp_switch,i_comb,j_comb;
   double val1,val2;
-  double add_to_mat;
+  PetscScalar add_to_mat;
   op_type tmp_op_switch;
 
   loop_limit1 = _get_loop_limit(op_type1,levels1);
@@ -1120,7 +1152,7 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
  * given a Hilbert space size before and after and adds that to the Petsc matrix full_A
  *
  * Inputs:
- *      double a            scalar to multiply operator
+ *      PetscScalar a            scalar to multiply operator
  *      int n_before_op:    Hilbert space size before op
  *      int levels_op:      number of levels for op
  *      op_type op_type_op: operator type of op
@@ -1132,12 +1164,12 @@ void _add_to_dense_kron_comb(double a,int n_before1,int levels1,op_type op_type1
  *      none, but adds to dense hamiltonian
  */
 
-void _add_to_dense_kron_comb_vec(double a,int n_before_op,int levels_op,op_type op_type_op,
+void _add_to_dense_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_type op_type_op,
                                  int n_before_vec,int levels_vec,int i_vec,int j_vec){
   long loop_limit_op,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,i_comb,j_comb;
   double val1,val2;
-  double add_to_mat;
+  PetscScalar add_to_mat;
 
   loop_limit_op = _get_loop_limit(op_type_op,levels_op);
 

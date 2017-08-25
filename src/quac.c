@@ -31,6 +31,29 @@ void QuaC_initialize(int argc,char **args){
 }
 
 /*
+ * QuaC_clear clears the internal state of many of QuaC's
+ * variables so that multiple systems can be run in one file.
+ */
+
+void QuaC_clear(){
+  int i;
+  /* Destroy Matrix */
+  MatDestroy(&full_A);
+  MatDestroy(&ham_A);
+  MatDestroy(&full_stiff_A);
+  MatDestroy(&ham_stiff_A);
+
+  for (i=0;i<_num_time_dep;i++){
+    MatDestroy(&_time_dep_list[i].mat);
+  }
+  //stab_added       = 0;
+  _print_dense_ham = 0;
+  _num_time_dep = 0;
+  op_initialized = 0;
+}
+
+
+/*
  * QuaC_finalize finalizes petsc and destroys full_A.
  * The user is responsible for freeing all of the objects
  * using destroy_*
@@ -40,6 +63,9 @@ void QuaC_finalize(){
   int i;
   /* Destroy Matrix */
   MatDestroy(&full_A);
+  MatDestroy(&ham_A);
+  MatDestroy(&full_stiff_A);
+  MatDestroy(&ham_stiff_A);
 
   for (i=0;i<_num_time_dep;i++){
     MatDestroy(&_time_dep_list[i].mat);

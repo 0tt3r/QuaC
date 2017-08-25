@@ -20,5 +20,6 @@ int get_num_populations();
 void get_bipartite_concurrence(Vec,double*);
 void sqrt_mat(Mat);
 void get_fidelity(Vec,Vec,double*);
+void print_psi(Vec,int);
 void print_dm(Vec,int);
 #endif

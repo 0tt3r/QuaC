@@ -18,6 +18,8 @@ PetscErrorCode _RHS_time_dep_ham(TS,PetscReal,Vec,Mat,Mat,void*); // Move to hea
 
 PetscErrorCode (*_ts_monitor)(TS,PetscInt,PetscReal,Vec,void*) = NULL;
 
+PetscErrorCode _Normalize_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
+PetscErrorCode _Normalize_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,void*);
 /*
  * steady_state solves for the steady_state of the system
  * that was previously setup using the add_to_ham and add_lin
@@ -34,9 +36,23 @@ void steady_state(Vec x){
   long           dim;
   int            num_pop;
   double         *populations;
+  Mat            solve_A;
 
-  dim = total_levels*total_levels;
-
+  if (_lindblad_terms) {
+    dim = total_levels*total_levels;
+    solve_A = full_A;
+    if (nid==0) {
+      printf("Lindblad terms found, using Lindblad solver.");
+    }
+  } else {
+    if (nid==0) {
+      printf("Warning! Steady state not supported for Schrodinger.\n");
+      printf("         Defaulting to (less efficient) Lindblad Solver\n");
+      exit(0);
+    }
+    dim = total_levels*total_levels;
+    solve_A = ham_A;
+  }
   if (!stab_added){
     if (nid==0) printf("Adding stabilization...\n");
     /*
@@ -61,7 +77,7 @@ void steady_state(Vec x){
         if (nid==0){
           for (i=0;i<total_levels;i++){
             for (j=0;j<total_levels;j++){
-              fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
+              fprintf(fp_ham,"%e %e ",PetscRealPart(_hamiltonian[i][j]),PetscImaginaryPart(_hamiltonian[i][j]));
             }
             fprintf(fp_ham,"\n");
           }
@@ -214,7 +230,6 @@ void steady_state(Vec x){
  */
 void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   PetscViewer    mat_view;
-  //  Vec            x;
   TS             ts; /* timestepping context */
   PetscInt       i,j,Istart,Iend,steps,row,col;
   PetscScalar    mat_tmp;
@@ -224,22 +239,40 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   operator       op;
   int            num_pop;
   double         *populations;
-  /* long           dim; */
+  Mat            solve_A,solve_stiff_A;
 
-  /* dim = total_levels*total_levels; */
+  if (_lindblad_terms) {
+    if (nid==0) {
+      printf("Lindblad terms found, using Lindblad solver.\n");
+    }
+    solve_A = full_A;
+    if (_stiff_solver) {
+      if(nid==0) printf("ERROR! Lindblad-stiff solver untested.");
+      exit(0);
+    }
+  } else {
+    if (nid==0) {
+      printf("No Lindblad terms found, using (more efficient) Schrodinger solver.\n");
+    }
+    solve_A = ham_A;
+    solve_stiff_A = ham_stiff_A;
+    if (_num_time_dep&&_stiff_solver) {
+      if(nid==0) printf("ERROR! Schrodinger-stiff + timedep solver untested.");
+      exit(0);
+    }
+  }
 
   /* Possibly print dense ham. No stabilization is needed? */
   if (nid==0) {
     /* Print dense ham, if it was asked for */
     if (_print_dense_ham){
       FILE *fp_ham;
-
       fp_ham = fopen("ham","w");
 
       if (nid==0){
         for (i=0;i<total_levels;i++){
           for (j=0;j<total_levels;j++){
-            fprintf(fp_ham,"%e ",_hamiltonian[i][j]);
+            fprintf(fp_ham,"%e %e ",PetscRealPart(_hamiltonian[i][j]),PetscImaginaryPart(_hamiltonian[i][j]));
           }
           fprintf(fp_ham,"\n");
         }
@@ -270,7 +303,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     }
   }
 
-  MatGetOwnershipRange(full_A,&Istart,&Iend);
+  MatGetOwnershipRange(solve_A,&Istart,&Iend);
   /*
    * Explicitly add 0.0 to all diagonal elements;
    * this fixes a 'matrix in wrong state' message that PETSc
@@ -279,9 +312,16 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   if (nid==0) printf("Adding 0 to diagonal elements...\n");
   for (i=Istart;i<Iend;i++){
     mat_tmp = 0 + 0.*PETSC_i;
-    MatSetValue(full_A,i,i,mat_tmp,ADD_VALUES);
+    MatSetValue(solve_A,i,i,mat_tmp,ADD_VALUES);
   }
+  if(_stiff_solver){
+    MatGetOwnershipRange(solve_stiff_A,&Istart,&Iend);
+    for (i=Istart;i<Iend;i++){
+      mat_tmp = 0 + 0.*PETSC_i;
+      MatSetValue(solve_stiff_A,i,i,mat_tmp,ADD_VALUES);
+    }
 
+  }
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
    *       Create the timestepping solver and set various options       *
@@ -305,50 +345,74 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
    */
 
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+
+  if(_stiff_solver) {
+    TSSetIFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+    if(nid==0) printf("Using stiff solver - TSROSW\n");
+  }
+
   if(_num_time_dep) {
     for(i=0;i<_num_time_dep;i++){
       for(j=0;j<_time_dep_list[i].num_ops;j++){
         op = _time_dep_list[i].ops[j];
-        /* Add -i *(I cross H(t)) */
-        mat_tmp = 0.0 + 0.0*PETSC_i;
-        _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
-                         op->my_op_type,op->position,total_levels,1);
-        /* Add i *(H(t) cross I) */
-        mat_tmp = 0.0 + 0.0*PETSC_i;
-        _add_to_PETSc_kron(full_A,mat_tmp,op->n_before,op->my_levels,
-                           op->my_op_type,op->position,1,total_levels);
+        if (_lindblad_terms) {
+          /*
+           * Add 0 terms to the hamiltonian where the time dependent
+           * H terms will be. This allows PETSc to be more efficient later
+           */
+          /* Add -i *(I cross H(t)) */
+          mat_tmp = 0.0 + 0.0*PETSC_i;
+          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
+                             op->my_op_type,op->position,total_levels,1);
+          /* Add i *(H(t) cross I) */
+          mat_tmp = 0.0 + 0.0*PETSC_i;
+          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
+                             op->my_op_type,op->position,1,total_levels);
+        } else {
+          mat_tmp = 0.0 + 0.0*PETSC_i;
+          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
+                             op->my_op_type,op->position,1,1);
+        }
       }
     }
     /* Tell PETSc to assemble the matrix */
-    MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
     if (nid==0) printf("Matrix Assembled.\n");
 
-    MatDuplicate(full_A,MAT_COPY_VALUES,&AA);
+    MatDuplicate(solve_A,MAT_COPY_VALUES,&AA);
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
 
     TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham,NULL);
   } else {
     /* Tell PETSc to assemble the matrix */
-    MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
+    if (_stiff_solver){
+      MatAssemblyBegin(solve_stiff_A,MAT_FINAL_ASSEMBLY);
+      MatAssemblyEnd(solve_stiff_A,MAT_FINAL_ASSEMBLY);
+      TSSetIJacobian(ts,solve_stiff_A,solve_stiff_A,TSComputeRHSJacobianConstant,NULL);
+    }
     if (nid==0) printf("Matrix Assembled.\n");
-
-    TSSetRHSJacobian(ts,full_A,full_A,TSComputeRHSJacobianConstant,NULL);
+    TSSetRHSJacobian(ts,solve_A,solve_A,TSComputeRHSJacobianConstant,NULL);
   }
   /*
    * Moved matrix information print down so that we can see the information
    * on the extra zeros we added
-   * to full_A to make copying into AA for time dependent runs
+   * to solve_A to make copying into AA for time dependent runs
    * more efficient.
    */
 
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  MatView(full_A,mat_view);
-    PetscViewerDestroy(&mat_view);
+
+  MatView(solve_A,mat_view);
+  if(_stiff_solver){
+    MatView(solve_stiff_A,mat_view);
+  }
+  PetscViewerDestroy(&mat_view);
 
 
   TSSetInitialTimeStep(ts,0.0,dt);
@@ -359,8 +423,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
 
   TSSetDuration(ts,steps_max,time_max);
   TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
-  TSSetType(ts,TSRK);
-  TSRKSetType(ts,TSRK3BS);
+  if (_stiff_solver) {
+    TSSetType(ts,TSROSW);
+  } else {
+    TSSetType(ts,TSRK);
+    TSRKSetType(ts,TSRK3BS);
+  }
 
   /* If we have gates to apply, set up the event handler. */
   if (_num_quantum_gates > 0) {
@@ -372,7 +440,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
      */
     TSSetEventHandler(ts,nevents,&direction,&terminate,_QG_EventFunction,_QG_PostEventFunction,NULL);
   }
-
+  if (_lindblad_terms) {
+    nevents   =  1; //Only one event for now (did we cross a gate?)
+    direction =  0; //We only want to count an event if we go from positive to negative
+    terminate = PETSC_FALSE; //Keep time stepping after we passed our event
+    TSSetEventHandler(ts,nevents,&direction,&terminate,_Normalize_EventFunction,_Normalize_PostEventFunction,NULL);
+  }
   TSSetFromOptions(ts);
   TSSolve(ts,x);
   TSGetTimeStepNumber(ts,&steps);
@@ -456,4 +529,25 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
   }
   return 0;
+}
+
+/*
+ * EventFunction is one step in Petsc to apply some action if a statement is true.
+ * This function ALWAYS triggers,
+ */
+PetscErrorCode _Normalize_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
+  /* Return 0 to mean we want to trigger this event*/
+  fvalue[0] = 0;
+  return(0);
+}
+
+/*
+ * PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
+ * to apply that event, which, in this case, normalizes the vector.
+*/
+PetscErrorCode _Normalize_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+  PetscErrorCode  ierr;
+  ierr = VecNormalize(U,NULL);CHKERRQ(ierr);
+  TSSetSolution(ts,U);
+  return(0);
 }
