@@ -132,6 +132,8 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   if (dm_size<pow(current_total_levels,2)){
     if (nid==0){
       printf("ERROR! ptraced_dm is not large enough to store the traced over density matrix!\n");
+      printf("       Please ensure that the Hilbert space size of the ptraced_dm is large enough\n");
+      printf("       to store the Hilbert space size that you are tracing down to.\n");
       exit(0);
     }
   }
