@@ -129,7 +129,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
 
   VecGetSize(ptraced_dm,&dm_size);
 
-  if (dm_size<current_total_levels){
+  if (dm_size<pow(current_total_levels,2)){
     if (nid==0){
       printf("ERROR! ptraced_dm is not large enough to store the traced over density matrix!\n");
       exit(0);
