@@ -440,12 +440,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
      */
     TSSetEventHandler(ts,nevents,&direction,&terminate,_QG_EventFunction,_QG_PostEventFunction,NULL);
   }
-  if (_lindblad_terms) {
-    nevents   =  1; //Only one event for now (did we cross a gate?)
-    direction =  0; //We only want to count an event if we go from positive to negative
-    terminate = PETSC_FALSE; //Keep time stepping after we passed our event
-    TSSetEventHandler(ts,nevents,&direction,&terminate,_Normalize_EventFunction,_Normalize_PostEventFunction,NULL);
-  }
+  /* if (_lindblad_terms) { */
+  /*   nevents   =  1; //Only one event for now (did we cross a gate?) */
+  /*   direction =  0; //We only want to count an event if we go from positive to negative */
+  /*   terminate = PETSC_FALSE; //Keep time stepping after we passed our event */
+  /*   TSSetEventHandler(ts,nevents,&direction,&terminate,_Normalize_EventFunction,_Normalize_PostEventFunction,NULL); */
+  /* } */
   TSSetFromOptions(ts);
   TSSolve(ts,x);
   TSGetTimeStepNumber(ts,&steps);
@@ -528,7 +528,8 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
   }
-  return 0;
+
+  PetscFunctionReturn(0);
 }
 
 /*
