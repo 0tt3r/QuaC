@@ -41,12 +41,12 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
  * _get_val_in_subspace is a simple function that returns the
  * i_op,j_op pair and val for a given i;
  * Inputs:
- *      int i:              current index in the loop over the subspace
+ *      long i:             current index in the loop over the subspace
  *      op_type my_op_type: operator type
  *      int position:       vec operator's position variable
  * Outputs:
- *      int *i_op:          row value in subspace
- *      int *j_op:          column value in subspace
+ *      long *i_op:         row value in subspace
+ *      long *j_op:         column value in subspace
  * Return value:
  *      double val:         value at i_op,j_op
  */
@@ -94,6 +94,100 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
   return val;
 }
 
+/*
+ * _get_val_j_from_global_i returns the val and global j for a given global i.
+ * If there is no nonzero value for a given i, it returns a negative j
+ * Inputs:
+ *      long i:             global i
+ *      operator:           operator to get
+ * Outputs:
+ *      long *j:             global j for nonzer of given i; or negative if none
+ *      double *val:        value of op for global i,j
+  */
+
+void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,double *val){
+  int i_sub,n_after,tmp_int,k1,k2;
+  /*
+   * We store our operators as a type and number of levels;
+   * we use the stored information to calculate the global j location
+   * and nonzero value for a give global i
+   *
+   * If it is a lowering operator, it is super diagonal.
+   * If it is a number operator, it is diagonal.
+   * If it is a raising operator, it is sub diagonal.
+   */
+  n_after = total_levels/(this_op->my_levels*this_op->n_before);
+  i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
+
+  if (this_op->my_op_type==LOWER) {
+    /*
+     * Lowering operator
+     * From i, use the generating function from the kronecker product:
+     *    i = i_sub * n_af + k1 + k2*n_l*n_af
+     *    j = (i_sub+1) * n_af + k1 + k2*n_l*n_af
+     * We work out k1 and k2 from i to get j.
+     */
+    if (i_sub>=(this_op->my_levels-1)){
+      //There is no nonzero value for given global i; return -1 as flag
+      *j = -1;
+      *val = 0.0;
+    } else {
+      tmp_int = i - i_sub * n_after;
+      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(this_op->my_levels*n_after);
+      *j = (i_sub + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
+      *val   = sqrt((double)i_sub+1.0);
+    }
+  } else if (this_op->my_op_type==NUMBER){
+    /* Number operator */
+    if (i_sub!=0){
+      *j = i; //Diagonal, even in global space
+      *val   = (double)i_sub;
+    } else {
+      //There is no nonzero value for given global i; return -1 as flag
+      *j = -1;
+      *val = 0.0;
+    }
+  } else if (this_op->my_op_type==RAISE){
+    /*
+     * Raising operator
+     *
+     * From i, use the generating function from the kronecker product:
+     *    i = (i_sub+1) * n_af + k1 + k2*n_me*n_af
+     *    j = i_sub * n_af + k1 + k2*n_me*n_af
+     * We work out k1 and k2 from i to get j.
+     */
+    i_sub = i_sub - 1;
+    if(i_sub<0){
+      //There is no nonzero value for given global i; return -1 as flag
+      *j = -1;
+      *val = 0.0;
+    } else {
+      tmp_int = i - (i_sub+1) * n_after;
+      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(this_op->my_levels*n_after);
+      *j = i_sub * n_after + k1 + k2*this_op->my_levels*n_after;
+      *val   = sqrt((double)i_sub+1.0);
+    }
+  } else {
+    /* Vec operator */
+    /*
+     * Since we assume 1 vec operator means |e><e|,
+     * the only i,j pair is on the diagonal, at it's position
+     * And the value is 1
+     */
+      if (nid==0){
+        printf("ERROR! Vec Operators not currently supported for _get_val_j_from_global_i\n");
+        printf("       (maybe from get_expectation_value)");
+        exit(0);
+      }
+    /* *i_op = position; */
+    /* *j_op = position; */
+    /* *val   = 1.0; */
+  }
+
+  return val;
+}
 
 /*
  * _add_to_PETSc_kron_ij is the main driver of the kronecker
@@ -116,6 +210,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
  *       none, but adds to PETSc matrix A
  *
  */
+
 
 void _add_to_PETSc_kron_ij(Mat matrix,PetscScalar add_to_mat,int i_op,int j_op,
                            int n_before,int n_after,int my_levels){

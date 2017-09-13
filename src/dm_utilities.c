@@ -693,6 +693,96 @@ void get_populations(Vec x,double **populations) {
   return;
 }
 
+void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...){
+  va_list ap;
+  operator *op;
+  PetscInt i,j,this_i,this_j,my_j_start,my_i_start,my_j_end,my_start,my_end,dim,dm_size;
+  PetscReal op_val;
+  PetscScalar dm_element;
+
+  if(_lindblad_terms) {
+    dim = total_levels*total_levels;
+  } else {
+    dim = total_levels;
+    if (nid==0){
+      printf("ERROR! Expectation values not support for Schrodinger solver!\n");
+      exit(0);
+    }
+
+  }
+  VecGetSize(rho,&dm_size);
+
+  if (dm_size!=dim){
+    if (nid==0){
+      printf("ERROR! The input density matrix does not seem to be the full one!\n");
+      printf("       Populations cannot be calculated.\n");
+      exit(0);
+    }
+  }
+
+  va_start(ap,number_of_ops);
+  op = malloc(number_of_ops*sizeof(struct operator));
+  /* Loop through passed in ops and store in list */
+  for (i=0;i<number_of_ops;i++){
+    op[i] = va_arg(ap,operator);
+  }
+  va_end(ap);
+
+  /*
+   * Calculate Tr(ABC...*rho) using the following observations:
+   *     Tr(A*rho) = sum_i (A*rho)_ii = sum_i sum_k A_ik rho_ki
+   *          i.e., we do not need a j loop.
+   *     Each operator (ABCD...) are very sparse - having less than
+   *          1 value per row. This allows us to efficiently do the
+   *          multiplication of ABCD... by just calculating the value
+   *          for one of the indices (i); if there is no matching j,
+   *          the value is 0.
+   *
+   * Since the matrix is stored in C format, we use the complex
+   * conjugate of Rho instead of rho directly, so that we can
+   * minimize communication
+   */
+  *trace_val = 0.0 + 0.0*PETSC_i;
+  VecGetOwnershipRange(rho,&my_start,&my_end);
+
+  /*
+   * Find the range of j values stored on a core.
+   * Some columns will be shared by more than 1 core;
+   * In that case the core who has the first element
+   * of the row calculates that value, potentially
+   * communicating to get values it does not have
+   */
+  my_j_start = my_start/total_levels; // Rely on integer division to get 'floor'
+  my_i_start = my_start%total_levels;
+  if (my_i_start>0) my_j_start += 1;
+  my_j_end  = my_end/total_levels;
+
+  for (i=my_j_start;i<my_j_end;i++){
+    this_i = i; // The leading index which we check
+    op_val = 1.0;
+    for (j=0;j<number_of_ops;j++){
+      _get_val_j_from_global_i(this_i,op[j],&this_j,&op_val); // Get the corresponding j and val
+      if (this_j<0) {
+        /*
+         * Negative j says there is no nonzero value for a given this_i
+         * As such, we can immediately break the loop for i
+         */
+        op_val = 0.0;
+        break;
+      } else {
+        this_i = this_j;
+        op_val = op_val*op_val;
+      }
+    }
+    get_dm_element(rho,this_i,i,&dm_element);
+
+    *trace_val = *trace_val + op_val*dm_element;
+  }
+
+    //MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPI_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
+  free(op);
+  return;
+}
 
 /*
  * void get_bipartite_concurrence calculates the bipartite concurrence of a density matrix

@@ -16,6 +16,7 @@ void assemble_dm(Vec);
 void partial_trace_over_one(Vec,Vec,PetscInt,PetscInt,PetscInt,PetscInt);
 void partial_trace_over(Vec,Vec,int,...);
 void get_populations(Vec,double**);
+void get_expectation_value(Vec,PetscScalar*,int,...);
 int get_num_populations();
 void get_bipartite_concurrence(Vec,double*);
 void sqrt_mat(Mat);
