@@ -740,6 +740,31 @@ void get_populations(Vec x,double **populations) {
   return;
 }
 
+/*
+ * void get_expectation_value calculates the expectation value of the multiplication
+ * of a list of operators.
+ * The expectation value is defined as:
+ *              <ABC...> = Tr(ABC...*rho)
+ * where A,B,C,... are operators and rho is the density matrix.
+ * This function only accepts operators to be multiplied. To find the
+ * expectation value of a sum, call this function once for each
+ * element of the sum. i.e.
+ *              <A+B+C> = Tr((A+B+C)*rho)
+ *                      = Tr(A*rho) + Tr(B*rho) * Tr(C*rho)
+ *                      = <A> + <B> + <C>
+ *
+ * Inputs:
+ *         Vec dm            - full Hilbert space density matrix
+ *         int number_of_ops - number of operators in the list
+ *          ...              - list of operators
+ * Outputs:
+ *         PetscScalar *trace_val - the expectation value of the multiplied operators
+ *
+ * An example calling this function:
+ *      get_expectation_value(dm,&expect,4,ph[0]->dag,ph[1]->dag,ph[0],ph[1]);
+ *
+ */
+
 void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...){
   va_list ap;
   operator *op;
@@ -834,7 +859,7 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
        * Take complex conjugate of dm_element (since we relied on the fact
        * that rho was hermitian to get better data locality)
        */
-      *trace_val = *trace_val + op_val*(PetscRealPart(dm_element) - PetscImaginaryPart(dm_element)*PETSC_i);
+      *trace_val = *trace_val + op_val*(PetscRealPart(dm_element) + PetscImaginaryPart(dm_element)*PETSC_i);
     }
   }
 
