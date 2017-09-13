@@ -53,13 +53,13 @@ int main(int argc,char **args){
     /* Add terms to the hamiltonian */
     add_to_ham(w_m,a->n); // w_m at a
     add_to_ham(w_m,nv[0]->n); // w_m nvt nv
-    
+
     /* Below 4 terms represent lambda_eff (nvt + nv)(at + a) */
     add_to_ham_mult2(lambda_eff,a->dag,nv[0]->dag); //nvt at
     add_to_ham_mult2(lambda_eff,nv[0]->dag,a);  //nvt a
     add_to_ham_mult2(lambda_eff,nv[0],a->dag);  //nt at
     add_to_ham_mult2(lambda_eff,nv[0],a);   //nv a
-    
+
     /* nv center lindblad terms */
     add_lin(gamma_eff,nv[0]);
     //add_lin(gamma_par,nv[0]->n);
@@ -76,13 +76,13 @@ int main(int argc,char **args){
     lambda_eff = lambda_s;
     for (i=0;i<num_nv;i++){
       add_to_ham(w_m,nv[i]->n); // w_m nvt nv
-    
+
       /* Below 4 terms represent lambda_eff (nvt + nv)(at + a) */
       /* add_to_ham_mult2(lambda_eff,a->dag,nv[i]->dag); //nvt at */
       add_to_ham_mult2(lambda_eff,nv[i]->dag,a);  //nvt a
       add_to_ham_mult2(lambda_eff,nv[i],a->dag);  //nt at
       /* add_to_ham_mult2(lambda_eff,nv[i],a);   //nv a */
-    
+
       /* nv center lindblad terms */
       add_lin(gamma_eff,nv[i]);
       /* add_lin(gamma_par,nv[i]->n); */
@@ -91,7 +91,7 @@ int main(int argc,char **args){
   }
 
 
-  
+
 
   /* phonon bath thermal terms */
   rate = w_m/(Q)*(n_th+1);
@@ -116,4 +116,3 @@ int main(int argc,char **args){
   QuaC_finalize();
   return 0;
 }
-
