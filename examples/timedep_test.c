@@ -106,7 +106,6 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
   }
 
   pulse_value = pulse(time);
-  printf("%f %f \n",time,pulse_value);
-
+  free(populations);
   PetscFunctionReturn(0);
 }
