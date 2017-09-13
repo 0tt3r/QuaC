@@ -9,7 +9,8 @@
 void create_dm(Vec*,PetscInt);
 void create_full_dm(Vec*);
 void destroy_dm(Vec);
-void get_dm_element(Vec,PetscInt,PetscInt,PetscScalar *);
+void get_dm_element(Vec,PetscInt,PetscInt,PetscScalar*);
+void get_dm_element_local(Vec,PetscInt,PetscInt,PetscScalar*);
 void add_value_to_dm(Vec,PetscInt,PetscInt,PetscScalar);
 void set_dm_from_initial_pop(Vec);
 void assemble_dm(Vec);

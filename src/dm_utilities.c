@@ -364,7 +364,9 @@ void set_dm_from_initial_pop(Vec x){
 
 /*
  * void get_dm_element gets a specific i,j element from the
- * input density matrix.
+ * input density matrix - global version; will grab from other
+ * cores.
+ * NOTE: This should be called by all processors, or the code will hang!
  *
  * Inputs:
  *        Vec new_dm   - density matrix from which to get element
@@ -373,18 +375,58 @@ void set_dm_from_initial_pop(Vec x){
  * Outpus:
  *        PetscScalar val - requested density matrix element
  *
- * NOTE: Only allowed to get LOCAL elements; this should not be
- *       called by all processors! Should be fixed to be made
- *       more safe.
  */
 void get_dm_element(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
-  PetscInt location[1],dm_size;
+  PetscInt location[1],dm_size,my_start,my_end;
   PetscScalar val_array[1];
   location[0] = row;
   VecGetSize(dm,&dm_size);
   location[0] = sqrt(dm_size)*row + col;
 
-  VecGetValues(dm,1,location,val_array);
+  VecGetOwnershipRange(dm,&my_start,&my_end);
+  if (location[0]>=my_start&&location[0]<my_end) {
+    VecGetValues(dm,1,location,val_array);
+  } else{
+    val_array[0] = 0.0 + 0.0*PETSC_i;
+  }
+  MPI_Allreduce(MPI_IN_PLACE,val_array,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
+
+  *val = val_array[0];
+}
+
+/*
+ * void get_dm_element_local gets a specific i,j element from the
+ * input density matrix - local version; only gets values local
+ * to the current core
+ * NOTE: This should be only be called with an i,j such that the
+ *       calling core owns that position!
+ *
+ * Inputs:
+ *        Vec new_dm   - density matrix from which to get element
+ *        PetscInt row - i location of requested element
+ *        PetscInt col - j location of requested element
+ * Outpus:
+ *        PetscScalar val - requested density matrix element
+ *
+ */
+
+void get_dm_element_local(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
+  PetscInt location[1],dm_size,my_start,my_end;
+  PetscScalar val_array[1];
+  location[0] = row;
+  VecGetSize(dm,&dm_size);
+  location[0] = sqrt(dm_size)*row + col;
+
+  VecGetOwnershipRange(dm,&my_start,&my_end);
+  if (location[0]>=my_start&&location[0]<my_end) {
+    VecGetValues(dm,1,location,val_array);
+  } else{
+    if (nid==0){
+      printf("ERROR! Can only get elements local to a core in !\n");
+      printf("       get_dm_element_local.\n");
+      exit(0);
+    }
+  }
   *val = val_array[0];
 }
 
@@ -784,12 +826,12 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
      */
     this_loc = total_levels*this_i + i;
     if (this_loc>=my_start&&this_loc<my_end) {
-      get_dm_element(rho,this_i,i,&dm_element);
+      get_dm_element_local(rho,this_i,i,&dm_element);
       *trace_val = *trace_val + op_val*dm_element;
     }
   }
 
-  MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPI_DOUBLE_COMPLEX,MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
   free(op);
   return;
 }
