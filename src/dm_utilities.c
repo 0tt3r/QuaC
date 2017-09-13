@@ -373,6 +373,9 @@ void set_dm_from_initial_pop(Vec x){
  * Outpus:
  *        PetscScalar val - requested density matrix element
  *
+ * NOTE: Only allowed to get LOCAL elements; this should not be
+ *       called by all processors! Should be fixed to be made
+ *       more safe.
  */
 void get_dm_element(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
   PetscInt location[1],dm_size;
@@ -697,6 +700,7 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
   va_list ap;
   operator *op;
   PetscInt i,j,this_i,this_j,my_j_start,my_i_start,my_j_end,my_start,my_end,dim,dm_size;
+  PetscInt this_loc;
   PetscReal op_val,val;
   PetscScalar dm_element;
 
@@ -754,7 +758,6 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
    */
   my_j_start = my_start/total_levels; // Rely on integer division to get 'floor'
   my_i_start = my_start%total_levels;
-  if (my_i_start>0) my_j_start += 1;
   my_j_end  = my_end/total_levels;
 
   for (i=my_j_start;i<my_j_end;i++){
@@ -774,11 +777,19 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
         op_val = op_val*val;
       }
     }
-    get_dm_element(rho,this_i,i,&dm_element);
-    *trace_val = *trace_val + op_val*dm_element;
+    /*
+     * Check that this i is on this core;
+     * most of the time, it will be, but sometimes
+     * columns are split up by core
+     */
+    this_loc = total_levels*this_i + i;
+    if (this_loc>=my_start&&this_loc<my_end) {
+      get_dm_element(rho,this_i,i,&dm_element);
+      *trace_val = *trace_val + op_val*dm_element;
+    }
   }
 
-    //MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPI_COMPLEX,MPI_SUM,MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPI_DOUBLE_COMPLEX,MPI_SUM,PETSC_COMM_WORLD);
   free(op);
   return;
 }
