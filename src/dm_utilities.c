@@ -6,6 +6,7 @@
 /*
  * Print the DM as a matrix.
  * Not recommended for large matrices.
+ * NOTE: Should be called from all cores!
  */
 void print_dm(Vec rho,int h_dim){
   PetscScalar val;
@@ -24,6 +25,7 @@ void print_dm(Vec rho,int h_dim){
 /*
  * Print psi
  * Not recommended for large systems
+ * NOTE: Won't work in parallel well at this time
  */
 
 void print_psi(Vec rho,int h_dim){
