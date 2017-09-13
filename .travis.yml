@@ -15,7 +15,9 @@ addons:
 install:
   - |
     cd petsc/
-    git pull
+    ls
+    git clone -b maint https://bitbucket.org/petsc/petsc .
+    ls
     export PETSC_DIR=`pwd`
     export PETSC_ARCH=linux-gnu-c-opt
     ./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --download-fblaslapack --download-mpich --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-fortran-kernels=generic
