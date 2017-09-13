@@ -697,7 +697,7 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
   va_list ap;
   operator *op;
   PetscInt i,j,this_i,this_j,my_j_start,my_i_start,my_j_end,my_start,my_end,dim,dm_size;
-  PetscReal op_val;
+  PetscReal op_val,val;
   PetscScalar dm_element;
 
   if(_lindblad_terms) {
@@ -761,7 +761,7 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<number_of_ops;j++){
-      _get_val_j_from_global_i(this_i,op[j],&this_j,&op_val); // Get the corresponding j and val
+      _get_val_j_from_global_i(this_i,op[j],&this_j,&val); // Get the corresponding j and val
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i
@@ -771,11 +771,10 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
         break;
       } else {
         this_i = this_j;
-        op_val = op_val*op_val;
+        op_val = op_val*val;
       }
     }
     get_dm_element(rho,this_i,i,&dm_element);
-
     *trace_val = *trace_val + op_val*dm_element;
   }
 
