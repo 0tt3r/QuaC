@@ -7,6 +7,7 @@ EXAMPLESDIR=examples
 EXAMPLES=$(basename $(notdir $(wildcard $(EXAMPLESDIR)/*.c)))
 TESTDIR=tests
 TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*.c)))
+MPI_TESTS=$(addprefix mpi_,$(TESTS))
 CFLAGS += -isystem $(SRCDIR)
 
 include ${PETSC_DIR}/lib/petsc/conf/variables
@@ -43,8 +44,17 @@ examples: clean_test $(EXAMPLES)
 $(TESTS) : CFLAGS += -DUNIT_TEST
 $(TESTS) : % : $(ODIR)/%.o $(OBJ) $(TEST_OBJ)
 	@${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
-	@-./$@ -ts_adapt_type none > tmp_test_results
 	@echo 'running '$@
+	@-./$@ -ts_adapt_type none > tmp_test_results
+	-@grep FAIL tmp_test_results || true
+	@cat tmp_test_results >> test_results
+	@rm tmp_test_results
+
+$(MPI_TESTS) : CFLAGS += -DUNIT_TEST
+$(MPI_TESTS) : $(TESTS)
+	@$(eval tmp=$(subst mpi_,,$@))
+	@echo 'running '$@
+	@-mpiexec -np 2 ./$(tmp) -ts_adapt_type none > tmp_test_results
 	-@grep FAIL tmp_test_results || true
 	@cat tmp_test_results >> test_results
 	@rm tmp_test_results
@@ -60,6 +70,8 @@ clean_test:
 	@rm -f test_results
 
 test: clean_test $(TESTS) count_fails
+
+mpi_test: clean_test $(MPI_TESTS) count_fails
 
 $(EXAMPLES) : % : $(ODIR)/%.o $(OBJ)
 	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}

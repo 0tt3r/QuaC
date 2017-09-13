@@ -17,8 +17,10 @@ void test_timedep(void)
   /* Initialize QuaC */
   timedep_test(&populations,&num_pop);
   /* These values assume TSRK3BS */
-  TEST_ASSERT_FLOAT_WITHIN(eps,0.0,populations[0]);
-  TEST_ASSERT_FLOAT_WITHIN(eps,0.0,populations[1]);
+  if (nid==0) {
+    TEST_ASSERT_FLOAT_WITHIN(eps,0.0,populations[0]);
+    TEST_ASSERT_FLOAT_WITHIN(eps,0.0,populations[1]);
+  }
 }
 
 void test_imag_ham_dm(void)
@@ -29,8 +31,10 @@ void test_imag_ham_dm(void)
   /* Initialize QuaC */
   imag_ham_dm_test(&populations,&num_pop);
   /* These values assume TSRK3BS */
-  TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
-  TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  if (nid==0) {
+    TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
+    TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  }
 
 }
 
@@ -42,8 +46,10 @@ void test_imag_ham_psi(void)
   /* Initialize QuaC */
   imag_ham_psi_test(&populations,&num_pop);
   /* These values assume TSRK3BS */
-  TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
-  TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  if (nid==0) {
+    TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
+    TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  }
 
 }
 
@@ -55,8 +61,10 @@ void test_real_ham_dm(void)
   /* Initialize QuaC */
   real_ham_dm_test(&populations,&num_pop);
   /* These values assume TSRK3BS */
-  TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
-  TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  if (nid==0) {
+    TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
+    TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  }
 
 }
 
@@ -68,8 +76,10 @@ void test_real_ham_psi(void)
   /* Initialize QuaC */
   real_ham_psi_test(&populations,&num_pop);
   /* These values assume TSRK3BS */
-  TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
-  TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  if (nid==0) {
+    TEST_ASSERT_FLOAT_WITHIN(eps,1.0,populations[1]);
+    TEST_ASSERT_FLOAT_WITHIN(eps,4.0e-8,populations[0]);
+  }
 
 }
 

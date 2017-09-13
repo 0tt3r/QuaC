@@ -6,7 +6,7 @@
 
 #include "unity.h"
 #include <stddef.h>
-
+#include "../src/operators.h"
 /* If omitted from header, declare overrideable prototypes here so they're ready for use */
 #ifdef UNITY_OMIT_OUTPUT_CHAR_HEADER_DECLARATION
 void UNITY_OUTPUT_CHAR(int);
@@ -59,7 +59,7 @@ static const char UnityStrDetail2Name[]            = " " UNITY_DETAIL2_NAME " ";
 void UnityPrint(const char* string)
 {
     const char* pch = string;
-
+    if (nid==0){
     if (pch != NULL)
     {
         while (*pch)
@@ -91,12 +91,13 @@ void UnityPrint(const char* string)
             pch++;
         }
     }
+    }
 }
 
 void UnityPrintLen(const char* string, const UNITY_UINT32 length)
 {
     const char* pch = string;
-
+    if (nid==0) {
     if (pch != NULL)
     {
         while (*pch && (UNITY_UINT32)(pch - string) < length)
@@ -127,6 +128,7 @@ void UnityPrintLen(const char* string, const UNITY_UINT32 length)
             }
             pch++;
         }
+    }
     }
 }
 
@@ -168,7 +170,7 @@ void UnityPrintNumber(const UNITY_INT number_to_print)
 void UnityPrintNumberUnsigned(const UNITY_UINT number)
 {
     UNITY_UINT divisor = 1;
-
+    if (nid==0) {
     /* figure out initial divisor */
     while (number / divisor > 9)
     {
@@ -181,6 +183,7 @@ void UnityPrintNumberUnsigned(const UNITY_UINT number)
         UNITY_OUTPUT_CHAR((char)('0' + (number / divisor % 10)));
         divisor /= 10;
     } while (divisor > 0);
+    }
 }
 
 /*-----------------------------------------------*/
@@ -188,6 +191,7 @@ void UnityPrintNumberHex(const UNITY_UINT number, const char nibbles_to_print)
 {
     int nibble;
     char nibbles = nibbles_to_print;
+    if (nid==0){
     if ((unsigned)nibbles > (2 * sizeof(number)))
         nibbles = 2 * sizeof(number);
 
@@ -204,6 +208,7 @@ void UnityPrintNumberHex(const UNITY_UINT number, const char nibbles_to_print)
             UNITY_OUTPUT_CHAR((char)('A' - 10 + nibble));
         }
     }
+    }
 }
 
 /*-----------------------------------------------*/
@@ -211,7 +216,7 @@ void UnityPrintMask(const UNITY_UINT mask, const UNITY_UINT number)
 {
     UNITY_UINT current_bit = (UNITY_UINT)1 << (UNITY_INT_WIDTH - 1);
     UNITY_INT32 i;
-
+    if (nid==0) {
     for (i = 0; i < UNITY_INT_WIDTH; i++)
     {
         if (current_bit & mask)
@@ -231,12 +236,14 @@ void UnityPrintMask(const UNITY_UINT mask, const UNITY_UINT number)
         }
         current_bit = current_bit >> 1;
     }
+    }
 }
 
 /*-----------------------------------------------*/
 #ifndef UNITY_EXCLUDE_FLOAT_PRINT
 static void UnityPrintDecimalAndNumberWithLeadingZeros(UNITY_INT32 fraction_part, UNITY_INT32 divisor)
 {
+  if (nid==0) {
     UNITY_OUTPUT_CHAR('.');
     while (divisor > 0)
     {
@@ -245,6 +252,7 @@ static void UnityPrintDecimalAndNumberWithLeadingZeros(UNITY_INT32 fraction_part
         divisor /= 10;
         if (fraction_part == 0) break; /* Truncate trailing 0's */
     }
+  }
 }
 #ifndef UNITY_ROUND_TIES_AWAY_FROM_ZERO
 /* If rounds up && remainder 0.5 && result odd && below cutoff for double precision issues */
@@ -272,7 +280,7 @@ static void UnityPrintDecimalAndNumberWithLeadingZeros(UNITY_INT32 fraction_part
 void UnityPrintFloat(const UNITY_DOUBLE input_number)
 {
     UNITY_DOUBLE number;
-
+    if (nid==0) {
     if (input_number < 0)
     {
         UNITY_OUTPUT_CHAR('-');
@@ -325,31 +333,37 @@ void UnityPrintFloat(const UNITY_DOUBLE input_number)
         if (exponent < 10) UNITY_OUTPUT_CHAR('0');
         UnityPrintNumber(exponent);
     }
+    }
 }
 #endif /* ! UNITY_EXCLUDE_FLOAT_PRINT */
 
 /*-----------------------------------------------*/
 static void UnityTestResultsBegin(const char* file, const UNITY_LINE_TYPE line)
 {
+  if (nid==0) {
     UnityPrint(file);
     UNITY_OUTPUT_CHAR(':');
     UnityPrintNumber((UNITY_INT)line);
     UNITY_OUTPUT_CHAR(':');
     UnityPrint(Unity.CurrentTestName);
     UNITY_OUTPUT_CHAR(':');
+  }
 }
 
 /*-----------------------------------------------*/
 static void UnityTestResultsFailBegin(const UNITY_LINE_TYPE line)
 {
+  if (nid==0) {
     UnityTestResultsBegin(Unity.TestFile, line);
     UnityPrint(UnityStrFail);
     UNITY_OUTPUT_CHAR(':');
+  }
 }
 
 /*-----------------------------------------------*/
 void UnityConcludeTest(void)
 {
+  if (nid==0) {
     if (Unity.CurrentTestIgnored)
     {
         Unity.TestIgnores++;
@@ -368,6 +382,7 @@ void UnityConcludeTest(void)
     Unity.CurrentTestIgnored = 0;
     UNITY_PRINT_EOL();
     UNITY_FLUSH_CALL();
+  }
 }
 
 /*-----------------------------------------------*/
@@ -396,6 +411,7 @@ static void UnityAddMsgIfSpecified(const char* msg)
 /*-----------------------------------------------*/
 static void UnityPrintExpectedAndActualStrings(const char* expected, const char* actual)
 {
+  if (nid==0) {
     UnityPrint(UnityStrExpected);
     if (expected != NULL)
     {
@@ -418,6 +434,7 @@ static void UnityPrintExpectedAndActualStrings(const char* expected, const char*
     {
         UnityPrint(UnityStrNull);
     }
+  }
 }
 
 /*-----------------------------------------------*/
@@ -425,6 +442,7 @@ static void UnityPrintExpectedAndActualStringsLen(const char* expected,
                                                   const char* actual,
                                                   const UNITY_UINT32 length)
 {
+  if (nid==0) {
     UnityPrint(UnityStrExpected);
     if (expected != NULL)
     {
@@ -447,6 +465,7 @@ static void UnityPrintExpectedAndActualStringsLen(const char* expected,
     {
         UnityPrint(UnityStrNull);
     }
+  }
 }
 
 /*-----------------------------------------------
