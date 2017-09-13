@@ -144,6 +144,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
   if (nid==0) printf("dm_element: %f\n",PetscRealPart(dm_element));
   if (nid==0) printf("fidelity: %f\n",fidelity);
   destroy_dm(ptraced_dm);
+  free(populations);
   PetscFunctionReturn(0);
 
 }

@@ -24,7 +24,7 @@ int main(int argc,char **args){
   QuaC_initialize(argc,args);
 
 
-  
+
   GHz = 1.519827e-7;
   MHz = GHz*1e-3;
   kHz = MHz*1e-3;
@@ -50,7 +50,7 @@ int main(int argc,char **args){
   /* print_dense_ham(); */
   /* NV = {g+,g0,g-,e+,e0,e-,s} */
   /*       0  1  2  3  4  5  6 */
-  create_op(num_phonon,&a);  
+  create_op(num_phonon,&a);
 
   for (i=0;i<num_nv;i++){
     create_vec(7,&nv[i]);
@@ -69,12 +69,12 @@ int main(int argc,char **args){
 
   rate = w_m/(Q)*(N_th);
   add_lin(rate,a->dag);
-  
+
   create_full_dm(&rho);
   //  time_step();
   steady_state(rho);
 
-  
+
   destroy_op(&a);
   for (i=0;i<num_nv;i++){
     destroy_vec(&nv[i]);
@@ -124,7 +124,7 @@ void add_nv_terms(vec_op nv,operator a,double lambda_s){
   add_to_ham(w_m,nv[ep]); // |e+><e+|
 
 
-  /* Lindblad terms for NV 
+  /* Lindblad terms for NV
    * Note that lince we define L as L(C) = L(|f><|i|), this
    * is slightly different than Evan's paper, which defines
    * L_i,j. I have put Evan's definition to the side of each
@@ -150,18 +150,18 @@ void add_nv_terms(vec_op nv,operator a,double lambda_s){
 
   /* k31 term */
   add_lin_mult2(k31,nv[g0],nv[e0]); //L e0 g0
- 
+
   /* k35 term */
   add_lin_mult2(k35,nv[s],nv[e0]); //L e0 s
 
   /* k51 term */
   add_lin_mult2(k51,nv[g0],nv[s]); //L s g0
-  
+
   /* 1/T2g */
   rate = 1/T2g;
   add_lin_mult2(rate,nv[gp],nv[gp]); //L gp gp
   add_lin_mult2(rate,nv[gm],nv[gm]); //L gm gm
-  
+
   /* 1/T2e */
   rate = 1/T2e;
   add_lin_mult2(rate,nv[ep],nv[ep]); //L ep ep

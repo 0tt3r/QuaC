@@ -8,7 +8,7 @@
 /*
  * This simple test adds several operators, combines them in ways
  * similar to Jaynes-Cummings for the Hamiltonian and includes
- * thermal terms for the Lindblad. 
+ * thermal terms for the Lindblad.
  *
  * Should test that all of the kroneckor products with I, including
  * I_between, are working.
@@ -50,7 +50,7 @@ int main(int argc,char **args){
   add_to_ham_mult2(2*g,a,sm2->dag);
   add_to_ham_mult2(3*g,sm->dag,sm2);
   add_to_ham_mult2(3*g,sm,sm2->dag);
-  
+
   add_to_ham_mult2(5*g,a2->dag,sm2);
   add_to_ham_mult2(5*g,a2,sm2->dag);
 

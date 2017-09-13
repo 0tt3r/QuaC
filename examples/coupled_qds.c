@@ -141,6 +141,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
     /* Print fidelity and concurrence to file */
     fprintf(f_fid,"%e %e %e %e\n",time,fidelity*fidelity,concurrence,fidelity2);
   }
+  free(populations);
   PetscFunctionReturn(0);
 
 }

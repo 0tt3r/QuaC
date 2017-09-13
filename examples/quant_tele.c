@@ -166,7 +166,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec rho,void *ctx){
   partial_trace_over(rho,rho_tmp,2,qubits[0],qubits[1]);
   get_fidelity(rho_init,rho_tmp,&fidelity);
   if(nid==0) printf("%f %f\n",time,fidelity);
-
+  free(populations);
   //  print_dm(dm,2);
   PetscFunctionReturn(0);
 

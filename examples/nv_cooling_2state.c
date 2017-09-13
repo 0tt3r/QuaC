@@ -121,7 +121,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
     }
     fprintf(f_pop,"\n");
   }
-
+  free(populations);
   PetscFunctionReturn(0);
 
 }

@@ -89,7 +89,7 @@ void imag_ham_dm_test(double **final_populations,int *num_pop){
   destroy_op(&ph);
   destroy_dm(rho);
   if (nid==0) {fclose(f_pop);}
-  return 0;
+  return;
 }
 
 void imag_ham_psi_test(double **final_populations,int *num_pop){
@@ -163,7 +163,7 @@ void imag_ham_psi_test(double **final_populations,int *num_pop){
   destroy_op(&ph);
   destroy_dm(rho);
   if (nid==0) {fclose(f_pop);}
-  return 0;
+  return;
 }
 
 void real_ham_dm_test(double **final_populations,int *num_pop){
@@ -233,7 +233,7 @@ void real_ham_dm_test(double **final_populations,int *num_pop){
   destroy_op(&ph);
   destroy_dm(rho);
   if (nid==0) {fclose(f_pop);}
-  return 0;
+  return;
 }
 
 void real_ham_psi_test(double **final_populations,int *num_pop){
@@ -303,7 +303,7 @@ void real_ham_psi_test(double **final_populations,int *num_pop){
   destroy_op(&ph);
   destroy_dm(rho);
   if (nid==0) {fclose(f_pop);}
-  return 0;
+  return;
 }
 
 
@@ -349,5 +349,6 @@ PetscErrorCode ts_monitor_ih(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx
     }
     fprintf(f_pop,"\n");
   }
+  free(populations);
   return(0);
 }

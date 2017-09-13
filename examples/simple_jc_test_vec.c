@@ -8,7 +8,7 @@
 /*
  * This simple test adds does a JC like Hamiltonian with a vec op, combines them in ways
  * similar to Jaynes-Cummings for the Hamiltonian and includes
- * thermal terms for the Lindblad. 
+ * thermal terms for the Lindblad.
  *
  * Should test that all of the kroneckor products with I, including
  * I_between, are working with vec_operators.
