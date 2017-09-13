@@ -743,7 +743,7 @@ void get_populations(Vec x,double **populations) {
 void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...){
   va_list ap;
   operator *op;
-  PetscInt i,j,this_i,this_j,my_j_start,my_i_start,my_j_end,my_start,my_end,dim,dm_size;
+  PetscInt i,j,this_i,this_j,my_j_start,my_j_end,my_start,my_end,dim,dm_size;
   PetscInt this_loc;
   PetscReal op_val,val;
   PetscScalar dm_element;
@@ -801,7 +801,6 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
    * communicating to get values it does not have
    */
   my_j_start = my_start/total_levels; // Rely on integer division to get 'floor'
-  my_i_start = my_start%total_levels;
   my_j_end  = my_end/total_levels;
 
   for (i=my_j_start;i<my_j_end;i++){
@@ -824,16 +823,23 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
     /*
      * Check that this i is on this core;
      * most of the time, it will be, but sometimes
-     * columns are split up by core
+     * columns are split up by core.
+     * NOTE the transpose here and in get_dm_element_local!
      */
-    this_loc = total_levels*this_i + i;
+    this_loc = total_levels*i + this_i;
     if (this_loc>=my_start&&this_loc<my_end) {
-      get_dm_element_local(rho,this_i,i,&dm_element);
-      *trace_val = *trace_val + op_val*dm_element;
+      get_dm_element_local(rho,i,this_i,&dm_element);
+
+      /*
+       * Take complex conjugate of dm_element (since we relied on the fact
+       * that rho was hermitian to get better data locality)
+       */
+      *trace_val = *trace_val + op_val*(PetscRealPart(dm_element) - PetscImaginaryPart(dm_element)*PETSC_i);
     }
   }
 
   MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
+
   free(op);
   return;
 }
