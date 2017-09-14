@@ -186,7 +186,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,double *va
     /* *val   = 1.0; */
   }
 
-  return val;
+  return;
 }
 
 /*
