@@ -126,7 +126,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
 
   if (nid==0){
     /* Print populations to file */
-    fprintf(f_pop,"%e",time_us);
+    fprintf(f_pop,"%e",time);
     for(i=0;i<num_pop;i++){
       fprintf(f_pop," %e ",populations[i]);
     }
