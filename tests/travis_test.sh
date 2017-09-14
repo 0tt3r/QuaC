@@ -1,4 +1,4 @@
 make examples
-make test
+make mpi_test
 cat test_results
-grep FAIL test_results
+! grep FAIL test_results
