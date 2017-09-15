@@ -364,6 +364,116 @@ void set_dm_from_initial_pop(Vec x){
   return;
 }
 
+
+
+/*
+ * set_dm_from_initial_pop sets the initial condition from the
+ * initial conditions provided via the set_initial_pop routine.
+ * Currently a sequential routine. May need to be updated in the future.
+ *
+ * Inputs:
+ *      Vec x
+ */
+void set_initial_dm_2qds_first_plus_pop(Vec x,Vec rho_2qds){
+  PetscInt    i,j,init_row_op=0,n_after,i_sub,j_sub,n_before;
+  PetscScalar mat_tmp_val;
+  PetscInt    *index_array;
+  Mat         subspace_dm,rho_mat;
+  int         simple_init_pop=1;
+  MatScalar   *rho_mat_array;
+  PetscReal   vec_pop;
+
+  /*
+   * See if there are any vec operators
+   */
+  /* for (i=0;i<num_subsystems&&simple_init_pop==1;i++){ */
+  /*   if (subsystem_list[i]->my_op_type==VEC){ */
+  /*     simple_init_pop = 0; */
+  /*   } */
+  /* } */
+
+
+
+
+    /* Create temporary PETSc matrices */
+  MatCreate(PETSC_COMM_SELF,&subspace_dm);
+  MatSetType(subspace_dm,MATSEQDENSE);
+  MatSetSizes(subspace_dm,total_levels,total_levels,total_levels,total_levels);
+  MatSetUp(subspace_dm);
+  MatZeroEntries(subspace_dm);
+  for (i=0;i<4;i++){
+    for (j=0;j<4;j++){
+      get_dm_element(rho_2qds,i,j,&mat_tmp_val);
+      n_after = total_levels/(4);
+      _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i,j,1.0,n_after,4);
+    }
+  }
+  if (nid==0){
+    MatCreate(PETSC_COMM_SELF,&rho_mat);
+    MatSetType(rho_mat,MATSEQDENSE);
+    MatSetSizes(rho_mat,total_levels,total_levels,total_levels,total_levels);
+    MatSetUp(rho_mat);
+    /*
+     * Set initial density matrix to the identity matrix, because
+     * A' cross B' cross C' = I (A cross I_b cross I_c) (I_a cross B cross I_c)
+     */
+    for (i=0;i<total_levels;i++){
+      MatSetValue(rho_mat,i,i,1.0,INSERT_VALUES);
+    }
+    MatAssemblyBegin(rho_mat,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(rho_mat,MAT_FINAL_ASSEMBLY);
+    /* Loop through subsystems */
+    /* Do the first 2 systems, which are assumed to be 2 levels */
+
+
+    _mult_PETSc_init_DM(subspace_dm,rho_mat,(double) 1.0);
+
+    for (i=2;i<num_subsystems;i++){
+
+      n_after = total_levels/(subsystem_list[i]->my_levels*subsystem_list[i]->n_before);
+      //      n_before = subsystem_list[i]->n_before;
+      /*
+       * If the subsystem is a ladder operator, the population will be just on a
+       * diagonal element within the subspace.
+       * LOWER is in the if because that is the op in the subsystem list for ladder operators
+       */
+      if (subsystem_list[i]->my_op_type==LOWER){
+
+        /* Zero out the subspace density matrix */
+        MatZeroEntries(subspace_dm);
+        i_sub = (int)subsystem_list[i]->initial_pop;
+        j_sub = i_sub;
+        mat_tmp_val = 1. + 0.0*PETSC_i;
+        _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,subsystem_list[i]->n_before,n_after,subsystem_list[i]->my_levels);
+        //     _add_PETSc_DM_kron_ij(mat_tmp_val,subspace_dm,rho_mat,i_sub,j_sub,n_after,n_before,subsystem_list[i]->my_levels);
+        _mult_PETSc_init_DM(subspace_dm,rho_mat,(double)1.0);
+
+      }
+    }
+    /* vectorize the density matrix */
+
+    /* First, get the array where matdense is stored */
+    MatDenseGetArray(rho_mat,&rho_mat_array);
+
+    /* Create an index list for, needed for VecSetValues */
+    PetscMalloc1(total_levels*total_levels,&index_array);
+    for (i=0;i<total_levels;i++){
+      for (j=0;j<total_levels;j++){
+        index_array[i+j*total_levels] = i+j*total_levels;
+      }
+    }
+
+    VecSetValues(x,total_levels*total_levels,index_array,rho_mat_array,INSERT_VALUES);
+    MatDenseRestoreArray(rho_mat,&rho_mat_array);
+    MatDestroy(&rho_mat);
+    PetscFree(index_array);
+  }
+  MatDestroy(&subspace_dm);
+
+  assemble_dm(x);
+  return;
+}
+
 /*
  * void get_dm_element gets a specific i,j element from the
  * input density matrix - global version; will grab from other
