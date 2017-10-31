@@ -363,15 +363,15 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
           /* Add -i *(I cross H(t)) */
           mat_tmp = 0.0 + 0.0*PETSC_i;
           _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
-                             op->my_op_type,op->position,total_levels,1);
-          /* Add i *(H(t) cross I) */
+                             op->my_op_type,op->position,total_levels,1,0);
+          /* Add i *(H(t)^T cross I) */
           mat_tmp = 0.0 + 0.0*PETSC_i;
           _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
-                             op->my_op_type,op->position,1,total_levels);
+                             op->my_op_type,op->position,1,total_levels,1);
         } else {
           mat_tmp = 0.0 + 0.0*PETSC_i;
           _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
-                             op->my_op_type,op->position,1,1);
+                             op->my_op_type,op->position,1,1,0);
         }
       }
     }
@@ -511,12 +511,12 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
       /* Add -i *(I cross H(t)) */
       time_dep_scalar = 0 - time_dep_val*PETSC_i;
       _add_to_PETSc_kron(BB,time_dep_scalar,op->n_before,op->my_levels,
-                         op->my_op_type,op->position,total_levels,1);
+                         op->my_op_type,op->position,total_levels,1,0);
 
-      /* Add i *(H(t) cross I) */
+      /* Add i *(H(t)^T cross I) */
       time_dep_scalar = 0 + time_dep_val*PETSC_i;
       _add_to_PETSc_kron(BB,time_dep_scalar,op->n_before,op->my_levels,
-                         op->my_op_type,op->position,1,total_levels);
+                         op->my_op_type,op->position,1,total_levels,1);
 
     }
     /* Consider putting _time_dep_func and _time_dep_mats in *ctx? */

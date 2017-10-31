@@ -12,6 +12,9 @@ typedef struct operator{
   /* For ladder operators only */
   struct operator *dag;
   struct operator *n;
+  struct operator *sig_x;
+  struct operator *sig_y;
+  struct operator *sig_z;
   /* For vec operators only */
   int     position;
   /* Stores a pointer to the top of the list. Used in vec[0] only*/

@@ -7,7 +7,10 @@ typedef enum {
     RAISE  = -1,
     NUMBER = 0,
     LOWER  = 1,
-    VEC    = 2
+    VEC    = 2,
+    SIGMA_X = 3,
+    SIGMA_Y = 4,
+    SIGMA_Z = 5
   } op_type;
 
 

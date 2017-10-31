@@ -70,6 +70,7 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->position    = -1;
   *new_op           = temp;
 
+  /* Make creation operator */
   temp              = malloc(sizeof(struct operator));
   temp->initial_pop = (double) 0.0;
   temp->n_before    = total_levels;
@@ -79,6 +80,7 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->position    = -1;
   (*new_op)->dag    = temp;
 
+  /* Make number operator */
   temp              = malloc(sizeof(struct operator));
   temp->initial_pop = (double) 0.0;
   temp->n_before    = total_levels;
@@ -88,6 +90,41 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->position    = -1;
 
   (*new_op)->n      = temp;
+
+  /* Make SIGMA_X operator (only valid for qubits, made for every system) */
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = (double) 0.0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = SIGMA_X;
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  temp->position    = -1;
+
+  (*new_op)->sig_x      = temp;
+
+  /* Make SIGMA_Z operator (only valid for qubits, made for every system) */
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = (double) 0.0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = SIGMA_Z;
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  temp->position    = -1;
+
+  (*new_op)->sig_z      = temp;
+
+  /* Make SIGMA_Y operator (only valid for qubits, made for every system) */
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = (double) 0.0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = SIGMA_Y;
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  temp->position    = -1;
+
+  (*new_op)->sig_y      = temp;
+
+
 
   /* Increase total_levels */
   total_levels = total_levels*number_of_levels;
@@ -205,8 +242,7 @@ void add_to_ham(PetscScalar a,operator op){
 
   mat_scalar = -a*PETSC_i;
   _add_to_PETSc_kron(ham_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,1,1);
-
+                     op->my_op_type,op->position,1,1,0);
   /*
    * Add -i * (I cross H) to the superoperator matrix, A
    * Since this is an additional I before, we simply
@@ -216,10 +252,10 @@ void add_to_ham(PetscScalar a,operator op){
 
   mat_scalar = -a*PETSC_i;
   _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,total_levels,1);
+                     op->my_op_type,op->position,total_levels,1,0);
 
   /*
-   * Add i * (H cross I) to the superoperator matrix, A
+   * Add i * (H^T cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
    * pass total_levels as extra_after.
    * We pass a*PETSC_i to get the imaginary part correct.
@@ -227,7 +263,7 @@ void add_to_ham(PetscScalar a,operator op){
 
   mat_scalar = a*PETSC_i;
   _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,1,total_levels);
+                     op->my_op_type,op->position,1,total_levels,1);
   return;
 }
 
@@ -260,7 +296,7 @@ void add_to_ham_stiff(PetscScalar a,operator op){
 
   mat_scalar = -a*PETSC_i;
   _add_to_PETSc_kron(ham_stiff_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,1,1);
+                     op->my_op_type,op->position,1,1,0);
 
   /*
    * Add -i * (I cross H) to the superoperator matrix, A
@@ -271,10 +307,10 @@ void add_to_ham_stiff(PetscScalar a,operator op){
 
   mat_scalar = -a*PETSC_i;
   _add_to_PETSc_kron(full_stiff_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,total_levels,1);
+                     op->my_op_type,op->position,total_levels,1,0);
 
   /*
-   * Add i * (H cross I) to the superoperator matrix, A
+   * Add i * (H^T cross I) to the superoperator matrix, A
    * Since this is an additional I after, we simply
    * pass total_levels as extra_after.
    * We pass a*PETSC_i to get the imaginary part correct.
@@ -282,7 +318,7 @@ void add_to_ham_stiff(PetscScalar a,operator op){
 
   mat_scalar = a*PETSC_i;
   _add_to_PETSc_kron(full_stiff_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,1,total_levels);
+                     op->my_op_type,op->position,1,total_levels,1);
   return;
 }
 
@@ -561,8 +597,8 @@ void add_to_ham_mult3(PetscScalar a,operator op1,operator op2,operator op3){
 /*
  * add_lin adds a Lindblad L(C) term to the system of equations, where
  * L(C)p = C p C^t - 1/2 (C^t C p + p C^t C)
- * Or, in superoperator space
- * Lp    = C cross C - 1/2(C^t C cross I + I cross C^t C) p
+ * Or, in superoperator space (t = conjugate transpose, T = transpose, * = conjugate)
+ * Lp    = C* cross C - 1/2(C^T C* cross I + I cross C^t C) p
  *
  * Inputs:
  *        PetscScalar a:    scalar to multiply L term (note: Full term, not sqrt())
@@ -584,21 +620,21 @@ void add_lin(PetscScalar a,operator op){
    */
   mat_scalar = -0.5*a;
   _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
-                         op->position,total_levels,1);
+                         op->position,total_levels,1,0);
   /*
-   * Add (C^t C cross I) to the superoperator matrix, A
-   * Which is (I_before cross C^t C cross I_after cross I_total)
+   * Add (C^T C* cross I) to the superoperator matrix, A
+   * Which is (I_before cross C^T C* cross I_after cross I_total)
    * Since this is an additional I_total after, we simply
    * set extra_after to total_levels
    */
   _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
-                         op->position,1,total_levels);
+                         op->position,1,total_levels,1);
 
   /*
-   * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
+   * Add (C'* cross C') to the superoperator matrix, A, where C' is the full space
    * representation of C. Let I_b = I_before and I_a = I_after
    * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
-   * or (I_b cross C cross I_ab cross C cross I_a)
+   * or (I_b cross C* cross I_ab cross C cross I_a)
    * This is just like add_to_ham_comb, with n_between = n_after*n_before
    */
   mat_scalar = a;
@@ -1095,7 +1131,11 @@ void _check_initialized_A(){
     MatSetSizes(ham_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
     MatSetFromOptions(ham_A);
     if (MAX_NNZ_PER_ROW>total_levels/2) {
-      MatMPIAIJSetPreallocation(ham_A,total_levels/2,NULL,total_levels/2,NULL);
+      if (np==1){
+        MatMPIAIJSetPreallocation(ham_A,total_levels,NULL,0,NULL);
+      } else {
+        MatMPIAIJSetPreallocation(ham_A,total_levels/2,NULL,total_levels/2,NULL);
+      }
     } else {
       MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
     }

@@ -32,8 +32,16 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
      * so the loop size is 1 and loop_limit is my_levels-1
      */
     loop_limit = my_levels-1;
+  } else if (my_op_type==SIGMA_X||my_op_type==SIGMA_Y||my_op_type==SIGMA_Z){
+    if (my_levels!=2) {
+      if (nid==0){
+        printf("ERROR! Pauli Operators are only defined for qubits\n");
+        exit(0);
+      }
+    }
+    /* Qubit Pauli Operators also need to loop through all my_levels */
+    loop_limit = 0;
   }
-
   return loop_limit;
 }
 
@@ -51,8 +59,8 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
  *      double val:         value at i_op,j_op
  */
 
-double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,long *j_op){
-  double val;
+PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,long *j_op){
+  PetscScalar val;
   /*
    * Since we store our operators as a type and number of levels
    * calculate the actual i,j location for our operator,
@@ -79,6 +87,51 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
     *i_op = i+1;
     *j_op = i;
     val  = sqrt((double)i+1);
+  } else if (my_op_type==SIGMA_X){
+    if (i==0) {
+      *i_op = 0;
+      *j_op = 1;
+    } else if (i==1) {
+      *i_op = 1;
+      *j_op = 0;
+    } else {
+      if (nid==0){
+        printf("ERROR! Pauli Operators are only defined for qubits\n");
+        exit(0);
+      }
+    }
+    val = 1.0;
+  } else if (my_op_type==SIGMA_Y){
+    if (i==0) {
+      *i_op = 0;
+      *j_op = 1;
+      val = -PETSC_i;
+    } else if (i==1) {
+      *i_op = 1;
+      *j_op = 0;
+      val = PETSC_i;
+    } else {
+      if (nid==0){
+        printf("ERROR! Pauli Operators are only defined for qubits\n");
+        exit(0);
+      }
+    }
+
+  } else if (my_op_type==SIGMA_Z){
+    if (i==0) {
+      *i_op = 0;
+      *j_op = 0;
+      val = 1.0;
+    } else if (i==1) {
+      *i_op = 1;
+      *j_op = 1;
+      val = -1.0;
+    } else {
+      if (nid==0){
+        printf("ERROR! Pauli Operators are only defined for qubits\n");
+        exit(0);
+      }
+    }
   } else {
     /* Vec operator */
     /*
@@ -105,7 +158,7 @@ double _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,lo
  *      double *val:        value of op for global i,j
   */
 
-void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,double *val){
+void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScalar *val){
   int i_sub,n_after,tmp_int,k1,k2;
   /*
    * We store our operators as a type and number of levels;
@@ -116,6 +169,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,double *va
    * If it is a number operator, it is diagonal.
    * If it is a raising operator, it is sub diagonal.
    */
+
   n_after = total_levels/(this_op->my_levels*this_op->n_before);
   i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
 
@@ -138,16 +192,6 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,double *va
       *j = (i_sub + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
       *val   = sqrt((double)i_sub+1.0);
     }
-  } else if (this_op->my_op_type==NUMBER){
-    /* Number operator */
-    if (i_sub!=0){
-      *j = i; //Diagonal, even in global space
-      *val   = (double)i_sub;
-    } else {
-      //There is no nonzero value for given global i; return -1 as flag
-      *j = -1;
-      *val = 0.0;
-    }
   } else if (this_op->my_op_type==RAISE){
     /*
      * Raising operator
@@ -169,7 +213,97 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,double *va
       *j = i_sub * n_after + k1 + k2*this_op->my_levels*n_after;
       *val   = sqrt((double)i_sub+1.0);
     }
+  } else if (this_op->my_op_type==SIGMA_X){
+    /*
+     * SIGMA_X
+     * if (i==1)
+     *    i = 1 * n_af + k1 + k2*n_me*n_af
+     *    j = 0 * n_af + k1 + k2*n_me*n_af
+     * if (i==0)
+     *    i = 0 * n_af + k1 + k2*n_l*n_af
+     *    j = 1 * n_af + k1 + k2*n_l*n_af
+     * We work out k1 and k2 from i to get j.
+     */
+    if (i_sub==0) {
+      tmp_int = i - 0 * n_after;
+      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(this_op->my_levels*n_after);
+      *j = (0 + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
+      *val   = 1.0;
+    } else if (i_sub==1) {
+      tmp_int = i - (0+1) * n_after;
+      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(this_op->my_levels*n_after);
+      *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
+      *val   = 1.0;
+    } else {
+      if (nid==0){
+        printf("ERROR! Pauli Operators are only defined for qubits\n");
+        exit(0);
+      }
+    }
+  } else if (this_op->my_op_type==SIGMA_Y){
+    /*
+     * SIGMA_Y
+     * if (i==1)
+     *    i = 1 * n_af + k1 + k2*n_me*n_af
+     *    j = 0 * n_af + k1 + k2*n_me*n_af
+     * if (i==0)
+     *    i = 0 * n_af + k1 + k2*n_l*n_af
+     *    j = 1 * n_af + k1 + k2*n_l*n_af
+     * We work out k1 and k2 from i to get j.
+     */
+    if (i_sub==0) {
+      tmp_int = i - 0 * n_after;
+      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(this_op->my_levels*n_after);
+      *j = (0 + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
+      *val   = -PETSC_i;
+    } else if (i_sub==1) {
+      tmp_int = i - (0+1) * n_after;
+      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(this_op->my_levels*n_after);
+      *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
+      *val   = PETSC_i;
+    } else {
+      if (nid==0){
+        printf("ERROR! Pauli Operators are only defined for qubits\n");
+        exit(0);
+      }
+    }
+
+  } else if (this_op->my_op_type==NUMBER){
+    /* Number operator */
+    if (i_sub!=0){
+      *j = i; //Diagonal, even in global space
+      *val   = (double)i_sub;
+    } else {
+      //There is no nonzero value for given global i; return -1 as flag
+      *j = -1;
+      *val = 0.0;
+    }
+  } else if (this_op->my_op_type==SIGMA_Z){
+    /*
+     * SIGMA_Z
+     * diagonal, even in global space
+     * if (i==0) val = 1.0
+     * if (i==1) val = -1.0
+     * We work out k1 and k2 from i to get j.
+     */
+    if (i_sub==0) {
+      *j = i;
+      *val   = 1.0;
+    } else if (i_sub==1) {
+      *j = i;
+      *val   = -1.0;
+    } else {
+      if (nid==0){
+        printf("ERROR! Pauli Operators are only defined for qubits\n");
+        exit(0);
+      }
+    }
   } else {
+
     /* Vec operator */
     /*
      * Since we assume 1 vec operator means |e><e|,
@@ -178,7 +312,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,double *va
      */
       if (nid==0){
         printf("ERROR! Vec Operators not currently supported for _get_val_j_from_global_i\n");
-        printf("       (maybe from get_expectation_value)");
+        printf("       (maybe from get_expectation_value)\n");
         exit(0);
       }
     /* *i_op = position; */
@@ -510,9 +644,9 @@ void _add_to_dense_kron_ij(PetscScalar a,int i_op,int j_op,
 
 void _add_to_PETSc_kron(Mat matrix, PetscScalar a,int n_before,int my_levels,
                         op_type my_op_type,int position,
-                        int extra_before,int extra_after){
+                        int extra_before,int extra_after,int transpose){
   long loop_limit,i,i_op,j_op,n_after;
-  PetscReal    val;
+  PetscScalar    val;
   PetscScalar add_to_mat;
   loop_limit = _get_loop_limit(my_op_type,my_levels);
 
@@ -530,7 +664,11 @@ void _add_to_PETSc_kron(Mat matrix, PetscScalar a,int n_before,int my_levels,
      */
     val = _get_val_in_subspace(i,my_op_type,position,&i_op,&j_op);
     add_to_mat = a*val;
-    _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,n_after*extra_after,my_levels);
+    if (transpose){
+      _add_to_PETSc_kron_ij(matrix,add_to_mat,j_op,i_op,n_before*extra_before,n_after*extra_after,my_levels);
+    } else {
+      _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,n_after*extra_after,my_levels);
+    }
    }
   return;
 }
@@ -563,7 +701,7 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
                              int transpose){
   long loop_limit1,loop_limit2,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,tmp_switch,i_comb,j_comb;
-  double val1,val2;
+  PetscScalar val1,val2;
   PetscScalar add_to_mat;
   op_type tmp_op_switch;
 
@@ -703,7 +841,7 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
                                  int transpose){
   long loop_limit_op,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,i_comb,j_comb;
-  double val1,val2;
+  PetscScalar val1,val2;
   PetscScalar add_to_mat;
 
   loop_limit_op = _get_loop_limit(op_type_op,levels_op);
@@ -863,9 +1001,9 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
 
 void _add_to_PETSc_kron_lin(Mat matrix,PetscScalar a,int n_before,int my_levels,
                         op_type my_op_type,int position,
-                        int extra_before,int extra_after){
+                            int extra_before,int extra_after,int transpose){
   long loop_limit,i,i_op,j_op,n_after;
-  PetscReal    val;
+  PetscScalar    val;
   PetscScalar add_to_mat;
   loop_limit = _get_loop_limit(my_op_type,my_levels);
 
@@ -873,17 +1011,22 @@ void _add_to_PETSc_kron_lin(Mat matrix,PetscScalar a,int n_before,int my_levels,
 
   for (i=0;i<my_levels-loop_limit;i++){
     /*
-     * For this term, we have to calculate Ct C.
+     * For this term, we have to calculate Ct C or (Ct C)^T = C^T C* = (C^t C)* .
      * We know, a priori, that all operators are (sub or super) diagonal.
-     * Any matrix such as this will be (true) diagonal after doing Ct C.
-     * Ct C is simple to calculate with these diagonal matrices:
+     * Any matrix such as this will be (true) diagonal after doing either operation.
+     * Ct C and (Ct C)* are simple to calculate with these diagonal matrices:
      * for all elements of C[k], where C is the stored diagonal,
      * location in Ct C = j,j of the
-     * original element C[k], and the value is C[k]*C[k]
+     * original element C[k], and the value is C[k]*C[k].
+     *
      */
     val  = _get_val_in_subspace(i,my_op_type,position,&i_op,&j_op);
     i_op = j_op;
-    val  = val*val;
+    if (transpose){
+      val  = PetscConjComplex(val*PetscConjComplex(val));
+    } else{
+      val  = val*PetscConjComplex(val);
+    }
     add_to_mat = a*val;
     _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,
                           n_after*extra_after,my_levels);
@@ -937,7 +1080,7 @@ void _add_to_PETSc_kron_lin2(Mat matrix,PetscScalar a,int n_before,int my_levels
 
 
 /*
- * add_to_PETSc_kron_lin_comb adds C' cross C' to matrix
+ * add_to_PETSc_kron_lin_comb adds C'* cross C' to matrix
  *
  * Inputs:
  *      Mat matrix          matrix to add to
@@ -954,7 +1097,7 @@ void _add_to_PETSc_kron_lin_comb(Mat matrix, PetscScalar a,int n_before,int my_l
                                  int position){
   long loop_limit,k3,i,j,i1,j1,i2,j2,i_comb,j_comb;
   long n_after,comb_levels;
-  double val1,val2;
+  PetscScalar val1,val2;
   PetscScalar add_to_mat;
 
 
@@ -969,8 +1112,9 @@ void _add_to_PETSc_kron_lin_comb(Mat matrix, PetscScalar a,int n_before,int my_l
        * Since we store our operators as a type and number of levels
        * calculate the actual i,j location for our operator,
        * within its subspace, as well as its values.
+       * Make sure to take complex conjugate here
        */
-      val1 = _get_val_in_subspace(i,my_op_type,position,&i1,&j1);
+      val1 = PetscConjComplex(_get_val_in_subspace(i,my_op_type,position,&i1,&j1));
       /*
        * Since we are taking c cross I cross c, we do
        * I_ab cross c below - the k3 loop is moved to the
@@ -1095,8 +1239,8 @@ void _add_to_PETSc_kron_lin2_comb(Mat matrix,PetscScalar a,int n_before,int my_l
 void _add_to_dense_kron(PetscScalar a,int n_before,int my_levels,
                         op_type my_op_type,int position){
   long loop_limit,i,i_op,j_op,n_after;
-  PetscReal    val;
-  double add_to_mat;
+  PetscScalar    val;
+  PetscScalar add_to_mat;
   loop_limit = _get_loop_limit(my_op_type,my_levels);
 
   n_after    = total_levels/(my_levels*n_before);
@@ -1137,7 +1281,7 @@ void _add_to_dense_kron_comb(PetscScalar a,int n_before1,int levels1,op_type op_
                              int n_before2,int levels2,op_type op_type2,int position2){
   long loop_limit1,loop_limit2,k3,i,j,i1,j1,i2,j2;
   long n_before,n_after,n_between,my_levels,tmp_switch,i_comb,j_comb;
-  double val1,val2;
+  PetscScalar val1,val2;
   PetscScalar add_to_mat;
   op_type tmp_op_switch;
 

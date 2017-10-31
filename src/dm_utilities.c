@@ -880,8 +880,7 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
   operator *op;
   PetscInt i,j,this_i,this_j,my_j_start,my_j_end,my_start,my_end,dim,dm_size;
   PetscInt this_loc;
-  PetscReal op_val,val;
-  PetscScalar dm_element;
+  PetscScalar dm_element,val,op_val;
 
   if(_lindblad_terms) {
     dim = total_levels*total_levels;
