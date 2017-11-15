@@ -1074,12 +1074,19 @@ void get_bipartite_concurrence(Vec dm,double *concurrence) {
      */
 
     /* Find max eigenvalue and sum up all eigs */
+
+    for (i=0;i<levels;i++){
+      max = PetscRealPart(eigs[i]);
+      if(max<1e-14){
+        eigs[i] = 0.0;
+      }
+    }
     max = -1; //The values should all be positive, so we can set the base comparison to negative
     *concurrence = 0;
     for (i=0;i<levels;i++){
-      *concurrence = *concurrence + PetscRealPart(eigs[i]);
-      if (PetscRealPart(eigs[i])>max) {
-        max = PetscRealPart(eigs[i]);
+      *concurrence = *concurrence + sqrt(PetscRealPart(eigs[i]));
+      if (sqrt(PetscRealPart(eigs[i]))>max) {
+        max = sqrt(PetscRealPart(eigs[i]));
       }
     }
     *concurrence = 2*max - *concurrence;
