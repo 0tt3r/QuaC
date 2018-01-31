@@ -13,10 +13,10 @@ CFLAGS += -isystem $(SRCDIR)
 include ${PETSC_DIR}/lib/petsc/conf/variables
 #include ${PETSC_DIR}/lib/petsc/conf/rules
 
-_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h
+_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h error_correction.h
 DEPS  = $(patsubst %,$(SRCDIR)/%,$(_DEPS))
 
-_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o
+_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o error_correction.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 _TEST_OBJ  = unity.o timedep_test.o imag_ham.o
