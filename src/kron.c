@@ -23,8 +23,8 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
    * one less length in the loop (loop_limit)
    */
   loop_limit = 1;
-  if (my_op_type==NUMBER){
-    /* Number operator needs to loop through the full my_levels*/
+  if (my_op_type==NUMBER||my_op_type==IDENTITY){
+    /* Number and identity operators needs to loop through the full my_levels*/
     loop_limit = 0;
   } else if (my_op_type==VEC){
     /*
@@ -82,6 +82,11 @@ PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_
     *i_op = i;
     *j_op = i;
     val   = (double)i;
+  } else if (my_op_type==IDENTITY){
+    /* Number operator */
+    *i_op = i;
+    *j_op = i;
+    val   = 1.0;
   } else if (my_op_type==RAISE){
     /* Raising operator */
     *i_op = i+1;
@@ -91,9 +96,11 @@ PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_
     if (i==0) {
       *i_op = 0;
       *j_op = 1;
+      val = 1.0;
     } else if (i==1) {
       *i_op = 1;
       *j_op = 0;
+      val = 1.0;
     } else {
       if (nid==0){
         printf("ERROR! Pauli Operators are only defined for qubits\n");
@@ -282,6 +289,11 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
       *j = -1;
       *val = 0.0;
     }
+  } else if (this_op->my_op_type==IDENTITY){
+    /* Identity operator */
+    /* diagonal, even in global space */
+    *j = i;
+    *val = 1.0;
   } else if (this_op->my_op_type==SIGMA_Z){
     /*
      * SIGMA_Z
@@ -995,6 +1007,7 @@ void _add_to_PETSc_kron_comb_vec(Mat matrix,PetscScalar a,int n_before_op,int le
  *      int position:       vec operator's position variable
  *      int extra_before:   extra Hilbert space size before
  *      int extra_after:    extra Hilbert space size after
+ *      int transpose:      whether or not to take the transpose
  * Outputs:
  *      none, but adds to PETSc matrix
  */
@@ -1030,6 +1043,62 @@ void _add_to_PETSc_kron_lin(Mat matrix,PetscScalar a,int n_before,int my_levels,
     add_to_mat = a*val;
     _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,
                           n_after*extra_after,my_levels);
+  }
+
+  return;
+}
+
+/*
+ * _add_to_PETSc_kron_lin_mat adds a formed matrix in the operator space
+ * to the full_A, expanding either before or after with the identity matrix.
+ *
+ * Inputs:
+ *      Mat matrix:         matrix to add to
+ *      PetscScalar a       scalar to multiply matrix (can be complex)
+ *      Mat matrix_to_add:  matrix to be added
+ *      int before:         whether to exand before (otherwise, expand after)
+ *      int transpose:      whether or not to take the conjugate transpose
+ * Outputs:
+ *      none, but adds to PETSc matrix
+n */
+
+void _add_to_PETSc_kron_lin_mat(Mat matrix,PetscScalar a, Mat matrix_to_add,
+                                int before, int transpose){
+  PetscScalar add_to_mat;
+  PetscInt    i,j,Istart,Iend,ncols,extra_before,extra_after;
+  const PetscInt    *cols;
+  const PetscScalar *vals;
+
+  MatGetOwnershipRange(matrix_to_add,&Istart,&Iend);
+
+  if (before) {
+    extra_before = total_levels;
+    extra_after  = 1;
+  } else {
+    extra_after  = total_levels;
+    extra_before = 1;
+  }
+
+  /*
+   * For this term, we have to calculate Ct C or (Ct C)^T = C^T C* = (C^t C)* .
+   */
+  for (i=Istart;i<Iend;i++){
+    /* Get the row */
+    MatGetRow(matrix_to_add,i,&ncols,&cols,&vals);
+    for (j=0;j<ncols;j++){
+      if (transpose) {
+        add_to_mat = a*PetscConjComplex(vals[j]);
+      } else {
+        add_to_mat = a*vals[j];
+      }
+      /*
+       * We add the i,j element (which is stored in vals[j]) to
+       * the full matrix, expanding appropriately
+       */
+      _add_to_PETSc_kron_ij(matrix,add_to_mat,i,cols[j],extra_before,
+                            extra_after,total_levels);
+    }
+    MatRestoreRow(matrix_to_add,i,&ncols,&cols,&vals);
   }
 
   return;

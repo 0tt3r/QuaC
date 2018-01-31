@@ -25,5 +25,8 @@ void _add_to_dense_kron_comb_vec(PetscScalar,int,int,op_type,int,int,int,int);
 void _add_to_dense_kron_ij(PetscScalar,int,int,int,int,int);
 void _add_PETSc_DM_kron_ij(PetscScalar,Mat,Mat,int,int,int,int,int);
 void _mult_PETSc_init_DM(Mat,Mat,double);
+void _add_to_PETSc_kron_lin_mat(Mat,PetscScalar,Mat,int,int);
+
+
 
 #endif
