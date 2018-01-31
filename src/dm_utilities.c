@@ -1,7 +1,9 @@
 #include "dm_utilities.h"
+#include "operators_p.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <petscblaslapack.h>
+#include <string.h>
 
 /*
  * Print the DM as a matrix.
@@ -364,6 +366,45 @@ void set_dm_from_initial_pop(Vec x){
   return;
 }
 
+/*
+ * add_to_dm_from_string takes a string of occupation numbers
+ * and adds that state to the starting density matrix
+ * (or psi, eventually)
+ */
+
+void add_to_dm_from_string(Vec rho,PetscScalar val,char string[]){
+  PetscInt string_length,i,passed_levels,real_levels;
+
+  string_length = strlen(string);
+  if(string_length!=num_subsystems) {
+    if (nid==0){
+      printf("ERROR! String must be the same size as the number of subsystems!\n");
+      printf("       (in add_to_dm_from_string)!\n");
+      exit(0);
+    }
+  }
+
+
+  for(i=0;i<num_subsystems;i++){
+    real_levels   = subsystem_list[i]->my_levels;
+    if(real_levels>9){
+      if (nid==0){
+        printf("ERROR! Number of levels must be less than 10 to use this routinie!\n");
+        printf("       (in add_to_dm_from_string)!\n");
+        exit(0);
+      }
+    }
+    passed_levels = string[i] - '0';
+    if(passed_levels>real_levels){
+      if (nid==0){
+        printf("ERROR! Number of levels in string must be the less than or equal to the true number!\n");
+        printf("       (in add_to_dm_from_string)!\n");
+        exit(0);
+      }
+    }
+  }
+
+}
 
 
 /*
@@ -887,7 +928,7 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
   } else {
     dim = total_levels;
     if (nid==0){
-      printf("ERROR! Expectation values not support for Schrodinger solver!\n");
+      printf("ERROR! Expectation values does not support the Schrodinger solver!\n");
       exit(0);
     }
 
