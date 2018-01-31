@@ -15,6 +15,7 @@ typedef struct operator{
   struct operator *sig_x;
   struct operator *sig_y;
   struct operator *sig_z;
+  struct operator *eye;
   /* For vec operators only */
   int     position;
   /* Stores a pointer to the top of the list. Used in vec[0] only*/
@@ -42,9 +43,11 @@ void add_to_ham_mult3(PetscScalar,operator,operator,operator);
 int  _check_op_type2(operator,operator);
 int  _check_op_type3(operator,operator,operator);
 void add_lin(PetscScalar,operator);
+void add_lin_mat(PetscScalar,Mat);
 void add_lin_mult2(PetscScalar,operator,operator);
 void print_dense_ham();
 void set_initial_pop(operator,double);
+void combine_ops_to_mat(Mat*,int,...);
 extern int nid; /* a ranks id */
 extern int np; /* number of processors */
 #define MAX_SUB 100  //Consider making this not a define

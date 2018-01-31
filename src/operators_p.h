@@ -10,7 +10,8 @@ typedef enum {
     VEC    = 2,
     SIGMA_X = 3,
     SIGMA_Y = 4,
-    SIGMA_Z = 5
+    SIGMA_Z = 5,
+    IDENTITY = 6
   } op_type;
 
 

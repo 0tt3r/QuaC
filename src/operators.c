@@ -15,7 +15,7 @@
  * - check if input DM is a valid DM (trace, hermitian, etc)
  */
 
-#define MAX_NNZ_PER_ROW 50
+#define MAX_NNZ_PER_ROW 512
 
 int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -90,6 +90,17 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->position    = -1;
 
   (*new_op)->n      = temp;
+
+  /* Make identity operator */
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = (double) 0.0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = IDENTITY;
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  temp->position    = -1;
+
+  (*new_op)->eye    = temp;
 
   /* Make SIGMA_X operator (only valid for qubits, made for every system) */
   temp              = malloc(sizeof(struct operator));
@@ -781,6 +792,171 @@ void add_lin_mult2(PetscScalar a,operator op1,operator op2){
 
   return;
 }
+
+/*
+ * add_lin_mat adds a Lindblad L(C) term to the system of equations, where
+ * L(C)p = C p C^t - 1/2 (C^t C p + p C^t C)
+ * Or, in superoperator space (t = conjugate transpose, T = transpose, * = conjugate)
+ * Lp    = C* cross C - 1/2(C^T C* cross I + I cross C^t C) p
+ * For this routine, C is expressed explicitly as a previously constructed matrix
+ * (rather than a compressed operator)
+ * Inputs:
+ *        PetscScalar a:    scalar to multiply L term (note: Full term, not sqrt())
+ *        Mat add_to_lin:   mat to make L(C) of
+ * Outputs:
+ *        none
+ */
+
+void add_lin_mat(PetscScalar a,Mat add_to_lin){
+  PetscInt       i,j,Istart,Iend,ncols,i_add,j_add,i2,j2;
+  const PetscInt    *cols2;
+  const PetscScalar *vals2;
+  PetscScalar    vals[total_levels],val_to_add;
+  PetscInt       cols[total_levels],ncols2;
+  PetscScalar    mat_scalar;
+  PetscReal      fill=1.0;
+  Mat work_mat1,work_mat2;
+
+  _check_initialized_A();
+  _lindblad_terms = 1;
+
+  /* Construct C^t C */
+  MatHermitianTranspose(add_to_lin,MAT_INITIAL_MATRIX,&work_mat2);
+  MatMatMult(work_mat2,add_to_lin,MAT_INITIAL_MATRIX,fill,&work_mat1);
+  MatDestroy(&work_mat2);
+  /*
+   * Add (I_total cross C^t C) to the superoperator matrix, A
+   */
+  mat_scalar = -0.5*a;
+
+  _add_to_PETSc_kron_lin_mat(full_A,mat_scalar,work_mat1,1,0);
+  /*
+   * Add (C^T C* cross I) to the superoperator matrix, A
+   */
+  _add_to_PETSc_kron_lin_mat(full_A,mat_scalar,work_mat1,0,1);
+
+  /*
+   * Add (C* cross C) to the superoperator matrix, A
+   * using the standard tensor product between two
+   * arbitrary matrices, exploiting no special structure
+   * WARNING: This won't work in parallel as written
+   */
+  MatGetOwnershipRange(add_to_lin,&Istart,&Iend);
+  for (i=Istart;i<Iend;i++){
+    /* Get the row */
+    MatGetRow(add_to_lin,i,&ncols2,&cols2,&vals2);
+    /* Copy info into temporary array */
+    ncols = ncols2;
+    for (j=0;j<ncols2;j++){
+      cols[j] = cols2[j];
+      vals[j] = vals2[j];
+    }
+    MatRestoreRow(add_to_lin,i,&ncols2,&cols2,&vals2);
+    for (j=0;j<ncols;j++){
+      for (i2=Istart;i2<Iend;i2++){
+        /* Get the row */
+        MatGetRow(add_to_lin,i2,&ncols2,&cols2,&vals2);
+        for (j2=0;j2<ncols2;j2++){
+          i_add = total_levels * i + i2;
+          j_add = total_levels * cols[j] + cols2[j2];
+          val_to_add = a*PetscConjComplex(vals[j])*vals2[j2];
+          MatSetValue(full_A,i_add,j_add,val_to_add,ADD_VALUES);
+        }
+        MatRestoreRow(add_to_lin,i2,&ncols2,&cols2,&vals2);
+      }
+    }
+
+  }
+
+  MatDestroy(&work_mat1);
+
+  return;
+}
+
+/*
+ * combine_ops_to_mat takes in a list of operators, multiplies them
+ * and stores it in a matrix. This should work with both operators from
+ * the same space and operators from different spaces. The matrix returned
+ * is of size total_levels by totel_levels; that is, it is in the 'operator'
+ * space. If a subspace is missing, it is assumed to be the identity.
+ * Because of this, this routine can be used to expand a single operator
+ * into its full matrix form. If no operators are passed, this returns the
+ * identity.
+ *
+ * Note that the matrix is allocated here, but must be freed outside
+ * of this routine.
+ *
+ * Inputs:
+ *        int number_of_ops: the number of operators to multiply
+ *        operator op1, op2, ...: the operators to multiply
+ * Outputs:
+ *        Mat *matrix_out: The matrix where the result is stored.
+ *
+ */
+void combine_ops_to_mat(Mat *matrix_out,int number_of_ops,...){
+  va_list ap;
+  operator *op;
+  PetscScalar val,op_val;
+  PetscInt Istart,Iend;
+  PetscInt i,j,this_i,this_j,dim;
+
+  va_start(ap,number_of_ops);
+  op = malloc(number_of_ops*sizeof(struct operator));
+  /* Loop through passed in ops and store in list */
+  for (i=0;i<number_of_ops;i++){
+    op[i] = va_arg(ap,operator);
+  }
+  va_end(ap);
+
+  dim = total_levels;
+
+  // Should this inherit its stucture from full_A?
+  MatCreate(PETSC_COMM_WORLD,matrix_out);
+  MatSetType(*matrix_out,MATMPIAIJ);
+  MatSetSizes(*matrix_out,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+  MatSetFromOptions(*matrix_out);
+
+  MatMPIAIJSetPreallocation(*matrix_out,5,NULL,5,NULL);
+
+  /*
+   * Calculate ABC using the following observation:
+   *     Each operator (ABCD...) are very sparse - having less than
+   *          1 value per row. This allows us to efficiently do the
+   *          multiplication of ABCD... by just calculating the value
+   *          for one of the indices (i); if there is no matching j,
+   *          the value is 0.
+   */
+
+
+
+  MatGetOwnershipRange(*matrix_out,&Istart,&Iend);
+
+  for (i=Istart;i<Iend;i++){
+    this_i = i; // The leading index which we check
+    op_val = 1.0;
+    for (j=0;j<number_of_ops;j++){
+      _get_val_j_from_global_i(this_i,op[j],&this_j,&val); // Get the corresponding j and val
+      if (this_j<0) {
+        /*
+         * Negative j says there is no nonzero value for a given this_i
+         * As such, we can immediately break the loop for i
+         */
+        op_val = 0.0;
+        break;
+      } else {
+        this_i = this_j;
+        op_val = op_val*val;
+      }
+    }
+    MatSetValue(*matrix_out,i,this_i,op_val,ADD_VALUES);
+  }
+
+  MatAssemblyBegin(*matrix_out,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(*matrix_out,MAT_FINAL_ASSEMBLY);
+  free(op);
+  return;
+}
+
 
 /*
  * _check_initialized_op checks if petsc was initialized and sets up variables
