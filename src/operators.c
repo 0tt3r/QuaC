@@ -238,6 +238,7 @@ void add_to_ham(PetscScalar a,operator op){
 
 
   _check_initialized_A();
+  if (PetscAbsComplex(a)==0) return;
 
   /*
    * Construct the dense Hamiltonian only on the master node
@@ -620,9 +621,10 @@ void add_to_ham_mult3(PetscScalar a,operator op1,operator op2,operator op3){
 
 void add_lin(PetscScalar a,operator op){
   PetscScalar    mat_scalar;
-
   _check_initialized_A();
   _lindblad_terms = 1;
+  if (PetscAbsComplex(mat_scalar)==0) return;
+
   /*
    * Add (I cross C^t C) to the superoperator matrix, A
    * Which is (I_total cross I_before cross C^t C cross I_after)
@@ -651,7 +653,6 @@ void add_lin(PetscScalar a,operator op){
   mat_scalar = a;
   _add_to_PETSc_kron_lin_comb(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
                               op->position);
-
   return;
 }
 
