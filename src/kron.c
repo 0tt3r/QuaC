@@ -60,7 +60,7 @@ long _get_loop_limit(op_type my_op_type,int my_levels){
  */
 
 PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_op,long *j_op){
-  PetscScalar val;
+  PetscScalar val=1.0;
   /*
    * Since we store our operators as a type and number of levels
    * calculate the actual i,j location for our operator,
@@ -681,7 +681,7 @@ void _add_to_PETSc_kron(Mat matrix, PetscScalar a,int n_before,int my_levels,
     } else {
       _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,n_after*extra_after,my_levels);
     }
-   }
+  }
   return;
 }
 
@@ -818,7 +818,7 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
         }
         add_to_mat = a*val1*val2;
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
-                              n_after*extra_after,my_levels);
+                                n_after*extra_after,my_levels);
       }
     }
   }
@@ -1042,7 +1042,7 @@ void _add_to_PETSc_kron_lin(Mat matrix,PetscScalar a,int n_before,int my_levels,
     }
     add_to_mat = a*val;
     _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,
-                          n_after*extra_after,my_levels);
+                            n_after*extra_after,my_levels);
   }
 
   return;
@@ -1478,6 +1478,7 @@ void _add_to_dense_kron_comb_vec(PetscScalar a,int n_before_op,int levels_op,op_
   long n_before,n_after,n_between,my_levels,i_comb,j_comb;
   double val1,val2;
   PetscScalar add_to_mat;
+  i2 = 0; j2 = 0;
 
   loop_limit_op = _get_loop_limit(op_type_op,levels_op);
 
