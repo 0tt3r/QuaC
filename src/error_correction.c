@@ -11,8 +11,8 @@
 void build_recovery_lin(Mat *recovery_mat,operator error,char commutation_string[],int n_stabilizers,...){
 
   va_list ap;
-  PetscScalar plus_or_minus_1,scale_val;
-  PetscInt i,dim;
+  PetscScalar plus_or_minus_1=1.0,scale_val;
+  PetscInt i;
   PetscReal fill;
   Mat temp_op_mat, work_mat1, work_mat2, this_stab;
   /*
@@ -24,8 +24,6 @@ void build_recovery_lin(Mat *recovery_mat,operator error,char commutation_string
 
   /* Construct our error matrix */
   combine_ops_to_mat(&temp_op_mat,1,error);
-
-  dim = total_levels;
 
   /*
    * Copy the error matrix into our recovery matrix
@@ -125,9 +123,8 @@ void destroy_stabilizer(stabilizer *stab){
 
 void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int n_stabilizers,...){
   va_list ap;
-  PetscReal   plus_or_minus_1;
-  PetscScalar mat_scalar,add_to_mat,op_val,val,error_val,error_i;
-  PetscInt   i,j,Istart,Iend,this_i,this_j,i_stab,j_stab,k_stab,l_stab;
+  PetscScalar mat_scalar,add_to_mat,op_val;
+  PetscInt   i,Istart,Iend,this_i,i_stab,j_stab,k_stab,l_stab;
   PetscInt i1,i2,j1,j2,num_nonzero1,num_nonzero2,i_comb,j_comb;
   /*
    * The following arrays are used in C* C calculationsg
@@ -138,7 +135,6 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
   PetscInt row_nonzeros1[total_levels],row_nonzeros2[total_levels];
   stabilizer     *stabs;
 
-  MatGetOwnershipRange(full_A,&Istart,&Iend);
   /*
    * We are calculating the recovery operator, which is defined as:
    *     R = E * (1 +/- M_1)/2 * (1 +/- M_2)/2 * ...
@@ -153,6 +149,8 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
   _check_initialized_A();
   _lindblad_terms = 1;
 
+  if (PetscAbsComplex(a)==0) return;
+  MatGetOwnershipRange(full_A,&Istart,&Iend);
 
   va_start(ap,n_stabilizers);
   stabs = malloc(n_stabilizers*sizeof(struct stabilizer));
@@ -213,13 +211,13 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
       this_i = i; // The leading index which we check
       op_val = 1.0;
       _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
-      add_to_mat = op_val * mat_scalar; // Include common prefactor terms
 
       /*
        * Now we have the matrix form of M_i_stab, but we need still need to
        * expand it to add it to the superoperator space.
        */
       /* I cross C^t C part */
+      add_to_mat = op_val * mat_scalar; // Include common prefactor terms
       _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
 
       /* (C^t C)* cross I part */
@@ -240,12 +238,12 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
           if (op_val!= 0.0) {
             _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
           }
-          add_to_mat = op_val * mat_scalar; // Include common prefactor terms
           /*
            * Now we have an element of the matrix form of M_i*M_j but we need still need to
            * expand it to add it to the superoperator space.
            */
           /* I cross C^t C part */
+          add_to_mat = op_val * mat_scalar; // Include common prefactor terms
           _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
 
           /* (C^t C)* cross I part */
@@ -272,12 +270,12 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
               _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
             }
 
-            add_to_mat = op_val * mat_scalar; // Include common prefactor terms
             /*
              * Now we have an element of the matrix form of M_i*M_j but we need still need to
              * expand it to add it to the superoperator space.
              */
             /* I cross C^t C part */
+            add_to_mat = op_val * mat_scalar; // Include common prefactor terms
             _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
 
             /* (C^t C)* cross I part */
@@ -310,12 +308,12 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
                 _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab]);
               }
 
-              add_to_mat = op_val * mat_scalar; // Include common prefactor terms
               /*
                * Now we have an element of the matrix form of M_i*M_j but we need still need to
                * expand it to add it to the superoperator space.
                */
               /* I cross C^t C part */
+              add_to_mat = op_val * mat_scalar; // Include common prefactor terms
               _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
 
               /* (C^t C)* cross I part */
@@ -390,7 +388,7 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
 void _get_this_i_and_val_from_stab(PetscInt *this_i, PetscScalar *op_val,stabilizer stab,char commutation_char){
   PetscInt j,this_j;
   PetscScalar val;
-  PetscReal plus_or_minus_1;
+  PetscReal plus_or_minus_1=1.0;
 
   if (commutation_char=='1') {
     plus_or_minus_1 = 1.0;
@@ -425,9 +423,8 @@ void _get_this_i_and_val_from_stab(PetscInt *this_i, PetscScalar *op_val,stabili
 
 /* Gets the nonzeros in a row for a given i, error operator, and stabilizers */
 void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *num_nonzero,PetscInt i,operator error,char commutation_string[],int n_stabilizers,stabilizer stabs[]){
-  PetscScalar error_val,op_val,val;
-  PetscReal   plus_or_minus_1;
-  PetscInt j,this_i,this_j,error_i,i_stab,j_stab,k_stab,l_stab,found;
+  PetscScalar error_val,op_val;
+  PetscInt j,this_i,error_i,i_stab,j_stab,k_stab,l_stab,found;
   /* Get the error terms nonzero for this i */
   _get_val_j_from_global_i(i,error,&error_i,&error_val); // Get the corresponding j and val
   this_i = error_i; // The leading index which we check
