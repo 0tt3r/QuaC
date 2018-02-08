@@ -949,7 +949,9 @@ void combine_ops_to_mat(Mat *matrix_out,int number_of_ops,...){
         op_val = op_val*val;
       }
     }
-    MatSetValue(*matrix_out,i,this_i,op_val,ADD_VALUES);
+    if (PetscAbsComplex(op_val)!=0) {
+      MatSetValue(*matrix_out,i,this_i,op_val,ADD_VALUES);
+    }
   }
 
   MatAssemblyBegin(*matrix_out,MAT_FINAL_ASSEMBLY);
