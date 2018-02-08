@@ -161,7 +161,7 @@ PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_
  *      long i:             global i
  *      operator:           operator to get
  * Outputs:
- *      long *j:             global j for nonzer of given i; or negative if none
+ *      long *j:            global j for nonzero of given i; or negative if none
  *      double *val:        value of op for global i,j
   */
 
