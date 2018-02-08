@@ -402,12 +402,6 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     if (nid==0) printf("Matrix Assembled.\n");
     TSSetRHSJacobian(ts,solve_A,solve_A,TSComputeRHSJacobianConstant,NULL);
   }
-  /*
-   * Moved matrix information print down so that we can see the information
-   * on the extra zeros we added
-   * to solve_A to make copying into AA for time dependent runs
-   * more efficient.
-   */
 
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
@@ -454,6 +448,17 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
      */
     TSSetEventHandler(ts,nevents,&direction,&terminate,_QG_EventFunction,_QG_PostEventFunction,NULL);
   }
+
+  if (_num_circuits > 0) {
+    nevents   =  1; //Only one event for now (did we cross a gate?)
+    direction = -1; //We only want to count an event if we go from positive to negative
+    terminate = PETSC_FALSE; //Keep time stepping after we passed our event
+    /* Arguments are: ts context, nevents, direction of zero crossing, whether to terminate,
+     * a function to check event status, a function to apply events, private data context.
+     */
+    TSSetEventHandler(ts,nevents,&direction,&terminate,_QC_EventFunction,_QC_PostEventFunction,NULL);
+  }
+
   /* if (_lindblad_terms) { */
   /*   nevents   =  1; //Only one event for now (did we cross a gate?) */
   /*   direction =  0; //We only want to count an event if we go from positive to negative */

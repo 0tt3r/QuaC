@@ -9,6 +9,10 @@ int _num_quantum_gates = 0;
 int _current_gate = 0;
 struct quantum_gate_struct _quantum_gate_list[MAX_GATES];
 
+int _num_circuits    = 0;
+int _current_circuit = 0;
+circuit _circuit_list[MAX_GATES];
+
 
 /* EventFunction is one step in Petsc to apply some action at a specific time.
  * This function checks to see if an event has happened.
@@ -45,9 +49,64 @@ PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[
   return(0);
 }
 
+/* EventFunction is one step in Petsc to apply some action at a specific time.
+ * This function checks to see if an event has happened.
+ */
+PetscErrorCode _QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
+  /* Check if the time has passed a gate */
+  PetscInt current_gate,num_gates;
+
+  if (_current_circuit<_num_circuits) {
+    current_gate = _circuit_list[_current_circuit].current_gate;
+    num_gates    = _circuit_list[_current_circuit].num_gates;
+    if (current_gate<num_gates) {
+      /* We signal that we passed the time by returning a negative number */
+      fvalue[0] = _circuit_list[_current_circuit].gate_list[current_gate].time
+        +_circuit_list[_current_circuit].start_time - t;
+    } else {
+      if (nid==0){
+        printf("ERROR! current_gate should never be larger than num_gates in _QC_EventFunction\n");
+        exit(0);
+      }
+    }
+  } else {
+    fvalue[0] = t;
+  }
+
+  return(0);
+}
+
+/* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
+ * to apply that event.
+*/
+PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+  PetscInt current_gate;
+   /* We only have one event at the moment, so we do not need to branch.
+    * If we had more than one event, we would put some logic here.
+    */
+  if (nevents) {
+    /* Apply the current gate */
+    current_gate = _circuit_list[_current_circuit].current_gate;
+    _apply_gate(_circuit_list[_current_circuit].gate_list[current_gate].my_gate_type,
+                _circuit_list[_current_circuit].gate_list[current_gate].qubit_numbers,U);
+
+    /* Increment our gate counter */
+    _circuit_list[_current_circuit].current_gate = _circuit_list[_current_circuit].current_gate + 1;
+
+    if(_circuit_list[_current_circuit].current_gate>=_circuit_list[_current_circuit].num_gates){
+      /* We've exhausted this circuit; move on to the next. */
+      _current_circuit = _current_circuit + 1;
+    }
+
+  }
+
+  TSSetSolution(ts,U);
+  return(0);
+}
+
 /* Add a gate to the list */
 void add_gate(PetscReal time,gate_type my_gate_type,...) {
-  int num_qubits,qubit,i;
+  int num_qubits=0,qubit,i;
   va_list ap;
 
   if (my_gate_type==HADAMARD) {
@@ -116,12 +175,12 @@ void _apply_gate(gate_type my_gate_type,int *systems,Vec rho){
  *     gate_type my_gate_type  type of quantum gate
  *     int *s
  * Outputs:
- *      none, but adds to PETSc matrix full_A
+ *      Mat gate_mat: the expanded, superoperator matrix for that gate
  */
 
 void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
   PetscInt i,j,i_mat,j_mat,k1,k2,k3,k4,n_before1,n_before2,my_levels,n_after;
-  PetscInt i1,j1,i2,j2,comb_levels,control,moved_system;
+  PetscInt i1,j1,i2=0,j2=0,comb_levels,control=-1,moved_system;
   PetscReal    val1,val2;
   PetscScalar add_to_mat;
 
@@ -191,7 +250,7 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
                 i2 = i2*n_after + k3 + k4*my_levels*n_after;
                 j2 = j2*n_after + k3 + k4*my_levels*n_after;
 
-          /* Permute to computational basis */
+                /* Permute to computational basis */
                 _change_basis_ij_pair(&i2,&j2,systems[control]+1,moved_system);
 
                 add_to_mat = val1*val2;
@@ -223,9 +282,39 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
     comb_levels = my_levels*my_levels*n_before1*n_after;
 
     for (k4=0;k4<n_before1*n_after;k4++){
-      for (i=0;i<4;i++){
+      for (i=0;i<4;i++){ // 4 hardcoded because there are 4 values in the hadamard
         val1 = _get_val_in_subspace_gate(i,my_gate_type,control,&i1,&j1);
         for (j=0;j<4;j++){
+          val2 = _get_val_in_subspace_gate(j,my_gate_type,control,&i2,&j2);
+          i2 = i2 + k4*my_levels;
+          j2 = j2 + k4*my_levels;
+          /*
+           * We need my_levels*n_before*n_after because we are taking
+           * H cross (Ia cross Ib cross H), so the the size of the second operator
+           * is my_levels*n_before*n_after
+           */
+          add_to_mat = val1*val2;
+          i_mat = my_levels*n_before1*n_after*i1 + i2;
+          j_mat = my_levels*n_before1*n_after*j1 + j2;
+          _add_to_PETSc_kron_ij(gate_mat,add_to_mat,i_mat,j_mat,n_before1,n_after,comb_levels);
+        }
+      }
+    }
+  } else if (my_gate_type == SIGMAX || my_gate_type == SIGMAY || my_gate_type == SIGMAZ) {
+
+    /*
+     * The pauli matrices are two qubit gates, sigmax, sigmay, sigmaz
+     */
+
+    n_before1  = subsystem_list[systems[0]]->n_before;
+    my_levels  = subsystem_list[systems[0]]->my_levels; //Should be 2, because qubit
+    n_after   = total_levels/(my_levels*n_before1);
+    comb_levels = my_levels*my_levels*n_before1*n_after;
+
+    for (k4=0;k4<n_before1*n_after;k4++){
+      for (i=0;i<2;i++){// 2 hardcoded because there are 4 values in the hadamard
+        val1 = _get_val_in_subspace_gate(i,my_gate_type,control,&i1,&j1);
+        for (j=0;j<2;j++){
           val2 = _get_val_in_subspace_gate(j,my_gate_type,control,&i2,&j2);
           i2 = i2 + k4*my_levels;
           j2 = j2 + k4*my_levels;
@@ -244,7 +333,6 @@ void _construct_gate_mat(gate_type my_gate_type,int *systems,Mat gate_mat){
   }
 
   return;
-
 }
 
 
@@ -305,9 +393,8 @@ void _change_basis_ij_pair(PetscInt *i_op,PetscInt *j_op,PetscInt system1,PetscI
   na1   = total_levels/(lev1*subsystem_list[system1]->n_before);
 
   lev2  = subsystem_list[system2]->my_levels;
-  na2   = total_levels/(lev1*subsystem_list[system2]->n_before);
+  na2   = total_levels/(lev2*subsystem_list[system2]->n_before); // Changed from lev1->lev2
 
-  //  printf("nb1,nb2,lev1,lev2: %d %d %d %d\n",nb1,nb2,lev1,lev2);
   *i_op = *i_op - ((*i_op/na1)%lev1)*na1 - ((*i_op/na2)%lev2)*na2 +
     ((*i_op/na1)%lev2)*na2 + ((*i_op/na2)%lev1)*na1;
 
@@ -333,7 +420,7 @@ void _change_basis_ij_pair(PetscInt *i_op,PetscInt *j_op,PetscInt system1,PetscI
  */
 
 PetscScalar _get_val_in_subspace_gate(int i,gate_type my_gate_type,int control,int *i_op,int *j_op){
-  PetscScalar val;
+  PetscScalar val=0.0;
   if (my_gate_type == CNOT) {
     /* The controlled NOT gate has two inputs, a target and a control.
      * the target output is equal to the target input if the control is
@@ -400,10 +487,1091 @@ PetscScalar _get_val_in_subspace_gate(int i,gate_type my_gate_type,int control,i
       *i_op = 1; *j_op = 1;
       val = -1.0/sqrt(2);
     }
-
-
+  } else if (my_gate_type == SIGMAX){
+    /*
+     * SIGMAX gate
+     *
+     *   | 0  1 |
+     *   | 1  0 |
+     *
+     */
+    if (i==0){
+      *i_op = 0; *j_op = 1;
+      val = 1.0;
+    } else if (i==1) {
+      *i_op = 1; *j_op = 0;
+      val = 1.0;
+    } else if (i==2){
+      *i_op = 1; *j_op = 1;
+      val = 0.0;
+    } else if (i==2) {
+      *i_op = 0; *j_op = 0;
+      val = 0.0;
+    }
+  } else if (my_gate_type == SIGMAX){
+    /*
+     * SIGMAY gate
+     *
+     *   | 0    -1.j |
+     *   | 1.j    0 |
+     *
+     */
+    if (i==0){
+      *i_op = 0; *j_op = 1;
+      val = -PETSC_i;
+    } else if (i==1) {
+      *i_op = 1; *j_op = 0;
+      val = PETSC_i;
+    } else if (i==2){
+      *i_op = 1; *j_op = 1;
+      val = 0.0;
+    } else if (i==2) {
+      *i_op = 0; *j_op = 0;
+      val = 0.0;
+    }
+  } else if (my_gate_type == SIGMAZ){
+    /*
+     * SIGMAZ gate
+     *
+     *   | 1  0 |
+     *   | 0 -1 |
+     *
+     */
+    if (i==0){
+      *i_op = 0; *j_op = 0;
+      val = 1.0;
+    } else if (i==1) {
+      *i_op = 1; *j_op = 1;
+      val = 1.0;
+    }else if (i==2){
+      *i_op = 1; *j_op = 0;
+      val = 0.0;
+    } else if (i==2) {
+      *i_op = 0; *j_op = 1;
+      val = 0.0;
+    }
   }
 
   return val;
 
 }
+
+/*
+ * create_circuit initializez the circuit struct. Gates can be added
+ * later.
+ *
+ * Inputs:
+ *        circuit circ: circuit to be initialized
+ *        PetscIn num_gates_est: an estimate of the number of gates in
+ *                               the circuit; can be negative, if no
+ *                               estimate is known.
+ * Outputs:
+ *       operator *new_op: lowering op (op), raising op (op->dag), and number op (op->n)
+ */
+
+void create_circuit(circuit *circ,PetscInt num_gates_est){
+  (*circ).start_time   = 0.0;
+  (*circ).num_gates    = 0;
+  (*circ).current_gate = 0;
+  /*
+   * If num_gates_est was positive when passed in, use that
+   * as the initial gate_list size, otherwise set to
+   * 100. gate_list will be dynamically resized when needed.
+   */
+  if (num_gates_est>0) {
+    (*circ).gate_list_size = num_gates_est;
+  } else {
+    // Default gate_list_size
+    (*circ).gate_list_size = 100;
+  }
+  // Allocate gate list
+  (*circ).gate_list = malloc((*circ).gate_list_size * sizeof(struct quantum_gate_struct));
+}
+
+/*
+ * Add a gate to a circuit.
+ * Inputs:
+ *        circuit circ: circuit to add to
+ *        PetscReal time: time that gate would be applied, counting from 0 at
+ *                        the start of the circuit
+ *        gate_type my_gate_type: which gate to add
+ *        ...:   list of qubit gate will act on, other (U for controlled_U?)
+ */
+void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...){
+  int num_qubits=0,qubit,i;
+  va_list ap;
+
+  if (my_gate_type==HADAMARD) {
+    num_qubits = 1;
+  } else if (my_gate_type==CNOT){
+    num_qubits = 2;
+  } else {
+    if (nid==0){
+      printf("ERROR! Gate type not recognized!\n");
+      exit(0);
+    }
+  }
+
+  // Store arguments in list
+  (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
+  (*circ).gate_list[(*circ).num_gates].time = time;
+  (*circ).gate_list[(*circ).num_gates].my_gate_type = my_gate_type;
+
+  va_start(ap,num_qubits);
+
+  // Loop through and store qubits
+  for (i=0;i<num_qubits;i++){
+    qubit = va_arg(ap,int);
+    if (qubit>=num_subsystems) {
+      if (nid==0){
+        printf("ERROR! Qubit number greater than total systems\n");
+        exit(0);
+      }
+    }
+    (*circ).gate_list[(*circ).num_gates].qubit_numbers[i] = qubit;
+  }
+
+  (*circ).num_gates = (*circ).num_gates + 1;
+  return;
+}
+
+/* register a circuit to be run a specific time during the time stepping */
+void start_circuit_at_time(circuit *circ,PetscReal time){
+  (*circ).start_time = time;
+  _circuit_list[_num_circuits] = *circ;
+  _num_circuits = _num_circuits + 1;
+
+}
+
+/*
+ *
+ * tensor_control - switch on which superoperator to compute
+ *                  -1: I cross G or just G (the difference is controlled by the passed in i's, but
+ *                                           the internal logic is exactly the same)
+ *                   0: G* cross G
+ *                   1: G* cross I
+ */
+
+void _get_val_j_from_global_i_gates(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                    PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  operator this_op1,this_op2;
+  PetscInt n_after,i_sub,tmp_int,control,moved_system,my_levels,num_js_i1=0,num_js_i2=0;
+  PetscInt k1,k2,n_before1,n_before2,i_tmp,j_sub,extra_after,i1,i2,j1,js_i1[2],js_i2[2];
+  PetscScalar vals_i1[2],vals_i2[2];
+  //2 is hardcoded because 2 is the largest number of js from 1 i (HADAMARD)
+  /*
+   * We store our gates as a type and affected systems;
+   * we use the stored information to calculate the global j(s) location
+   * and nonzero value(s) for a give global i
+   *
+   * Fo all 2-qubit gates, we use the fact that
+   * diagonal elements are diagonal, even in global space
+   * and that off-diagonal elements can be worked out from the
+   * following:
+   * Off diagonal elements:
+   *    if (i_sub==1)
+   *       i = 1 * n_af + k1 + k2*n_me*n_af
+   *       j = 0 * n_af + k1 + k2*n_me*n_af
+   *    if (i_sub==0)
+   *       i = 0 * n_af + k1 + k2*n_l*n_af
+   *       j = 1 * n_af + k1 + k2*n_l*n_af
+   * We work out k1 and k2 from i to get j.
+   *
+   */
+  if (tensor_control!= 0) {
+    if (tensor_control==1) {
+      extra_after = total_levels;
+    } else {
+      extra_after = 1;
+    }
+
+    if (gate.my_gate_type > 0) { // Single qubit gates are coded as positive numbers
+
+      //Get the system this is affecting
+      this_op1 = subsystem_list[gate.qubit_numbers[0]];
+
+      if (this_op1->my_levels!=2) {
+        //Check that it is a two level system
+        if (nid==0){
+          printf("ERROR! Single qubit gates can only affect 2-level systems\n");
+          exit(0);
+        }
+      }
+      n_after = total_levels/(this_op1->my_levels*this_op1->n_before)*extra_after;
+      i_sub = i/n_after%this_op1->my_levels; //Use integer arithmetic to get floor function
+
+      //Branch on the gate types
+      if (gate.my_gate_type == HADAMARD){
+        /*
+         * HADAMARD gate
+         *
+         * 1/sqrt(2) | 1  1 |
+         *           | 1 -1 |
+         * Hadamard gates have two values per row,
+         * with both diagonal anad off diagonal elements
+         *
+         */
+        *num_js = 2;
+        if (i_sub==0) {
+          // Diagonal element
+          js[0]   = i;
+          vals[0] = pow(2,-0.5);
+
+          // Off diagonal element
+          tmp_int = i - 0 * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          js[1]   = (0 + 1) * n_after + k1 + k2*this_op1->my_levels*n_after;
+          vals[1] = pow(2,-0.5);
+
+        } else if (i_sub==1){
+          // Diagonal element
+          js[0]   = i;
+          vals[0] = -pow(2,-0.5);
+
+          // Off diagonal element
+          tmp_int = i - (0+1) * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          js[1]   = 0 * n_after + k1 + k2*this_op1->my_levels*n_after;
+          vals[1] = pow(2,-0.5);
+
+        } else {
+          if (nid==0){
+            printf("ERROR! Hadamard gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == SIGMAX){
+        /*
+         * SIGMAX gate
+         *
+         *   | 0  1 |
+         *   | 1  0 |
+         *
+         */
+        *num_js = 1;
+        if (i_sub==0) {
+
+          // Off diagonal element
+          tmp_int = i - 0 * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          js[0]     = (0 + 1) * n_after + k1 + k2*this_op1->my_levels*n_after;
+          vals[0]   = 1.0;
+
+        } else if (i_sub==1){
+
+          // Off diagonal element
+          tmp_int = i - (0+1) * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          js[0]   = 0 * n_after + k1 + k2*this_op1->my_levels*n_after;
+          vals[0] = 1.0;
+
+        } else {
+          if (nid==0){
+            printf("ERROR! sigmax gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == SIGMAY){
+        /*
+         * SIGMAY gate
+         *
+         *   | 0  -1.j |
+         *   | 1.j  0 |
+         *
+         */
+        *num_js = 1;
+        if (i_sub==0) {
+
+          // Off diagonal element
+          tmp_int = i - 0 * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          js[0]   = (0 + 1) * n_after + k1 + k2*this_op1->my_levels*n_after;
+          vals[0] = -1.0*PETSC_i;
+
+        } else if (i_sub==1){
+
+          // Off diagonal element
+          tmp_int = i - (0+1) * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          js[0]   = 0 * n_after + k1 + k2*this_op1->my_levels*n_after;
+          vals[0] = 1.0*PETSC_i;
+
+        } else {
+          if (nid==0){
+            printf("ERROR! sigmax gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == SIGMAZ){
+        /*
+         * SIGMAZ gate
+         *
+         *   | 1   0 |
+         *   | 0  -1 |
+         *
+         */
+        *num_js = 1;
+        if (i_sub==0) {
+          // Diagonal element
+          js[0] = i;
+          vals[0] = 1.0;
+
+        } else if (i_sub==1){
+          // Diagonal element
+          js[0] = i;
+          vals[0] = -1.0;
+
+        } else {
+          if (nid==0){
+            printf("ERROR! sigmax gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+
+      } else {
+
+
+        if (nid==0){
+          printf("ERROR! Gate type not understood!\n");
+          exit(0);
+        }
+      }
+    } else {
+      //Two qubit gates
+      this_op1 = subsystem_list[gate.qubit_numbers[0]];
+      this_op2 = subsystem_list[gate.qubit_numbers[1]];
+      if (this_op1->my_levels * this_op2->my_levels != 4) {
+        //Check that it is a two level system
+        if (nid==0){
+          printf("ERROR! Two qubit gates can only affect two 2-level systems\n");
+          exit(0);
+        }
+      }
+
+      n_before1  = this_op1->n_before;
+      n_before2  = this_op2->n_before;
+
+      control = 0;
+      moved_system = gate.qubit_numbers[1];
+
+      /* 2 is hardcoded because CNOT gates are for qubits, which have 2 levels */
+      /* 4 is hardcoded because 2 qubits with 2 levels each */
+      n_after   = total_levels/(4*n_before1)*extra_after;
+
+      /*
+       * Check which is the control and which is the target,
+       * flip if need be.
+       */
+      if (n_before2<n_before1) {
+        n_after   = total_levels/(4*n_before2);
+        control   = 1;
+        moved_system = gate.qubit_numbers[0];
+        n_before1 = n_before2;
+      }
+
+      /* 4 is hardcoded because 2 qubits with 2 levels each */
+      my_levels   = 4;
+
+      /*
+       * Permute to temporary basis
+       * Get the i_sub in the permuted basis
+       */
+      i_tmp = i;
+      _change_basis_ij_pair(&i_tmp,&j1,gate.qubit_numbers[control]+1,moved_system); // j1 useless here
+
+      i_sub = i_tmp/n_after%my_levels; //Use integer arithmetic to get floor function
+
+      if (gate.my_gate_type == CNOT) {
+        /* The controlled NOT gate has two inputs, a target and a control.
+         * the target output is equal to the target input if the control is
+         * |0> and is flipped if the control input is |1> (Marinescu 146)
+         * As a matrix, for a two qubit system:
+         *     1 0 0 0        I2 0
+         *     0 1 0 0   =    0  sig_x
+         *     0 0 0 1
+         *     0 0 1 0
+         * Of course, when there are other qubits, tensor products and such
+         * must be applied to get the full basis representation.
+         */
+        *num_js = 1;
+        if (i_sub==0){
+          // Same, regardless of control
+          // Diagonal
+          vals[0] = 1.0;
+          /*
+           * We shouldn't need to deal with any permutation here;
+           * i_sub is in the permuted basis, but we know that a
+           * diagonal element is diagonal in all bases, so
+           * we just use the computational basis value.
+           p         */
+          js[0]  = i;
+
+        } else if (i_sub==1){
+          // Check which is the control bit
+          vals[0] = 1.0;
+          if (control==0){
+            // Diagonal
+            js[0]   = i;
+          } else {
+            // Off diagonal
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 3;
+            j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after; // 3 = j_sub
+
+            /* Permute back to computational basis */
+            _change_basis_ij_pair(&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+            js[0] = j1;
+          }
+
+        } else if (i_sub==2){
+          vals[0] = 1.0;
+          if (control==0){
+            // Off diagonal
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 3;
+            j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+
+            /* Permute back to computational basis */
+            _change_basis_ij_pair(&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+            js[0] = j1;
+          } else {
+            // Diagonal
+            js[0]   = i;
+          }
+        } else if (i_sub==3){
+          vals[0]   = 1.0;
+          if (control==0){
+            // Off diagonal element
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 2;
+            j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+          } else {
+            // Off diagonal element
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 1;
+            j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+          }
+          /* Permute back to computational basis */
+          _change_basis_ij_pair(&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1);//i_tmp useless here
+          js[0] = j1;
+        } else {
+          if (nid==0){
+            printf("ERROR! CNOT gate is only defined for 2 qubits!\n");
+            exit(0);
+          }
+        }
+      } else {
+        if (nid==0){
+          printf("ERROR! Gate type not understood!\n");
+          exit(0);
+        }
+      }
+    }
+  } else {
+    /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/total_levels;
+    i2 = i%total_levels;
+
+    /* Now, get js for U* (i1) by calling this function */
+    _get_val_j_from_global_i_gates(i1,gate,&num_js_i1,js_i1,vals_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    _get_val_j_from_global_i_gates(i2,gate,&num_js_i2,js_i2,vals_i2,-1);
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *num_js = 0;
+    for(k1=0;k1<num_js_i1;k1++){
+      for(k2=0;k2<num_js_i2;k2++){
+        js[*num_js] = total_levels * js_i1[k1] + js_i2[k2];
+        vals[*num_js] = vals_i1[k1]*vals_i2[k2];
+
+        *num_js = *num_js + 1;
+      }
+    }
+  }
+  return;
+}
+
+
+void combine_circuit_to_mat(Mat *matrix_out,circuit circ){
+  PetscScalar op_val,op_vals[total_levels],vals[2]={0};
+  PetscInt Istart,Iend;
+  PetscInt i,j,k,l,this_i,these_js[total_levels],js[2]={0},num_js_tmp=0,num_js,num_js_current;
+
+  // Should this inherit its stucture from full_A?
+  MatCreate(PETSC_COMM_WORLD,matrix_out);
+  MatSetType(*matrix_out,MATMPIAIJ);
+  MatSetSizes(*matrix_out,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
+  MatSetFromOptions(*matrix_out);
+
+  MatMPIAIJSetPreallocation(*matrix_out,16,NULL,16,NULL);
+
+  /*
+   * Calculate G1*G2*G3*.. using the following observation:
+   *     Each gate is very sparse - having no more than
+   *          2 values per row. This allows us to efficiently do the
+   *          multiplication by just touching the nonzero values
+   */
+  MatGetOwnershipRange(*matrix_out,&Istart,&Iend);
+  for (i=Istart;i<Iend;i++){
+    this_i = i; // The leading index which we check
+    // Reset the result for the row
+    num_js = 1;
+    these_js[0] = i;
+    op_vals[0]  = 1.0;
+    for (j=0;j<circ.num_gates;j++){
+      num_js_current = num_js;
+      for (k=0;k<num_js_current;k++){
+        // Loop through all of the js from the previous gate multiplications
+        this_i = these_js[k];
+        op_val = op_vals[k];
+
+        _get_val_j_from_global_i_gates(this_i,circ.gate_list[j],&num_js_tmp,js,vals,-1); // Get the corresponding j and val
+        /*
+         * Assume there is always at least 1 nonzero per row. This is a good assumption
+         * because all basic quantum gates have at least 1 nonzero per row
+         */
+        // WARNING! CODE NOT FINISHED
+        // WILL NOT WORK FOR HADAMARD * HADAMARD
+
+        these_js[k] = js[0];
+        op_vals[k]  = op_val*vals[0];
+
+        for (l=1;l<num_js_tmp;l++){
+          //If we have more than 1 num_js_tmp, we append to the end of the list
+          these_js[num_js+l-1] = js[l];
+          op_vals[num_js+l-1]  = op_val*vals[l];
+        }
+         num_js = num_js + num_js_tmp - 1; //If we spawned an extra j, add it here
+      }
+    }
+    MatSetValues(*matrix_out,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+  }
+
+  MatAssemblyBegin(*matrix_out,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(*matrix_out,MAT_FINAL_ASSEMBLY);
+
+  return;
+}
+
+
+void combine_circuit_to_mat2(Mat *matrix_out,circuit circ){
+  PetscScalar op_vals[2];
+  PetscInt Istart,Iend,i_mat;
+  PetscInt i,these_js[2],num_js;
+  Mat tmp_mat1,tmp_mat2,tmp_mat3;
+
+  // Should this inherit its stucture from full_A?
+
+  MatCreate(PETSC_COMM_WORLD,&tmp_mat1);
+  MatSetType(tmp_mat1,MATMPIAIJ);
+  MatSetSizes(tmp_mat1,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
+  MatSetFromOptions(tmp_mat1);
+
+  MatMPIAIJSetPreallocation(tmp_mat1,2,NULL,2,NULL);
+
+  /* Construct the first matrix in tmp_mat1 */
+  MatGetOwnershipRange(tmp_mat1,&Istart,&Iend);
+  for (i=Istart;i<Iend;i++){
+    _get_val_j_from_global_i_gates(i,circ.gate_list[0],&num_js,these_js,op_vals,-1); // Get the corresponding j and val
+    MatSetValues(tmp_mat1,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+  }
+
+  MatAssemblyBegin(tmp_mat1,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(tmp_mat1,MAT_FINAL_ASSEMBLY);
+
+  for (i_mat=1;i_mat<circ.num_gates;i_mat++){
+    // Create the next matrix
+    MatCreate(PETSC_COMM_WORLD,&tmp_mat2);
+    MatSetType(tmp_mat2,MATMPIAIJ);
+    MatSetSizes(tmp_mat2,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
+    MatSetFromOptions(tmp_mat2);
+
+    MatMPIAIJSetPreallocation(tmp_mat2,2,NULL,2,NULL);
+
+    /* Construct new matrix */
+    MatGetOwnershipRange(tmp_mat2,&Istart,&Iend);
+    for (i=Istart;i<Iend;i++){
+      _get_val_j_from_global_i_gates(i,circ.gate_list[i_mat],&num_js,these_js,op_vals,-1); // Get the corresponding j and val
+      MatSetValues(tmp_mat2,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+    }
+
+    MatAssemblyBegin(tmp_mat2,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(tmp_mat2,MAT_FINAL_ASSEMBLY);
+
+    // Now do matrix matrix multiply
+    MatMatMult(tmp_mat2,tmp_mat1,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&tmp_mat3);
+    MatDestroy(&tmp_mat1);
+    MatDestroy(&tmp_mat2); //Do I need to destroy it?
+
+    //Store tmp_mat3 into tmp_mat1
+    MatConvert(tmp_mat3,MATSAME,MAT_INITIAL_MATRIX,&tmp_mat1);
+    MatDestroy(&tmp_mat3);
+  }
+
+  //Copy tmp_mat1 into *matrix_out
+  MatConvert(tmp_mat1,MATSAME,MAT_INITIAL_MATRIX,matrix_out);;
+
+  MatDestroy(&tmp_mat1);
+  return;
+}
+
+
+void combine_circuit_to_super_mat(Mat *matrix_out,circuit circ){
+  PetscScalar val1=0,val2=0,op_vals[4];
+  PetscInt Istart,Iend,i_mat,dim;
+  PetscInt i,this_j1=0,this_j2=0,these_js[4],num_js;
+  Mat tmp_mat1,tmp_mat2,tmp_mat3;
+
+  // Should this inherit its stucture from full_A?
+  dim = total_levels*total_levels;
+  MatCreate(PETSC_COMM_WORLD,&tmp_mat1);
+  MatSetType(tmp_mat1,MATMPIAIJ);
+  MatSetSizes(tmp_mat1,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+  MatSetFromOptions(tmp_mat1);
+
+  MatMPIAIJSetPreallocation(tmp_mat1,8,NULL,8,NULL);
+
+  /* Construct the first matrix in tmp_mat1 */
+  MatGetOwnershipRange(tmp_mat1,&Istart,&Iend);
+  for (i=Istart;i<Iend;i++){
+    _get_val_j_from_global_i_gates(i,circ.gate_list[0],&num_js,these_js,op_vals,0); // Get the corresponding j and val
+    MatSetValues(tmp_mat1,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+  }
+
+  MatAssemblyBegin(tmp_mat1,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(tmp_mat1,MAT_FINAL_ASSEMBLY);
+
+  for (i_mat=1;i_mat<circ.num_gates;i_mat++){
+    // Create the next matrix
+    MatCreate(PETSC_COMM_WORLD,&tmp_mat2);
+    MatSetType(tmp_mat2,MATMPIAIJ);
+    MatSetSizes(tmp_mat2,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+    MatSetFromOptions(tmp_mat2);
+
+    MatMPIAIJSetPreallocation(tmp_mat2,8,NULL,8,NULL);
+
+    /* Construct new matrix */
+    MatGetOwnershipRange(tmp_mat2,&Istart,&Iend);
+    for (i=Istart;i<Iend;i++){
+      _get_val_j_from_global_i_gates(i,circ.gate_list[i_mat],&num_js,these_js,op_vals,0); // Get the corresponding j and val
+      MatSetValues(tmp_mat2,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+    }
+
+    MatAssemblyBegin(tmp_mat2,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(tmp_mat2,MAT_FINAL_ASSEMBLY);
+
+    // Now do matrix matrix multiply
+    MatMatMult(tmp_mat2,tmp_mat1,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&tmp_mat3);
+    MatDestroy(&tmp_mat1);
+    MatDestroy(&tmp_mat2); //Do I need to destroy it?
+
+    //Store tmp_mat3 into tmp_mat1
+    MatConvert(tmp_mat3,MATSAME,MAT_INITIAL_MATRIX,&tmp_mat1);
+    MatDestroy(&tmp_mat3);
+  }
+
+  //Copy tmp_mat1 into *matrix_out
+  MatConvert(tmp_mat1,MATSAME,MAT_INITIAL_MATRIX,matrix_out);;
+
+  MatDestroy(&tmp_mat1);
+  return;
+}
+
+/*
+ *
+ * tensor_control - switch on which superoperator to compute
+ *                  -1: I cross G
+ *                   0: G* cross G
+ *                   1: G* cross I
+ */
+
+void _get_val_j_from_global_i_super_gates(PetscInt i,struct quantum_gate_struct gate,PetscInt *j1,
+                                          PetscScalar *val1,PetscInt *j2,PetscScalar *val2,
+                                          PetscInt tensor_control){
+  operator this_op1,this_op2;
+  PetscInt n_after,i_sub,tmp_int,control,moved_system,my_levels;
+  PetscInt k1,k2,n_before1,n_before2,i_tmp,j_sub,extra_after;
+  /*
+   * We store our gates as a type and affected systems;
+   * we use the stored information to calculate the global j(s) location
+   * and nonzero value(s) for a give global i
+   *
+   * Fo all 2-qubit gates, we use the fact that
+   * diagonal elements are diagonal, even in global space
+   * and that off-diagonal elements can be worked out from the
+   * following:
+   * Off diagonal elements:
+   *    if (i_sub==1)
+   *       i = 1 * n_af + k1 + k2*n_me*n_af
+   *       j = 0 * n_af + k1 + k2*n_me*n_af
+   *    if (i_sub==0)
+   *       i = 0 * n_af + k1 + k2*n_l*n_af
+   *       j = 1 * n_af + k1 + k2*n_l*n_af
+   * We work out k1 and k2 from i to get j.
+   *
+   */
+  if (tensor_control!= 0) {
+    if (tensor_control==1) {
+      extra_after = total_levels;
+    } else {
+      extra_after = 1;
+    }
+
+    if (gate.my_gate_type > 0) { // Single qubit gates are coded as positive numbers
+
+      //Get the system this is affecting
+      this_op1 = subsystem_list[gate.qubit_numbers[0]];
+
+      if (this_op1->my_levels!=2) {
+        //Check that it is a two level system
+        if (nid==0){
+          printf("ERROR! Single qubit gates can only affect 2-level systems\n");
+          exit(0);
+        }
+      }
+      n_after = total_levels/(this_op1->my_levels*this_op1->n_before)*extra_after;
+      i_sub = i/n_after%this_op1->my_levels; //Use integer arithmetic to get floor function
+
+      //Branch on the gate types
+      if (gate.my_gate_type == HADAMARD){
+        /*
+         * HADAMARD gate
+         *
+         * 1/sqrt(2) | 1  1 |
+         *           | 1 -1 |
+         * Hadamard gates have two values per row,
+         * with both diagonal anad off diagonal elements
+         *
+         */
+        if (i_sub==0) {
+          // Diagonal element
+          *j1   = i;
+          *val1 = pow(2,-0.5);
+
+          // Off diagonal element
+          tmp_int = i - 0 * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          *j2     = (0 + 1) * n_after + k1 + k2*this_op1->my_levels*n_after;
+          *val2   = pow(2,-0.5);
+
+        } else if (i_sub==1){
+          // Diagonal element
+          *j1   = i;
+          *val1 = -pow(2,-0.5);
+
+          // Off diagonal element
+          tmp_int = i - (0+1) * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          *j2     = 0 * n_after + k1 + k2*this_op1->my_levels*n_after;
+          *val2   = pow(2,-0.5);
+
+        } else {
+          if (nid==0){
+            printf("ERROR! Hadamard gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == SIGMAX){
+        /*
+         * SIGMAX gate
+         *
+         *   | 0  1 |
+         *   | 1  0 |
+         *
+         */
+        *j2   = -1;
+        if (i_sub==0) {
+
+          // Off diagonal element
+          tmp_int = i - 0 * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          *j1     = (0 + 1) * n_after + k1 + k2*this_op1->my_levels*n_after;
+          *val1   = 1.0;
+
+        } else if (i_sub==1){
+
+          // Off diagonal element
+          tmp_int = i - (0+1) * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          *j1     = 0 * n_after + k1 + k2*this_op1->my_levels*n_after;
+          *val1   = 1.0;
+
+        } else {
+          if (nid==0){
+            printf("ERROR! sigmax gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == SIGMAY){
+        /*
+         * SIGMAY gate
+         *
+         *   | 0  -1.j |
+         *   | 1.j  0 |
+         *
+         */
+        *j2   = -1;
+        if (i_sub==0) {
+
+          // Off diagonal element
+          tmp_int = i - 0 * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          *j1     = (0 + 1) * n_after + k1 + k2*this_op1->my_levels*n_after;
+          *val1   = -1.0*PETSC_i;
+
+        } else if (i_sub==1){
+
+          // Off diagonal element
+          tmp_int = i - (0+1) * n_after;
+          k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+          k1      = tmp_int%(this_op1->my_levels*n_after);
+          *j1     = 0 * n_after + k1 + k2*this_op1->my_levels*n_after;
+          *val1   = 1.0*PETSC_i;
+
+        } else {
+          if (nid==0){
+            printf("ERROR! sigmax gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == SIGMAZ){
+        /*
+         * SIGMAZ gate
+         *
+         *   | 1   0 |
+         *   | 0  -1 |
+         *
+         */
+        *j2   = -1;
+        if (i_sub==0) {
+          // Diagonal element
+          *j1   = i;
+          *val1 = 1.0;
+
+        } else if (i_sub==1){
+          // Diagonal element
+          *j1   = i;
+          *val1 = -1.0;
+
+        } else {
+          if (nid==0){
+            printf("ERROR! sigmax gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+
+      } else {
+
+
+        if (nid==0){
+          printf("ERROR! Gate type not understood!\n");
+          exit(0);
+        }
+      }
+    } else {
+      //Two qubit gates
+      this_op1 = subsystem_list[gate.qubit_numbers[0]];
+      this_op2 = subsystem_list[gate.qubit_numbers[1]];
+
+      if (this_op1->my_levels * this_op2->my_levels != 4) {
+        //Check that it is a two level system
+        if (nid==0){
+          printf("ERROR! Two qubit gates can only affect two 2-level systems\n");
+          exit(0);
+        }
+      }
+
+      n_before1  = this_op1->n_before;
+      n_before2  = this_op2->n_before;
+
+      control = 0;
+      moved_system = gate.qubit_numbers[1];
+
+      /* 2 is hardcoded because CNOT gates are for qubits, which have 2 levels */
+      /* 4 is hardcoded because 2 qubits with 2 levels each */
+
+      n_after   = total_levels/(4*n_before1)*extra_after;
+
+      /*
+       * Check which is the control and which is the target,
+       * flip if need be.
+       */
+      if (n_before2<n_before1) {
+        n_after   = total_levels/(4*n_before2);
+        control   = 1;
+        moved_system = gate.qubit_numbers[0];
+        n_before1 = n_before2;
+      }
+
+      /* 4 is hardcoded because 2 qubits with 2 levels each */
+      my_levels   = 4;
+
+      /*
+       * Permute to temporary basis
+       * Get the i_sub in the permuted basis
+       */
+      i_tmp = i;
+
+      _change_basis_ij_pair(&i_tmp,j1,gate.qubit_numbers[control]+1,moved_system);
+
+      i_sub = i_tmp/n_after%my_levels; //Use integer arithmetic to get floor function
+
+      if (gate.my_gate_type == CNOT) {
+        /* The controlled NOT gate has two inputs, a target and a control.
+         * the target output is equal to the target input if the control is
+         * |0> and is flipped if the control input is |1> (Marinescu 146)
+         * As a matrix, for a two qubit system:
+         *     1 0 0 0        I2 0
+         *     0 1 0 0   =    0  sig_x
+         *     0 0 0 1
+         *     0 0 1 0
+         * Of course, when there are other qubits, tensor products and such
+         * must be applied to get the full basis representation.
+         */
+        if (i_sub==0){
+          // Same, regardless of control
+          // Diagonal
+          *val1 = 1.0;
+          /*
+           * We shouldn't need to deal with any permutation here;
+           * i_sub is in the permuted basis, but we know that a
+           * diagonal element is diagonal in all bases, so
+           * we just use the computational basis value.
+           p         */
+          *j1   = i;
+
+          *val2 = 0.0;
+          *j2   = -1; // Use -1 to say that val2 is 0
+
+        } else if (i_sub==1){
+          // Check which is the control bit
+          *val1 = 1.0;
+          if (control==0){
+            // Diagonal
+            *j1   = i; //?
+          } else {
+            // Off diagonal
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 3;
+            *j1     = (j_sub) * n_after + k1 + k2*my_levels*n_after; // 3 = j_sub
+
+            /* Permute back to computational basis */
+            _change_basis_ij_pair(&i_tmp,j1,moved_system,gate.qubit_numbers[control]+1);
+          }
+          *val2 = 0.0;
+          *j2   = -1; // Use -1 to say that val2 is 0
+
+        } else if (i_sub==2){
+          *val1 = 1.0;
+          if (control==0){
+            // Off diagonal
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 3;
+            *j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+
+            /* Permute back to computational basis */
+            _change_basis_ij_pair(&i_tmp,j1,moved_system,gate.qubit_numbers[control]+1);
+          } else {
+            // Diagonal
+            *j1   = i;
+          }
+          *val2 = 0.0;
+          *j2   = -1; // Use -1 to say that val2 is 0
+
+        } else if (i_sub==3){
+          *val1   = 1.0;
+          if (control==0){
+            // Off diagonal element
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 2;
+            *j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+          } else {
+            // Off diagonal element
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 1;
+            *j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+          }
+          /* Permute back to computational basis */
+          _change_basis_ij_pair(&i_tmp,j1,moved_system,gate.qubit_numbers[control]+1);
+
+          *val2 = 0.0;
+          *j2   = -1; // Use -1 to say that val2 is 0
+
+        } else {
+          if (nid==0){
+            printf("ERROR! CNOT gate is only defined for 2 qubits\n");
+            exit(0);
+          }
+        }
+
+      } else {
+        if (nid==0){
+          printf("ERROR! Gate type not understood!\n");
+          exit(0);
+        }
+      }
+    }
+  } else {
+    /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. We then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+
+
+
+  }
+
+  return;
+}
+
+
