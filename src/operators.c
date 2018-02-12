@@ -623,7 +623,8 @@ void add_lin(PetscScalar a,operator op){
   PetscScalar    mat_scalar;
   _check_initialized_A();
   _lindblad_terms = 1;
-  if (PetscAbsComplex(mat_scalar)==0) return;
+
+  if (PetscAbsComplex(a)==0) return;
 
   /*
    * Add (I cross C^t C) to the superoperator matrix, A
