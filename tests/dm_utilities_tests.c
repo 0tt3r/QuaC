@@ -165,7 +165,7 @@ void test_bipartite_separable(void)
    * Though concurrence is strictly max(0,concurrence), we compare here
    * against the negative value.
    */
-  TEST_ASSERT_EQUAL_FLOAT(-0.125,concurrence);
+  TEST_ASSERT_EQUAL_FLOAT(-0.5,concurrence);
 }
 
 
