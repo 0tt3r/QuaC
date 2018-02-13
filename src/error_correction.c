@@ -646,3 +646,163 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
 
   return;
 }
+
+
+/*
+ * Create an encoder. The first of the passed in systems is assumed to be the
+ * qubit that is encoded/decoded to.
+ */
+void create_encoded_qubit(encoded_qubit *new_encoder,encoder_type my_encoder_type,...){
+  PetscInt num_qubits,i,qubit;
+  va_list ap;
+
+  if(my_encoder_type==NONE){
+    num_qubits = 1;
+    (*new_encoder).num_qubits = num_qubits;
+    (*new_encoder).my_encoder_type = NONE;
+    (*new_encoder).qubits = malloc(num_qubits*sizeof(PetscInt));
+    va_start(ap,num_qubits);
+    for (i=0;i<num_qubits;i++){
+      qubit = va_arg(ap,int);
+      (*new_encoder).qubits[i] = qubit;
+    }
+    create_circuit(&((*new_encoder).encoder_circuit),1);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,EYE,(*new_encoder).qubits[0]);
+
+    create_circuit(&((*new_encoder).decoder_circuit),1);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,EYE,(*new_encoder).qubits[0]);
+
+  } else if(my_encoder_type==BIT){
+    num_qubits = 3;
+    (*new_encoder).num_qubits = num_qubits;
+    (*new_encoder).my_encoder_type = BIT;
+    (*new_encoder).qubits = malloc(num_qubits*sizeof(PetscInt));
+    va_start(ap,num_qubits);
+    for (i=0;i<num_qubits;i++){
+      qubit = va_arg(ap,int);
+      (*new_encoder).qubits[i] = qubit;
+    }
+    create_circuit(&((*new_encoder).encoder_circuit),2);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[2]);
+
+    create_circuit(&((*new_encoder).decoder_circuit),2);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[1]);
+
+  }
+
+  return;
+}
+
+//The ... are the encoders, assumes we decode to the first of the list in the encoder
+void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...){
+  int num_qubits=0,qubit,i;
+  va_list ap;
+  encoded_qubit *encoders;
+  if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ) {
+    num_qubits = 1;
+  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ){
+    num_qubits = 2;
+  } else {
+    if (nid==0){
+      printf("ERROR! Gate type not recognized in add_gate_to_circuit\n");
+      exit(0);
+    }
+  }
+  if ((*circ).num_gates==(*circ).gate_list_size){
+    if (nid==0){
+      printf("ERROR! Gate list not large enough!\n");
+      exit(1);
+    }
+  }
+
+  PetscMalloc1(num_qubits,&encoders);
+
+  va_start(ap,num_qubits);
+
+  //First, get the encoders
+  for (i=0;i<num_qubits;i++){
+    encoders[i] = va_arg(ap,encoded_qubit);
+  }
+
+  // Now, add the decoding circuit(s) to the output circuit
+  for (i=0;i<num_qubits;i++){
+    // Only add a decoder if we have an encoded qubit
+    if (encoders[i].my_encoder_type!=NONE){
+      add_circuit_to_circuit(circ,encoders[i].decoder_circuit,time);
+    }
+  }
+
+  // Store arguments for the logical operation in list
+  (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
+  (*circ).gate_list[(*circ).num_gates].time = time;
+  (*circ).gate_list[(*circ).num_gates].my_gate_type = my_gate_type;
+
+  // Loop through and store qubits
+  for (i=0;i<num_qubits;i++){
+    qubit = encoders[i].qubits[0]; //assumes we decode to the first of the list
+    (*circ).gate_list[(*circ).num_gates].qubit_numbers[i] = qubit;
+  }
+
+  (*circ).num_gates = (*circ).num_gates + 1;
+
+  // Now, reencode our qubits
+  for (i=0;i<num_qubits;i++){
+    // Only add a decoder if we have an encoded qubit
+    if (encoders[i].my_encoder_type!=NONE){
+      add_circuit_to_circuit(circ,encoders[i].encoder_circuit,time);
+    }
+  }
+
+  return;
+}
+
+//The ... are the encoders, assumes we encode from the first of the list in the encoder
+void encode_state(Vec rho,PetscInt num_logical_qubits,...){
+  PetscInt qubit,i;
+  va_list ap;
+  encoded_qubit this_qubit;
+  Vec work_rho;
+  Mat work_mat;
+
+  VecDuplicate(rho,&work_rho);
+  va_start(ap,num_logical_qubits);
+
+  //Loop through the qubit, multiplying rho by the encoding circuit
+  for (i=0;i<num_logical_qubits;i++){
+    this_qubit = va_arg(ap,encoded_qubit);
+    combine_circuit_to_super_mat(&work_mat,this_qubit.encoder_circuit);
+    MatMult(work_mat,rho,work_rho);
+    MatDestroy(&work_mat);
+    VecCopy(work_rho,rho);
+  }
+
+  VecDestroy(&work_rho);
+  return;
+}
+
+//The ... are the encoders, assumes we encode from the first of the list in the encoder
+void decode_state(Vec rho,PetscInt num_logical_qubits,...){
+  PetscInt qubit,i;
+  va_list ap;
+  encoded_qubit this_qubit;
+  Vec work_rho;
+  Mat work_mat;
+
+  VecDuplicate(rho,&work_rho);
+  va_start(ap,num_logical_qubits);
+
+  //Loop through the qubit, multiplying rho by the encoding circuit
+  for (i=0;i<num_logical_qubits;i++){
+    this_qubit = va_arg(ap,encoded_qubit);
+    combine_circuit_to_super_mat(&work_mat,this_qubit.decoder_circuit);
+    MatMult(work_mat,rho,work_rho);
+    MatDestroy(&work_mat);
+    VecCopy(work_rho,rho);
+  }
+
+  VecDestroy(&work_rho);
+  return;
+}
+

@@ -8,11 +8,15 @@
 #include <petscts.h>
 
 typedef enum {
+  CmZ  = -4,
+  CZ   = -3,
+  CXZ  = -2,
   CNOT = -1,
   HADAMARD = 1,
   SIGMAX = 2,
   SIGMAY = 3,
-  SIGMAZ = 4
+  SIGMAZ = 4,
+  EYE    = 5
 } gate_type;
 
 
@@ -31,7 +35,7 @@ typedef struct circuit{
 PetscScalar _get_val_in_subspace_gate(PetscInt,gate_type,PetscInt,PetscInt*,PetscInt*);
 void add_gate(PetscReal,gate_type,...);
 void _construct_gate_mat(gate_type,int*,Mat);
-void _apply_gate(gate_type,int*,Vec);
+void _apply_gate(struct quantum_gate_struct,Vec);
 void _change_basis_ij_pair(PetscInt*,PetscInt*,PetscInt,PetscInt);
 PetscErrorCode _QG_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
 PetscErrorCode _QG_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,void*);
@@ -41,6 +45,7 @@ PetscErrorCode _QC_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,void*
 
 void create_circuit(circuit*,PetscInt);
 void add_gate_to_circuit(circuit*,PetscReal,gate_type,...);
+void add_circuit_to_circuit(circuit*,circuit,PetscReal);
 void start_circuit_at_time(circuit*,PetscReal);
 
 void _get_val_j_from_global_i_gates(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);

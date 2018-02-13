@@ -40,7 +40,8 @@ PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[
     */
   if (nevents) {
     /* Apply the current gate */
-    _apply_gate(_quantum_gate_list[_current_gate].my_gate_type,_quantum_gate_list[_current_gate].qubit_numbers,U);
+    //Deprecated?
+    /* _apply_gate(_quantum_gate_list[_current_gate].my_gate_type,_quantum_gate_list[_current_gate].qubit_numbers,U); */
     /* Increment our gate counter */
     _current_gate = _current_gate + 1;
   }
@@ -80,19 +81,25 @@ PetscErrorCode _QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,voi
  * to apply that event.
 */
 PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
-  PetscInt current_gate;
+  PetscInt current_gate,num_gates;
+  PetscReal gate_time;
    /* We only have one event at the moment, so we do not need to branch.
     * If we had more than one event, we would put some logic here.
     */
   if (nevents) {
-    /* Apply the current gate */
+    num_gates    = _circuit_list[_current_circuit].num_gates;
     current_gate = _circuit_list[_current_circuit].current_gate;
-    _apply_gate(_circuit_list[_current_circuit].gate_list[current_gate].my_gate_type,
-                _circuit_list[_current_circuit].gate_list[current_gate].qubit_numbers,U);
+    gate_time = _circuit_list[_current_circuit].gate_list[current_gate].time;
 
-    /* Increment our gate counter */
-    _circuit_list[_current_circuit].current_gate = _circuit_list[_current_circuit].current_gate + 1;
+    /* Apply all gates at a given time incrementally  */
+    while (current_gate<num_gates && _circuit_list[_current_circuit].gate_list[current_gate].time == gate_time){
+      /* apply the current gate */
+      _apply_gate(_circuit_list[_current_circuit].gate_list[current_gate],U);
 
+      /* Increment our gate counter */
+      _circuit_list[_current_circuit].current_gate = _circuit_list[_current_circuit].current_gate + 1;
+      current_gate = _circuit_list[_current_circuit].current_gate;
+    }
     if(_circuit_list[_current_circuit].current_gate>=_circuit_list[_current_circuit].num_gates){
       /* We've exhausted this circuit; move on to the next. */
       _current_circuit = _current_circuit + 1;
@@ -138,10 +145,11 @@ void add_gate(PetscReal time,gate_type my_gate_type,...) {
 
 
 /* Apply a specific gate */
-void _apply_gate(gate_type my_gate_type,int *systems,Vec rho){
+void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
+  PetscScalar op_vals[total_levels];
   Mat gate_mat; //FIXME Consider having only one static array for all gates, rather than creating new ones every time
   Vec tmp_answer;
-  PetscInt dim;
+  PetscInt dim,i,Istart,Iend,num_js,these_js[total_levels];
 
   dim = total_levels*total_levels;
 
@@ -150,11 +158,14 @@ void _apply_gate(gate_type my_gate_type,int *systems,Vec rho){
   MatCreate(PETSC_COMM_WORLD,&gate_mat);
   MatSetSizes(gate_mat,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
   MatSetFromOptions(gate_mat);
-  MatMPIAIJSetPreallocation(gate_mat,2,NULL,2,NULL); //This matrix is incredibly sparse!
+  MatMPIAIJSetPreallocation(gate_mat,4,NULL,4,NULL); //This matrix is incredibly sparse!
   MatSetUp(gate_mat);
   /* Construct the gate matrix, on the fly */
-
-  _construct_gate_mat(my_gate_type,systems,gate_mat);
+  MatGetOwnershipRange(gate_mat,&Istart,&Iend);
+  for (i=Istart;i<Iend;i++){
+    _get_val_j_from_global_i_gates(i,this_gate,&num_js,these_js,op_vals,0); // Get the corresponding j and val
+    MatSetValues(gate_mat,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+  }
 
   MatAssemblyBegin(gate_mat,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(gate_mat,MAT_FINAL_ASSEMBLY);
@@ -166,8 +177,7 @@ void _apply_gate(gate_type my_gate_type,int *systems,Vec rho){
   MatDestroy(&gate_mat);
 }
 
-
-/*
+/*z
  * _construct_gate_mat constructs the matrix needed for the quantum
  * computing gates.
  *
@@ -601,17 +611,22 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
   int num_qubits=0,qubit,i;
   va_list ap;
 
-  if (my_gate_type==HADAMARD) {
+  if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE) {
     num_qubits = 1;
-  } else if (my_gate_type==CNOT){
+  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ){
     num_qubits = 2;
   } else {
     if (nid==0){
-      printf("ERROR! Gate type not recognized!\n");
+      printf("ERROR! Gate type not recognized in add_gate_to_circuit\n");
       exit(0);
     }
   }
-
+  if ((*circ).num_gates==(*circ).gate_list_size){
+    if (nid==0){
+      printf("ERROR! Gate list not large enough!\n");
+      exit(1);
+    }
+  }
   // Store arguments in list
   (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
   (*circ).gate_list[(*circ).num_gates].time = time;
@@ -632,6 +647,45 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
   }
 
   (*circ).num_gates = (*circ).num_gates + 1;
+  return;
+}
+
+
+/*
+ * Add a circuit to another circuit.
+ * Assumes whole circuit happens at time
+ */
+void add_circuit_to_circuit(circuit *circ,circuit circ_to_add,PetscReal time){
+  int num_qubits=0,qubit,i,j;
+  va_list ap;
+
+  // Check that we can fit the circuit in
+  if (((*circ).num_gates+circ_to_add.num_gates-1)==(*circ).gate_list_size){
+    if (nid==0){
+      printf("ERROR! Gate list not large enough to add this circuit!\n");
+      exit(1);
+    }
+  }
+
+  for (i=0;i<circ_to_add.num_gates;i++){
+    // Copy gate information over
+    (*circ).gate_list[(*circ).num_gates].time = time;
+    if (circ_to_add.gate_list[i].my_gate_type<0){
+      num_qubits = 2;
+    } else {
+      num_qubits = 1;
+    }
+    (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
+    for (j=0;j<num_qubits;j++){
+      (*circ).gate_list[(*circ).num_gates].qubit_numbers[j] = circ_to_add.gate_list[i].qubit_numbers[j];
+    }
+
+    (*circ).gate_list[(*circ).num_gates].my_gate_type = circ_to_add.gate_list[i].my_gate_type;
+    (*circ).num_gates = (*circ).num_gates + 1;
+  }
+
+
+
   return;
 }
 
@@ -689,7 +743,6 @@ void _get_val_j_from_global_i_gates(PetscInt i,struct quantum_gate_struct gate,P
 
       //Get the system this is affecting
       this_op1 = subsystem_list[gate.qubit_numbers[0]];
-
       if (this_op1->my_levels!=2) {
         //Check that it is a two level system
         if (nid==0){
@@ -826,6 +879,32 @@ void _get_val_j_from_global_i_gates(PetscInt i,struct quantum_gate_struct gate,P
           // Diagonal element
           js[0] = i;
           vals[0] = -1.0;
+
+        } else {
+          if (nid==0){
+            printf("ERROR! sigmax gate is only defined for qubits\n");
+            exit(0);
+          }
+        }
+
+      } else if (gate.my_gate_type == EYE){
+        /*
+         * Identity (EYE) gate
+         *
+         *   | 1   0 |
+         *   | 0   1 |
+         *
+         */
+        *num_js = 1;
+        if (i_sub==0) {
+          // Diagonal element
+          js[0] = i;
+          vals[0] = 1.0;
+
+        } else if (i_sub==1){
+          // Diagonal element
+          js[0] = i;
+          vals[0] = 1.0;
 
         } else {
           if (nid==0){
@@ -974,9 +1053,196 @@ void _get_val_j_from_global_i_gates(PetscInt i,struct quantum_gate_struct gate,P
             exit(0);
           }
         }
+      } else if (gate.my_gate_type == CXZ) {
+        /* The controlled-XZ gate has two inputs, a target and a control.
+         * As a matrix, for a two qubit system
+         *     1 0 0 0        I2 0
+         *     0 1 0 0   =    0  sig_x * sig_z
+         *     0 0 0 -1
+         *     0 0 1 0
+         * Of course, when there are other qubits, tensor products and such
+         * must be applied to get the full basis representation.
+         *
+         * Note that this is a temporary gate; i.e., we will create a more
+         * general controlled-U gate at a later time that will replace this.
+         */
+        *num_js = 1;
+        if (i_sub==0){
+          // Same, regardless of control
+          // Diagonal
+          vals[0] = 1.0;
+          /*
+           * We shouldn't need to deal with any permutation here;
+           * i_sub is in the permuted basis, but we know that a
+           * diagonal element is diagonal in all bases, so
+           * we just use the computational basis value.
+           p         */
+          js[0]  = i;
+
+        } else if (i_sub==1){
+          // Check which is the control bit
+          if (control==0){
+            // Diagonal
+            vals[0] = 1.0;
+            js[0]   = i;
+          } else {
+            // Off diagonal
+            vals[0] = -1.0;
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 3;
+            j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after; // 3 = j_sub
+
+            /* Permute back to computational basis */
+            _change_basis_ij_pair(&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+            js[0] = j1;
+          }
+
+        } else if (i_sub==2){
+          if (control==0){
+            vals[0] = -1.0;
+            // Off diagonal
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 3;
+            j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+
+            /* Permute back to computational basis */
+            _change_basis_ij_pair(&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+            js[0] = j1;
+          } else {
+            // Diagonal
+            vals[0] = 1.0;
+            js[0]   = i;
+          }
+        } else if (i_sub==3){
+          vals[0]   = 1.0;
+          if (control==0){
+            // Off diagonal element
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 2;
+            j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+          } else {
+            // Off diagonal element
+            tmp_int = i_tmp - i_sub * n_after;
+            k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+            k1      = tmp_int%(my_levels*n_after);
+            j_sub   = 1;
+            j1     = j_sub * n_after + k1 + k2*my_levels*n_after;
+          }
+          /* Permute back to computational basis */
+          _change_basis_ij_pair(&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1);//i_tmp useless here
+          js[0] = j1;
+        } else {
+          if (nid==0){
+            printf("ERROR! CXZ gate is only defined for 2 qubits!\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == CZ) {
+        /* The controlled-Z gate has two inputs, a target and a control.
+         * As a matrix, for a two qubit system
+         *     1 0 0 0        I2 0
+         *     0 1 0 0   =    0  sig_z
+         *     0 0 1 0
+         *     0 0 0 -1
+         * Of course, when there are other qubits, tensor products and such
+         * must be applied to get the full basis representation.
+         *
+         * Note that this is a temporary gate; i.e., we will create a more
+         * general controlled-U gate at a later time that will replace
+         *
+         * Controlled-z is the same for both possible controls
+         */
+        *num_js = 1;
+        if (i_sub==0){
+          // Same, regardless of control
+          // Diagonal
+          vals[0] = 1.0;
+          /*
+           * We shouldn't need to deal with any permutation here;
+           * i_sub is in the permuted basis, but we know that a
+           * diagonal element is diagonal in all bases, so
+           * we just use the computational basis value.
+           p         */
+          js[0]  = i;
+
+        } else if (i_sub==1){
+          // Diagonal
+          vals[0] = 1.0;
+          js[0]   = i;
+        } else if (i_sub==2){
+          // Diagonal
+          vals[0] = 1.0;
+          js[0]   = i;
+        } else if (i_sub==3){
+          vals[0] = -1.0;
+          js[0]   = i;
+        } else {
+          if (nid==0){
+            printf("ERROR! CZ gate is only defined for 2 qubits!\n");
+            exit(0);
+          }
+        }
+      } else if (gate.my_gate_type == CmZ) {
+        /* The controlled-mZ gate has two inputs, a target and a control.
+         * As a matrix, for a two qubit system
+         *     1 0 0 0        I2 0
+         *     0 1 0 0   =    0  -sig_z
+         *     0 0 -1 0
+         *     0 0 0 1
+         * Of course, when there are other qubits, tensor products and such
+         * must be applied to get the full basis representation.
+         *
+         * Note that this is a temporary gate; i.e., we will create a more
+         * general controlled-U gate at a later time that will replace
+         *
+         */
+        *num_js = 1;
+        if (i_sub==0){
+          // Same, regardless of control
+          // Diagonal
+          vals[0] = 1.0;
+          /*
+           * We shouldn't need to deal with any permutation here;
+           * i_sub is in the permuted basis, but we know that a
+           * diagonal element is diagonal in all bases, so
+           * we just use the computational basis value.
+           p         */
+          js[0]  = i;
+
+        } else if (i_sub==1){
+          // Diagonal
+          js[0]   = i;
+          if (control==0) {
+            vals[0] = 1.0;
+          } else {
+            vals[0] = -1.0;
+          }
+        } else if (i_sub==2){
+          // Diagonal
+          js[0]   = i;
+          if (control==0) {
+            vals[0] = -1.0;
+          } else {
+            vals[0] = 1.0;
+          }
+        } else if (i_sub==3){
+          vals[0] = 1.0;
+          js[0]   = i;
+        } else {
+          if (nid==0){
+            printf("ERROR! CmZ gate is only defined for 2 qubits!\n");
+            exit(0);
+          }
+        }
       } else {
         if (nid==0){
-          printf("ERROR! Gate type not understood!\n");
+          printf("ERROR! Gate type not understood! %d\n",gate.my_gate_type);
           exit(0);
         }
       }
@@ -1021,7 +1287,7 @@ void _get_val_j_from_global_i_gates(PetscInt i,struct quantum_gate_struct gate,P
 }
 
 
-void combine_circuit_to_mat(Mat *matrix_out,circuit circ){
+void combine_circuit_to_mat2(Mat *matrix_out,circuit circ){
   PetscScalar op_val,op_vals[total_levels],vals[2]={0};
   PetscInt Istart,Iend;
   PetscInt i,j,k,l,this_i,these_js[total_levels],js[2]={0},num_js_tmp=0,num_js,num_js_current;
@@ -1083,7 +1349,7 @@ void combine_circuit_to_mat(Mat *matrix_out,circuit circ){
 }
 
 
-void combine_circuit_to_mat2(Mat *matrix_out,circuit circ){
+void combine_circuit_to_mat(Mat *matrix_out,circuit circ){
   PetscScalar op_vals[2];
   PetscInt Istart,Iend,i_mat;
   PetscInt i,these_js[2],num_js;
