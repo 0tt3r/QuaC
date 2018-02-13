@@ -1527,10 +1527,3 @@ void sqrt_mat(Mat dm_mat){
   PetscFree(evec);
   PetscFree(eigs);
 }
-
-// Sets the global dm from separable dms. If a system is not included in
-// the list, it is assumed to be in the |0><0| state
-/* void set_initial_dm_from_separable_dms(Vec dm_out,PetscInt num_dms){ */
-  
-/* } */
-                                                                                                                                                                               
