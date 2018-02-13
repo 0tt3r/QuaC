@@ -25,6 +25,25 @@ void print_dm(Vec rho,int h_dim){
 }
 
 /*
+ * Print the DM as a sparse matrix.
+ * Not recommended for large matrices.
+ * NOTE: Should be called from all cores!
+ */
+void print_dm_sparse(Vec rho,int h_dim){
+  PetscScalar val;
+  int i,j;
+  for (i=0;i<h_dim;i++){
+    for (j=0;j<h_dim;j++){
+      get_dm_element(rho,i,j,&val);
+      if (PetscAbsComplex(val)>1e-10){
+        PetscPrintf(PETSC_COMM_WORLD,"%d %d %f %f i\n",i,j,PetscRealPart(val),PetscImaginaryPart(val));
+      }
+    }
+  }
+
+}
+
+/*
  * Print psi
  * Not recommended for large systems
  * NOTE: Won't work in parallel well at this time
@@ -65,6 +84,14 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   Vec tmp_dm,tmp_full_dm;
   operator op;
   PetscInt i,j,current_total_levels,*nbef_prev,*nop_prev,dm_size,nbef,naf,previous_total_levels;
+
+  if (number_of_ops>num_subsystems){
+    if (nid==0){
+      printf("ERROR! number_of_ops cannot be greater than num_subsystems\n");
+      exit(0);
+    }
+  }
+
   va_start(ap,number_of_ops);
 
   /* Check that the full_dm is of size total_levels */
@@ -160,6 +187,161 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   PetscFree(nbef_prev);
   PetscFree(nop_prev);
 
+  va_end(ap);
+  return;
+}
+
+
+/*
+ * partial_trace_keep does the partial trace, keeping only a list of operators
+ * tracing out the operators not listed. Assumes systems are listed in order they
+ * were created.
+ *
+ * Inputs:
+ *     Vec full_dm: the full Hilbert space density matrix to trace over.
+ *                  Note: MUST be the full density matrix; use other routines
+ *                        if starting with an already traced DM
+ *     int number_of_ops: number of ops in list to keep
+ *     <list of ops>: A list of operators which are to be kept
+ *
+ * Outpus:
+ *     Vec ptraced_dm: the result of the partial trace is stored here.
+ *                     Note: Assumed to already be allocated via create_dm()
+ */
+
+void partial_trace_keep(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
+  va_list ap;
+  Vec tmp_dm,tmp_full_dm;
+  operator op,*keeper_systems;
+  PetscInt i,j,k,l,current_total_levels,*nbef_prev,*nop_prev,dm_size,nbef,naf,previous_total_levels;
+  PetscInt num_trace;
+
+  if (number_of_ops>num_subsystems){
+    if (nid==0){
+      printf("ERROR! number_of_ops cannot be greater than num_subsystems\n");
+      exit(0);
+    }
+  }
+
+  va_start(ap,number_of_ops);
+
+  /* Check that the full_dm is of size total_levels */
+
+  VecGetSize(full_dm,&dm_size);
+
+  if (dm_size!=pow(total_levels,2)){
+    if (nid==0){
+      printf("ERROR! You need to use the full Hilbert space sized DM in \n");
+      printf("       partial_trace_over!\n");
+      exit(0);
+    }
+  }
+
+  num_trace = num_subsystems - number_of_ops;
+  PetscMalloc1(num_trace,&nbef_prev);
+  PetscMalloc1(num_trace,&nop_prev);
+  PetscMalloc1(number_of_ops,&keeper_systems);
+  current_total_levels = total_levels;
+  /* Initially create a copy of the full DM */
+  VecDuplicate(full_dm,&tmp_full_dm);
+  VecCopy(full_dm,tmp_full_dm);
+  // Loop through ops that we are tracing over
+  for (i=0;i<number_of_ops;i++){
+    op = va_arg(ap,operator);
+    keeper_systems[i] = op;
+  }
+  k=0;
+  l=0;
+  for (i=0;i<num_subsystems;i++){
+    op = subsystem_list[i];
+    if (op->n_before==keeper_systems[k]->n_before){
+      //this is a keeper system, so skip it!
+      k = k+1;
+      if (k==number_of_ops) {
+        /*
+         * Small hack to go back to the last one of the list and
+         * keep checking that one; otherwise k will go larger
+         * than the list size and give a seg fault. This is safe
+         * because, once we have passed all of the ops, we
+         * won't hit op->n_before ever again.
+         */
+        k = k-1;
+      }
+    } else {
+      previous_total_levels = current_total_levels;
+      current_total_levels = current_total_levels/op->my_levels;
+
+      /* Creat a smaller, temporary DM to store the current partial trace */
+      create_dm(&tmp_dm,current_total_levels);
+
+      nbef = op->n_before;
+      naf  = total_levels/(op->my_levels*nbef);
+
+      /* Update nbef and naf with the already removed operators */
+      for (j=0;j<l;j++) {
+        if (nbef_prev[j]==op->n_before){
+          if (nid==0){
+            printf("ERROR! Partial tracing the same operator twice does not make sense!\n");
+            exit(0);
+          }
+        }
+        /*
+         * If the current operator was before a previous in the ordering of the
+         * Hilbert spaces, we decrease nbef. If it was after, we decrease
+         * naf
+         */
+        if (nbef_prev[j]<op->n_before){
+          nbef = nbef/nop_prev[j];
+        } else {
+          naf = naf/nop_prev[j];
+        }
+      }
+
+      partial_trace_over_one(tmp_full_dm,tmp_dm,nbef,op->my_levels,naf,previous_total_levels);
+
+      /* Destroy old large copy, copy smaller DM into a new 'large' copy for the next trace */
+      destroy_dm(tmp_full_dm);
+      VecDuplicate(tmp_dm,&tmp_full_dm);
+      VecCopy(tmp_dm,tmp_full_dm);
+      destroy_dm(tmp_dm);
+      /* Store this ops information in the *_prev arrays */
+      nbef_prev[l] = op->n_before;
+      nop_prev[l]  = op->my_levels;
+      l = l+1;
+    }
+  }
+
+  /* Check that ptraced_dm is big enough */
+
+  VecGetSize(ptraced_dm,&dm_size);
+
+  if (dm_size<pow(current_total_levels,2)){
+    if (nid==0){
+      printf("ERROR! ptraced_dm is not large enough to store the traced over density matrix!\n");
+      printf("       Please ensure that the Hilbert space size of the ptraced_dm is large enough\n");
+      printf("       to store the Hilbert space size that you are tracing down to (keep).\n");
+      exit(0);
+    }
+  }
+
+  if (dm_size>pow(current_total_levels,2)){
+    if (nid==0){
+      printf("Warning! ptraced_dm is larger than the traced over density matrix!\n");
+      printf("         This will work, but it may not be what you meant.\n");
+    }
+  }
+
+
+  /* Assume ptraced_dm has been created, copy ptraced information into in */
+  VecCopy(tmp_full_dm,ptraced_dm);
+
+  /* Destroy tmp_full_dm */
+  destroy_dm(tmp_full_dm);
+
+
+  PetscFree(nbef_prev);
+  PetscFree(nop_prev);
+  PetscFree(keeper_systems);
   va_end(ap);
   return;
 }
@@ -1345,3 +1527,10 @@ void sqrt_mat(Mat dm_mat){
   PetscFree(evec);
   PetscFree(eigs);
 }
+
+// Sets the global dm from separable dms. If a system is not included in
+// the list, it is assumed to be in the |0><0| state
+/* void set_initial_dm_from_separable_dms(Vec dm_out,PetscInt num_dms){ */
+  
+/* } */
+                                                                                                                                                                               
