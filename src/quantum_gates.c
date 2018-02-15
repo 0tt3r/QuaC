@@ -429,7 +429,7 @@ void _change_basis_ij_pair(PetscInt *i_op,PetscInt *j_op,PetscInt system1,PetscI
  *      PetscScalar val:         value at i_op,j_op
  */
 
-PetscScalar _get_val_in_subspace_gate(int i,gate_type my_gate_type,int control,int *i_op,int *j_op){
+PetscScalar _get_val_in_subspace_gate(PetscInt i,gate_type my_gate_type,PetscInt control,PetscInt *i_op,PetscInt *j_op){
   PetscScalar val=0.0;
   if (my_gate_type == CNOT) {
     /* The controlled NOT gate has two inputs, a target and a control.
