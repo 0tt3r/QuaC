@@ -8,6 +8,7 @@
 #include <petscts.h>
 
 typedef enum {
+  CZX  = -5,
   CmZ  = -4,
   CZ   = -3,
   CXZ  = -2,

@@ -8,6 +8,7 @@
 #include <stdarg.h>
 
 Mat *_DQEC_mats;
+int _discrete_ec = 0;
 
 void build_recovery_lin(Mat *recovery_mat,operator error,char commutation_string[],int n_stabilizers,...){
 
@@ -1004,7 +1005,7 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
-  } else if (this_qubit.my_eoncoder_type == PHASE){
+  } else if (this_qubit.my_encoder_type == PHASE){
     qubit0 = subsystem_list[this_qubit.qubits[0]];
     qubit1 = subsystem_list[this_qubit.qubits[1]];
     qubit2 = subsystem_list[this_qubit.qubits[2]];
@@ -1080,13 +1081,13 @@ PetscErrorCode _DQEC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,v
   /* Check if the time has passed a gate */
   PetscInt i;
 
-  /* We signal that we passed the time by returning a negative number */
-  for (i=0;i<_num_DQEC;i++){
-    fvalue[i] = _correction_time[i] - t;
-    if (fvalue[i]<0){
-      _correction_time[i] = _correction_time[i] + _correction_dt[i];
-    }
-  }
+  /* /\* We signal that we passed the time by returning a negative number *\/ */
+  /* for (i=0;i<_num_DQEC;i++){ */
+  /*   fvalue[i] = _correction_time[i] - t; */
+  /*   if (fvalue[i]<0){ */
+  /*     _correction_time[i] = _correction_time[i] + _correction_dt[i]; */
+  /*   } */
+  /* } */
 
   return(0);
 }
@@ -1104,8 +1105,8 @@ PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_lis
   if (nevents) {
     //Loop through events
     for (i_ev=0;i_ev<nevents;i_ev++){
-      MatMult(_DQEC_mats[i],rho,tmp_answer);
-      VecCopy(tmp_answer,rho);
+      MatMult(_DQEC_mats[i],U,tmp_answer);
+      VecCopy(tmp_answer,U);
     }
     VecDestroy(&tmp_answer);
   }

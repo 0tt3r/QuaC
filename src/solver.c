@@ -5,6 +5,7 @@
 #include "kron_p.h"
 #include "dm_utilities.h"
 #include "quantum_gates.h"
+#include "error_correction.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -457,6 +458,16 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
      * a function to check event status, a function to apply events, private data context.
      */
     TSSetEventHandler(ts,nevents,&direction,&terminate,_QC_EventFunction,_QC_PostEventFunction,NULL);
+  }
+
+  if (_discrete_ec > 0) {
+    nevents   =  1; //Only one event for now (did we cross an ec step?)
+    direction = -1; //We only want to count an event if we go from positive to negative
+    terminate = PETSC_FALSE; //Keep time stepping after we passed our event
+    /* Arguments are: ts context, nevents, direction of zero crossing, whether to terminate,
+     * a function to check event status, a function to apply events, private data context.
+     */
+    TSSetEventHandler(ts,nevents,&direction,&terminate,_DQEC_EventFunction,_DQEC_PostEventFunction,NULL);
   }
 
   /* if (_lindblad_terms) { */

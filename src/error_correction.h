@@ -31,4 +31,7 @@ void add_encoded_gate_to_circuit(circuit*,PetscReal,gate_type,...);
 void encode_state(Vec,PetscInt,...);
 void decode_state(Vec,PetscInt,...);
 void add_continuous_error_correction(encoded_qubit,PetscReal);
+PetscErrorCode _DQEC_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,void*);
+PetscErrorCode _DQEC_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
+extern int _discrete_ec;
 #endif
