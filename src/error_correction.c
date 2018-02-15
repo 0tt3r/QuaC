@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+Mat *_DQEC_mats;
 
 void build_recovery_lin(Mat *recovery_mat,operator error,char commutation_string[],int n_stabilizers,...){
 
@@ -690,6 +691,92 @@ void create_encoded_qubit(encoded_qubit *new_encoder,encoder_type my_encoder_typ
     add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[2]);
     add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[1]);
 
+  } else if(my_encoder_type==PHASE){
+
+    num_qubits = 3;
+    (*new_encoder).num_qubits = num_qubits;
+    (*new_encoder).my_encoder_type = PHASE;
+    (*new_encoder).qubits = malloc(num_qubits*sizeof(PetscInt));
+    va_start(ap,num_qubits);
+    for (i=0;i<num_qubits;i++){
+      qubit = va_arg(ap,int);
+      (*new_encoder).qubits[i] = qubit;
+    }
+    create_circuit(&((*new_encoder).encoder_circuit),5);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[2]);
+
+    create_circuit(&((*new_encoder).decoder_circuit),5);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[0],(*new_encoder).qubits[1]);
+
+  } else if(my_encoder_type==FIVE){
+    num_qubits = 5;
+    (*new_encoder).num_qubits = num_qubits;
+    (*new_encoder).my_encoder_type = FIVE;
+    (*new_encoder).qubits = malloc(num_qubits*sizeof(PetscInt));
+    va_start(ap,num_qubits);
+    for (i=0;i<num_qubits;i++){
+      qubit = va_arg(ap,int);
+      (*new_encoder).qubits[i] = qubit;
+    }
+
+    create_circuit(&((*new_encoder).encoder_circuit),21);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CmZ,(*new_encoder).qubits[0],(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[0],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[4],(*new_encoder).qubits[3]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[4],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CXZ,(*new_encoder).qubits[4],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,SIGMAZ,(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[3]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[3],(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[3],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CNOT,(*new_encoder).qubits[3],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[2],(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[2],(*new_encoder).qubits[3]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CNOT,(*new_encoder).qubits[2],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[1],(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CZ,(*new_encoder).qubits[1],(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,CXZ,(*new_encoder).qubits[1],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).encoder_circuit),1.0,SIGMAZ,(*new_encoder).qubits[1]);
+
+
+    create_circuit(&((*new_encoder).decoder_circuit),21);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,SIGMAZ,(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZX,(*new_encoder).qubits[1],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[1],(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[1],(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[2],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[2],(*new_encoder).qubits[3]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[2],(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CNOT,(*new_encoder).qubits[3],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[3],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[3],(*new_encoder).qubits[2]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[3]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,SIGMAZ,(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZX,(*new_encoder).qubits[4],(*new_encoder).qubits[0]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[4],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[4],(*new_encoder).qubits[3]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,HADAMARD,(*new_encoder).qubits[4]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CZ,(*new_encoder).qubits[0],(*new_encoder).qubits[1]);
+    add_gate_to_circuit(&((*new_encoder).decoder_circuit),1.0,CmZ,(*new_encoder).qubits[0],(*new_encoder).qubits[4]);
+
+  } else {
+    if (nid==0){
+      printf("ERROR! Encoding type not understood!\n");
+      exit(0);
+    }
   }
 
   return;
@@ -700,19 +787,19 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
   int num_qubits=0,qubit,i;
   va_list ap;
   encoded_qubit *encoders;
-  if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ) {
+  if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE) {
     num_qubits = 1;
-  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ){
+  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX){
     num_qubits = 2;
   } else {
     if (nid==0){
-      printf("ERROR! Gate type not recognized in add_gate_to_circuit\n");
+      printf("ERROR! Gate type not recognized in add_encoded_gate_to_circuit\n");
       exit(0);
     }
   }
   if ((*circ).num_gates==(*circ).gate_list_size){
     if (nid==0){
-      printf("ERROR! Gate list not large enough!\n");
+      printf("ERROR! Gate list not large enough (encoded)!\n");
       exit(1);
     }
   }
@@ -806,3 +893,223 @@ void decode_state(Vec rho,PetscInt num_logical_qubits,...){
   return;
 }
 
+
+void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correction_rate){
+  stabilizer     S1,S2,S3,S4;
+  operator       qubit0,qubit1,qubit2,qubit3,qubit4;
+  if (this_qubit.my_encoder_type == NONE){
+    //No encoding, no error correction needed
+  } else if (this_qubit.my_encoder_type == BIT){
+    qubit0 = subsystem_list[this_qubit.qubits[0]];
+    qubit1 = subsystem_list[this_qubit.qubits[1]];
+    qubit2 = subsystem_list[this_qubit.qubits[2]];
+
+    create_stabilizer(&S1,2,qubit0->sig_z,qubit1->sig_z);
+    create_stabilizer(&S2,2,qubit1->sig_z,qubit2->sig_z);
+
+    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit0->sig_x,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit1->sig_x,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit2->sig_x,"10",2,S1,S2);
+
+    destroy_stabilizer(&S1);
+    destroy_stabilizer(&S2);
+
+  } else if (this_qubit.my_encoder_type == PHASE){
+    qubit0 = subsystem_list[this_qubit.qubits[0]];
+    qubit1 = subsystem_list[this_qubit.qubits[1]];
+    qubit2 = subsystem_list[this_qubit.qubits[2]];
+
+    create_stabilizer(&S1,2,qubit0->sig_x,qubit1->sig_x);
+    create_stabilizer(&S2,2,qubit1->sig_x,qubit2->sig_x);
+
+    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit0->sig_z,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit1->sig_z,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit2->sig_z,"10",2,S1,S2);
+
+    destroy_stabilizer(&S1);
+    destroy_stabilizer(&S2);
+
+  } else if (this_qubit.my_encoder_type == FIVE) {
+    qubit0 = subsystem_list[this_qubit.qubits[0]];
+    qubit1 = subsystem_list[this_qubit.qubits[1]];
+    qubit2 = subsystem_list[this_qubit.qubits[2]];
+    qubit3 = subsystem_list[this_qubit.qubits[3]];
+    qubit4 = subsystem_list[this_qubit.qubits[4]];
+
+    create_stabilizer(&S1,4,qubit0->sig_x,qubit1->sig_z,qubit2->sig_z,qubit3->sig_x);
+    create_stabilizer(&S2,4,qubit1->sig_x,qubit2->sig_z,qubit3->sig_z,qubit4->sig_x);
+    create_stabilizer(&S3,4,qubit2->sig_x,qubit3->sig_z,qubit4->sig_z,qubit0->sig_x);
+    create_stabilizer(&S4,4,qubit3->sig_x,qubit4->sig_z,qubit0->sig_z,qubit1->sig_x);
+
+    add_lin_recovery(correction_rate,qubit0->eye,"1111",4,S1,S2,S3,S4);
+
+    //Qubit 0 errors
+    add_lin_recovery(correction_rate,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
+
+    //Qubit 1 errors
+    add_lin_recovery(correction_rate,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
+
+    //Qubit 2 errors
+    add_lin_recovery(correction_rate,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
+
+    //Qubit 3 errors
+    add_lin_recovery(correction_rate,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
+
+    //Qubit 4 errors
+    add_lin_recovery(correction_rate,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
+
+    destroy_stabilizer(&S1);
+    destroy_stabilizer(&S2);
+    destroy_stabilizer(&S3);
+    destroy_stabilizer(&S4);
+
+  } else {
+    if (nid==0){
+      printf("ERROR! Encoder type not understood!\n");
+      exit(1);
+    }
+  }
+  return;
+}
+
+void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction_rate){
+  stabilizer     S1,S2,S3,S4;
+  operator       qubit0,qubit1,qubit2,qubit3,qubit4;
+  if (this_qubit.my_encoder_type == NONE){
+    //No encoding, no error correction needed
+  } else if (this_qubit.my_encoder_type == BIT){
+    qubit0 = subsystem_list[this_qubit.qubits[0]];
+    qubit1 = subsystem_list[this_qubit.qubits[1]];
+    qubit2 = subsystem_list[this_qubit.qubits[2]];
+
+    create_stabilizer(&S1,2,qubit0->sig_z,qubit1->sig_z);
+    create_stabilizer(&S2,2,qubit1->sig_z,qubit2->sig_z);
+
+    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit0->sig_x,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit1->sig_x,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit2->sig_x,"10",2,S1,S2);
+
+    destroy_stabilizer(&S1);
+    destroy_stabilizer(&S2);
+  } else if (this_qubit.my_eoncoder_type == PHASE){
+    qubit0 = subsystem_list[this_qubit.qubits[0]];
+    qubit1 = subsystem_list[this_qubit.qubits[1]];
+    qubit2 = subsystem_list[this_qubit.qubits[2]];
+
+    create_stabilizer(&S1,2,qubit0->sig_x,qubit1->sig_x);
+    create_stabilizer(&S2,2,qubit1->sig_x,qubit2->sig_x);
+    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit0->sig_z,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit1->sig_z,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,qubit2->sig_z,"10",2,S1,S2);
+
+    destroy_stabilizer(&S1);
+    destroy_stabilizer(&S2);
+
+  } else if (this_qubit.my_encoder_type == FIVE) {
+    qubit0 = subsystem_list[this_qubit.qubits[0]];
+    qubit1 = subsystem_list[this_qubit.qubits[1]];
+    qubit2 = subsystem_list[this_qubit.qubits[2]];
+    qubit3 = subsystem_list[this_qubit.qubits[3]];
+    qubit4 = subsystem_list[this_qubit.qubits[4]];
+
+    create_stabilizer(&S1,4,qubit0->sig_x,qubit1->sig_z,qubit2->sig_z,qubit3->sig_x);
+    create_stabilizer(&S2,4,qubit1->sig_x,qubit2->sig_z,qubit3->sig_z,qubit4->sig_x);
+    create_stabilizer(&S3,4,qubit2->sig_x,qubit3->sig_z,qubit4->sig_z,qubit0->sig_x);
+    create_stabilizer(&S4,4,qubit3->sig_x,qubit4->sig_z,qubit0->sig_z,qubit1->sig_x);
+
+    add_lin_recovery(correction_rate,qubit0->eye,"1111",4,S1,S2,S3,S4);
+
+    //Qubit 0 errors
+    add_lin_recovery(correction_rate,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
+
+    //Qubit 1 errors
+    add_lin_recovery(correction_rate,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
+
+    //Qubit 2 errors
+    add_lin_recovery(correction_rate,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
+
+    //Qubit 3 errors
+    add_lin_recovery(correction_rate,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
+
+    //Qubit 4 errors
+    add_lin_recovery(correction_rate,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
+
+    destroy_stabilizer(&S1);
+    destroy_stabilizer(&S2);
+    destroy_stabilizer(&S3);
+    destroy_stabilizer(&S4);
+
+  } else {
+    if (nid==0){
+      printf("ERROR! Encoder type not understood!\n");
+      exit(1);
+    }
+  }
+  return;
+}
+
+
+/* EventFunction is one step in Petsc to apply some action at a specific time.
+ * This function checks to see if an event has happened.
+ */
+PetscErrorCode _DQEC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
+  /* Check if the time has passed a gate */
+  PetscInt i;
+
+  /* We signal that we passed the time by returning a negative number */
+  for (i=0;i<_num_DQEC;i++){
+    fvalue[i] = _correction_time[i] - t;
+    if (fvalue[i]<0){
+      _correction_time[i] = _correction_time[i] + _correction_dt[i];
+    }
+  }
+
+  return(0);
+}
+
+/* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
+ * to apply that event.
+*/
+PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+  PetscInt i,i_ev;
+  Mat ec_mat;
+  Vec tmp_answer;
+
+  VecDuplicate(U,&tmp_answer);
+
+  if (nevents) {
+    //Loop through events
+    for (i_ev=0;i_ev<nevents;i_ev++){
+      MatMult(_DQEC_mats[i],rho,tmp_answer);
+      VecCopy(tmp_answer,rho);
+    }
+    VecDestroy(&tmp_answer);
+  }
+
+  TSSetSolution(ts,U);
+  return(0);
+}

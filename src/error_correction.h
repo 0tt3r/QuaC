@@ -30,4 +30,5 @@ void create_encoded_qubit(encoded_qubit*,encoder_type,...);
 void add_encoded_gate_to_circuit(circuit*,PetscReal,gate_type,...);
 void encode_state(Vec,PetscInt,...);
 void decode_state(Vec,PetscInt,...);
+void add_continuous_error_correction(encoded_qubit,PetscReal);
 #endif
