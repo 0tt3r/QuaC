@@ -3,6 +3,7 @@
 #include "operators.h"
 #include "solver.h"
 #include "kron_p.h"
+#include "quac_p.h"
 #include "dm_utilities.h"
 #include "quantum_gates.h"
 #include "error_correction.h"
@@ -246,7 +247,8 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   const PetscInt    *cols;
   const PetscScalar *vals;
 
-
+  PetscLogStagePop();
+  PetscLogStagePush(solve_stage);
   if (_lindblad_terms) {
     if (nid==0) {
       printf("Lindblad terms found, using Lindblad solver.\n");
@@ -499,6 +501,8 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     MatDestroy(&AA);
   }
   free(populations);
+  PetscLogStagePop();
+  PetscLogStagePush(post_solve_stage);
 
   return;
 }

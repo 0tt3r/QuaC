@@ -1,4 +1,5 @@
 #include "quantum_gates.h"
+#include "quac_p.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <petsc.h>
@@ -56,7 +57,7 @@ PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[
 PetscErrorCode _QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
   /* Check if the time has passed a gate */
   PetscInt current_gate,num_gates;
-
+  PetscLogEventBegin(_qc_event_function_event,0,0,0,0);
   if (_current_circuit<_num_circuits) {
     current_gate = _circuit_list[_current_circuit].current_gate;
     num_gates    = _circuit_list[_current_circuit].num_gates;
@@ -73,7 +74,7 @@ PetscErrorCode _QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,voi
   } else {
     fvalue[0] = t;
   }
-
+  PetscLogEventEnd(_qc_event_function_event,0,0,0,0);
   return(0);
 }
 
@@ -86,6 +87,9 @@ PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[
    /* We only have one event at the moment, so we do not need to branch.
     * If we had more than one event, we would put some logic here.
     */
+
+  PetscLogEventBegin(_qc_postevent_function_event,0,0,0,0);
+
   if (nevents) {
     num_gates    = _circuit_list[_current_circuit].num_gates;
     current_gate = _circuit_list[_current_circuit].current_gate;
@@ -108,6 +112,7 @@ PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[
   }
 
   TSSetSolution(ts,U);
+  PetscLogEventEnd(_qc_postevent_function_event,0,0,0,0);
   return(0);
 }
 
@@ -151,6 +156,9 @@ void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
   Vec tmp_answer;
   PetscInt dim,i,Istart,Iend,num_js,these_js[total_levels];
 
+
+  PetscLogEventBegin(_apply_gate_event,0,0,0,0);
+
   dim = total_levels*total_levels;
 
   VecDuplicate(rho,&tmp_answer); //Create a new vec with the same size as rho
@@ -162,11 +170,11 @@ void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
   MatSetUp(gate_mat);
   /* Construct the gate matrix, on the fly */
   MatGetOwnershipRange(gate_mat,&Istart,&Iend);
+
   for (i=Istart;i<Iend;i++){
     _get_val_j_from_global_i_gates(i,this_gate,&num_js,these_js,op_vals,0); // Get the corresponding j and val
     MatSetValues(gate_mat,1,&i,num_js,these_js,op_vals,ADD_VALUES);
   }
-
   MatAssemblyBegin(gate_mat,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(gate_mat,MAT_FINAL_ASSEMBLY);
   //  MatView(gate_mat,PETSC_VIEWER_STDOUT_SELF);
@@ -175,6 +183,9 @@ void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
 
   VecDestroy(&tmp_answer); //Destroy the temp answer
   MatDestroy(&gate_mat);
+  
+  PetscLogEventEnd(_apply_gate_event,0,0,0,0);
+
 }
 
 /*z

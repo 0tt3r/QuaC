@@ -147,120 +147,92 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
    * full_A matrix, never explicitly building R, but rather,
    * building I cross R^t R + (R^t R)* cross I + R* cross R
    */
-
+  PetscLogEventBegin(add_lin_recovery_event,0,0,0,0);
   _check_initialized_A();
   _lindblad_terms = 1;
 
-  if (PetscAbsComplex(a)==0) return;
-  MatGetOwnershipRange(full_A,&Istart,&Iend);
+  if (PetscAbsComplex(a)!=0) {
+    MatGetOwnershipRange(full_A,&Istart,&Iend);
 
-  va_start(ap,n_stabilizers);
-  stabs = malloc(n_stabilizers*sizeof(struct stabilizer));
-  /* Loop through passed in ops and store in list */
-  for (i=0;i<n_stabilizers;i++){
-    stabs[i] = va_arg(ap,stabilizer);
-  }
-  va_end(ap);
-
-  /*
-   * Construct R^t R. Due to interesting relations among the pauli operators
-   * (sig_i * sig_i) = I and sig_i = sig_i^t, as well as the fact that
-   * pauli operators from different subspaces commute and the stabilizers
-   * themselve commute, R^t R has a rather simple form:
-   *
-   * R^t R = \prod_i (I + M_i)/2
-   *
-   * This is almost the same as R, but without the error!
-   * This product is very similar to the elementary symmetric polynomials, and there
-   * are formula for calculating the values (which we don't make use of at this point,
-   * given we plan to have few stabilizers at this time).
-   * An example, with 3 stabilizers:
-   *
-   * R^t R = 1/2^3 (I + M_1 + M_2 + M_3 + M_1*M_2 + M_1*M_3 + M_2*M_3 + M_1*M_2*M_3)
-   *
-   * Generally, the form is:
-   * R^t R = 1/2^n (I + \sum_i M_i + \sum_i<j M_i*M_j + \sum_i<j<k M_i*M_j*M_k + ...)
-   *
-   * Since all M_i are constructed of tensor products (like I \cross Z \cross Z), and each of
-   * the submatrices are very sparse, we can use tricks (like in combine_ops_to_mat) to
-   * efficiently generate each of the members of the sum.
-   */
-
-  mat_scalar = -1/pow(2,n_stabilizers) * 0.5 * a; //Store the common multiplier for all terms, -0.5*a*1/4^n
-
-  /* First, do I cross C^t C and (C^t C)* cross I */
-
-  /*
-   * We break it up into different numbers of stabilizers, for the different
-   * numbers of terms (i.e., M_i or M_i*M_j, or M_i*M_j*M_k, etc)
-   * There should be a general way to do this that supports any number,
-   * but we code only to a maxmimum of 4 for now.
-   */
-
-  /* I terms - a * (I cross I + I cross I) = 2*a*I in the total space*/
-  MatGetOwnershipRange(full_A,&Istart,&Iend);
-  for (i=Istart;i<Iend;i++){
-    add_to_mat = 2*mat_scalar;
-    MatSetValue(full_A,i,i,add_to_mat,ADD_VALUES);
-  }
-
-  /* Single M_i terms */
-  // FIXME Consider distributing this loop in some smart fashion
-  for (i=0;i<total_levels;i++){
-    for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-      /* First loop through i_stab's ops */
-      /* Reset this_i and op_val to identity */
-      this_i = i; // The leading index which we check
-      op_val = 1.0;
-      _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
-
-      /*
-       * Now we have the matrix form of M_i_stab, but we need still need to
-       * expand it to add it to the superoperator space.
-       */
-      /* I cross C^t C part */
-      add_to_mat = op_val * mat_scalar; // Include common prefactor terms
-      _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
-
-      /* (C^t C)* cross I part */
-      add_to_mat = PetscConjComplex(add_to_mat);
-      _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
+    va_start(ap,n_stabilizers);
+    stabs = malloc(n_stabilizers*sizeof(struct stabilizer));
+    /* Loop through passed in ops and store in list */
+    for (i=0;i<n_stabilizers;i++){
+      stabs[i] = va_arg(ap,stabilizer);
     }
-  }
+    va_end(ap);
 
-  if (n_stabilizers > 1) {
-    /* M_i*M_j terms */
+    /*
+     * Construct R^t R. Due to interesting relations among the pauli operators
+     * (sig_i * sig_i) = I and sig_i = sig_i^t, as well as the fact that
+     * pauli operators from different subspaces commute and the stabilizers
+     * themselve commute, R^t R has a rather simple form:
+     *
+     * R^t R = \prod_i (I + M_i)/2
+     *
+     * This is almost the same as R, but without the error!
+     * This product is very similar to the elementary symmetric polynomials, and there
+     * are formula for calculating the values (which we don't make use of at this point,
+     * given we plan to have few stabilizers at this time).
+     * An example, with 3 stabilizers:
+     *
+     * R^t R = 1/2^3 (I + M_1 + M_2 + M_3 + M_1*M_2 + M_1*M_3 + M_2*M_3 + M_1*M_2*M_3)
+     *
+     * Generally, the form is:
+     * R^t R = 1/2^n (I + \sum_i M_i + \sum_i<j M_i*M_j + \sum_i<j<k M_i*M_j*M_k + ...)
+     *
+     * Since all M_i are constructed of tensor products (like I \cross Z \cross Z), and each of
+     * the submatrices are very sparse, we can use tricks (like in combine_ops_to_mat) to
+     * efficiently generate each of the members of the sum.
+     */
+
+    mat_scalar = -1/pow(2,n_stabilizers) * 0.5 * a; //Store the common multiplier for all terms, -0.5*a*1/4^n
+
+    /* First, do I cross C^t C and (C^t C)* cross I */
+
+    /*
+     * We break it up into different numbers of stabilizers, for the different
+     * numbers of terms (i.e., M_i or M_i*M_j, or M_i*M_j*M_k, etc)
+     * There should be a general way to do this that supports any number,
+     * but we code only to a maxmimum of 4 for now.
+     */
+
+    /* I terms - a * (I cross I + I cross I) = 2*a*I in the total space*/
+    MatGetOwnershipRange(full_A,&Istart,&Iend);
+    for (i=Istart;i<Iend;i++){
+      add_to_mat = 2*mat_scalar;
+      MatSetValue(full_A,i,i,add_to_mat,ADD_VALUES);
+    }
+
+    /* Single M_i terms */
+    // FIXME Consider distributing this loop in some smart fashion
     for (i=0;i<total_levels;i++){
       for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-        for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
-          /* Reset this_i and op_val to identity */
-          this_i = i; // The leading index which we check
-          op_val = 1.0;
-          _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
-          if (op_val!= 0.0) {
-            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
-          }
-          /*
-           * Now we have an element of the matrix form of M_i*M_j but we need still need to
-           * expand it to add it to the superoperator space.
-           */
-          /* I cross C^t C part */
-          add_to_mat = op_val * mat_scalar; // Include common prefactor terms
-          _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
+        /* First loop through i_stab's ops */
+        /* Reset this_i and op_val to identity */
+        this_i = i; // The leading index which we check
+        op_val = 1.0;
+        _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
 
-          /* (C^t C)* cross I part */
-          add_to_mat = PetscConjComplex(add_to_mat);
-          _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
-        }
+        /*
+         * Now we have the matrix form of M_i_stab, but we need still need to
+         * expand it to add it to the superoperator space.
+         */
+        /* I cross C^t C part */
+        add_to_mat = op_val * mat_scalar; // Include common prefactor terms
+        _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
+
+        /* (C^t C)* cross I part */
+        add_to_mat = PetscConjComplex(add_to_mat);
+        _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
       }
     }
-  }
-  if (n_stabilizers>2) {
-    /* M_i*M_j*M_k terms */
-    for (i=0;i<total_levels;i++){
-      for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-        for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
-          for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
+
+    if (n_stabilizers > 1) {
+      /* M_i*M_j terms */
+      for (i=0;i<total_levels;i++){
+        for (i_stab=0;i_stab<n_stabilizers;i_stab++){
+          for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
             /* Reset this_i and op_val to identity */
             this_i = i; // The leading index which we check
             op_val = 1.0;
@@ -268,10 +240,6 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
             if (op_val!= 0.0) {
               _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
             }
-            if (op_val!= 0.0) {
-              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
-            }
-
             /*
              * Now we have an element of the matrix form of M_i*M_j but we need still need to
              * expand it to add it to the superoperator space.
@@ -287,15 +255,12 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
         }
       }
     }
-  }
-
-  if (n_stabilizers>3) {
-    /* M_i*M_j*M_k*M_l terms */
-    for (i=0;i<total_levels;i++){
-      for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-        for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
-          for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
-            for (l_stab=k_stab+1;l_stab<n_stabilizers;l_stab++){
+    if (n_stabilizers>2) {
+      /* M_i*M_j*M_k terms */
+      for (i=0;i<total_levels;i++){
+        for (i_stab=0;i_stab<n_stabilizers;i_stab++){
+          for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
+            for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
               /* Reset this_i and op_val to identity */
               this_i = i; // The leading index which we check
               op_val = 1.0;
@@ -305,9 +270,6 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
               }
               if (op_val!= 0.0) {
                 _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
-              }
-              if (op_val!= 0.0) {
-                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab]);
               }
 
               /*
@@ -326,63 +288,102 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
         }
       }
     }
-  }
 
-  if (n_stabilizers>4) {
-    if (nid==0){
-      printf("ERROR! A maximum of 4 stabilizers is supported at this time!\n");
-      exit(0);
-    }
-  }
+    if (n_stabilizers>3) {
+      /* M_i*M_j*M_k*M_l terms */
+      for (i=0;i<total_levels;i++){
+        for (i_stab=0;i_stab<n_stabilizers;i_stab++){
+          for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
+            for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
+              for (l_stab=k_stab+1;l_stab<n_stabilizers;l_stab++){
+                /* Reset this_i and op_val to identity */
+                this_i = i; // The leading index which we check
+                op_val = 1.0;
+                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+                if (op_val!= 0.0) {
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
+                }
+                if (op_val!= 0.0) {
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
+                }
+                if (op_val!= 0.0) {
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab]);
+                }
 
-  /*
-   * Add (C* cross C) to the superoperator matrix,
-   * We expand R* and R, get their respective i,j
-   * and use _add_to_PETSc_kron_ij to add the value
-   * to the full_A
-   *
-   *     R = E * (1 +/- M_1)/2 * (1 +/- M_2)/2 * ...
-   * or
-   *     R = E * \prod_i (1 +/- M_i)/2
-   *
-   * Similar to the calculation of R^t R above,
-   * we expand the product as:
-   *
-   *     R = E * (I + M_1 + M_2 + M_3 + M_1 * M_2 + ...)
-   *
-   * a la elementary symmetric polynomials.
-   * We take a given i, calculate the value for each
-   * of the individual terms, then sum it all up.
-   */
-  // Store common prefactors. 2*n_stab because C* cross C
-  mat_scalar = 1/pow(2,2*n_stabilizers) * a;
-  // FIXME Consider distributing this loop in some smart fashion
-  for (i1=0;i1<total_levels;i1++){
-    /* Get the nonzeros for row i1 of C */
-    _get_row_nonzeros(this_row1,row_nonzeros1,&num_nonzero1,i1,error,commutation_string,n_stabilizers,stabs);
-    for (i2=0;i2<total_levels;i2++){
-      /* Get the nonzeros for row i2 of C */
-      /* FIXME: Consider skipping the i1=i2 spot */
-      _get_row_nonzeros(this_row2,row_nonzeros2,&num_nonzero2,i2,error,commutation_string,n_stabilizers,stabs);
-      /*
-       * Use the general formula for the kronecker product between
-       * two matrices to find the full value
-       */
-      for (j1=0;j1<num_nonzero1;j1++){
-        for (j2=0;j2<num_nonzero2;j2++){
-          /* Get the combind indices */
-          i_comb = total_levels*i1 + i2;
-          j_comb = total_levels*row_nonzeros1[j1] + row_nonzeros2[j2];
-          add_to_mat = mat_scalar *
-            PetscConjComplex(this_row1[row_nonzeros1[j1]])*
-            this_row2[row_nonzeros2[j2]];
-          if (i_comb>=Istart&&i_comb<Iend) MatSetValue(full_A,i_comb,j_comb,add_to_mat,ADD_VALUES);
+                /*
+                 * Now we have an element of the matrix form of M_i*M_j but we need still need to
+                 * expand it to add it to the superoperator space.
+                 */
+                /* I cross C^t C part */
+                add_to_mat = op_val * mat_scalar; // Include common prefactor terms
+                _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
+
+                /* (C^t C)* cross I part */
+                add_to_mat = PetscConjComplex(add_to_mat);
+                _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
+              }
+            }
+          }
         }
       }
+    }
 
+    if (n_stabilizers>4) {
+      if (nid==0){
+        printf("ERROR! A maximum of 4 stabilizers is supported at this time!\n");
+        exit(0);
+      }
+    }
+
+    /*
+     * Add (C* cross C) to the superoperator matrix,
+     * We expand R* and R, get their respective i,j
+     * and use _add_to_PETSc_kron_ij to add the value
+     * to the full_A
+     *
+     *     R = E * (1 +/- M_1)/2 * (1 +/- M_2)/2 * ...
+     * or
+     *     R = E * \prod_i (1 +/- M_i)/2
+     *
+     * Similar to the calculation of R^t R above,
+     * we expand the product as:
+     *
+     *     R = E * (I + M_1 + M_2 + M_3 + M_1 * M_2 + ...)
+     *
+     * a la elementary symmetric polynomials.
+     * We take a given i, calculate the value for each
+     * of the individual terms, then sum it all up.
+     */
+    // Store common prefactors. 2*n_stab because C* cross C
+    mat_scalar = 1/pow(2,2*n_stabilizers) * a;
+    // FIXME Consider distributing this loop in some smart fashion
+    for (i1=0;i1<total_levels;i1++){
+      /* Get the nonzeros for row i1 of C */
+      _get_row_nonzeros(this_row1,row_nonzeros1,&num_nonzero1,i1,error,commutation_string,n_stabilizers,stabs);
+      for (i2=0;i2<total_levels;i2++){
+        /* Get the nonzeros for row i2 of C */
+        /* FIXME: Consider skipping the i1=i2 spot */
+        _get_row_nonzeros(this_row2,row_nonzeros2,&num_nonzero2,i2,error,commutation_string,n_stabilizers,stabs);
+        /*
+         * Use the general formula for the kronecker product between
+         * two matrices to find the full value
+         */
+        for (j1=0;j1<num_nonzero1;j1++){
+          for (j2=0;j2<num_nonzero2;j2++){
+            /* Get the combind indices */
+            i_comb = total_levels*i1 + i2;
+            j_comb = total_levels*row_nonzeros1[j1] + row_nonzeros2[j2];
+            add_to_mat = mat_scalar *
+              PetscConjComplex(this_row1[row_nonzeros1[j1]])*
+              this_row2[row_nonzeros2[j2]];
+            if (i_comb>=Istart&&i_comb<Iend) MatSetValue(full_A,i_comb,j_comb,add_to_mat,ADD_VALUES);
+          }
+        }
+
+      }
     }
   }
-
+  PetscLogEventEnd(add_lin_recovery_event,0,0,0,0);
   return;
 }
 
@@ -848,49 +849,38 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
 
 //The ... are the encoders, assumes we encode from the first of the list in the encoder
 void encode_state(Vec rho,PetscInt num_logical_qubits,...){
-  PetscInt qubit,i;
+  PetscInt qubit,i,j;
   va_list ap;
   encoded_qubit this_qubit;
-  Vec work_rho;
-  Mat work_mat;
-
-  VecDuplicate(rho,&work_rho);
   va_start(ap,num_logical_qubits);
 
   //Loop through the qubit, multiplying rho by the encoding circuit
   for (i=0;i<num_logical_qubits;i++){
     this_qubit = va_arg(ap,encoded_qubit);
-    combine_circuit_to_super_mat(&work_mat,this_qubit.encoder_circuit);
-    MatMult(work_mat,rho,work_rho);
-    MatDestroy(&work_mat);
-    VecCopy(work_rho,rho);
+    for (j=0;j<this_qubit.encoder_circuit.num_gates;j++) {
+      _apply_gate(this_qubit.encoder_circuit.gate_list[j],rho);
+    }
   }
 
-  VecDestroy(&work_rho);
   return;
 }
 
 //The ... are the encoders, assumes we encode from the first of the list in the encoder
 void decode_state(Vec rho,PetscInt num_logical_qubits,...){
-  PetscInt qubit,i;
+  PetscInt qubit,i,j;
   va_list ap;
   encoded_qubit this_qubit;
-  Vec work_rho;
-  Mat work_mat;
 
-  VecDuplicate(rho,&work_rho);
   va_start(ap,num_logical_qubits);
 
   //Loop through the qubit, multiplying rho by the encoding circuit
   for (i=0;i<num_logical_qubits;i++){
     this_qubit = va_arg(ap,encoded_qubit);
-    combine_circuit_to_super_mat(&work_mat,this_qubit.decoder_circuit);
-    MatMult(work_mat,rho,work_rho);
-    MatDestroy(&work_mat);
-    VecCopy(work_rho,rho);
+    for (j=0;j<this_qubit.decoder_circuit.num_gates;j++) {
+      _apply_gate(this_qubit.decoder_circuit.gate_list[j],rho);
+    }
   }
 
-  VecDestroy(&work_rho);
   return;
 }
 

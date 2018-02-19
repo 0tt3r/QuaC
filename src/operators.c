@@ -15,7 +15,7 @@
  * - check if input DM is a valid DM (trace, hermitian, etc)
  */
 
-#define MAX_NNZ_PER_ROW 512
+#define MAX_NNZ_PER_ROW 128
 
 int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -236,46 +236,49 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
 void add_to_ham(PetscScalar a,operator op){
   PetscScalar    mat_scalar;
 
+  PetscLogEventBegin(add_to_ham_event,0,0,0,0);
 
   _check_initialized_A();
-  if (PetscAbsComplex(a)==0) return;
+  if (PetscAbsComplex(a)!=0) {
 
-  /*
-   * Construct the dense Hamiltonian only on the master node
-   */
-  if (nid==0&&_print_dense_ham) {
-    mat_scalar = a;
-    _add_to_dense_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,op->position);
+    /*
+     * Construct the dense Hamiltonian only on the master node
+     */
+    if (nid==0&&_print_dense_ham) {
+      mat_scalar = a;
+      _add_to_dense_kron(mat_scalar,op->n_before,op->my_levels,op->my_op_type,op->position);
+    }
+
+    /*
+     * Add to the Hamiltonian matrix, ham_A
+     */
+
+    mat_scalar = -a*PETSC_i;
+    _add_to_PETSc_kron(ham_A,mat_scalar,op->n_before,op->my_levels,
+                       op->my_op_type,op->position,1,1,0);
+    /*
+     * Add -i * (I cross H) to the superoperator matrix, A
+     * Since this is an additional I before, we simply
+     * pass total_levels as extra_before
+     * We pass the -a*PETSC_i to get the sign and imaginary part correct.
+     */
+
+    mat_scalar = -a*PETSC_i;
+    _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
+                       op->my_op_type,op->position,total_levels,1,0);
+
+    /*
+     * Add i * (H^T cross I) to the superoperator matrix, A
+     * Since this is an additional I after, we simply
+     * pass total_levels as extra_after.
+     * We pass a*PETSC_i to get the imaginary part correct.
+     */
+
+    mat_scalar = a*PETSC_i;
+    _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
+                       op->my_op_type,op->position,1,total_levels,1);
   }
-
-  /*
-   * Add to the Hamiltonian matrix, ham_A
-   */
-
-  mat_scalar = -a*PETSC_i;
-  _add_to_PETSc_kron(ham_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,1,1,0);
-  /*
-   * Add -i * (I cross H) to the superoperator matrix, A
-   * Since this is an additional I before, we simply
-   * pass total_levels as extra_before
-   * We pass the -a*PETSC_i to get the sign and imaginary part correct.
-   */
-
-  mat_scalar = -a*PETSC_i;
-  _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,total_levels,1,0);
-
-  /*
-   * Add i * (H^T cross I) to the superoperator matrix, A
-   * Since this is an additional I after, we simply
-   * pass total_levels as extra_after.
-   * We pass a*PETSC_i to get the imaginary part correct.
-   */
-
-  mat_scalar = a*PETSC_i;
-  _add_to_PETSc_kron(full_A,mat_scalar,op->n_before,op->my_levels,
-                     op->my_op_type,op->position,1,total_levels,1);
+  PetscLogEventEnd(add_to_ham_event,0,0,0,0);
   return;
 }
 
@@ -621,39 +624,43 @@ void add_to_ham_mult3(PetscScalar a,operator op1,operator op2,operator op3){
 
 void add_lin(PetscScalar a,operator op){
   PetscScalar    mat_scalar;
+
+  PetscLogEventBegin(add_lin_event,0,0,0,0);
   _check_initialized_A();
   _lindblad_terms = 1;
 
-  if (PetscAbsComplex(a)==0) return;
+  if (PetscAbsComplex(a)!=0){
 
-  /*
-   * Add (I cross C^t C) to the superoperator matrix, A
-   * Which is (I_total cross I_before cross C^t C cross I_after)
-   * Since this is an additional I_total before, we simply
-   * set extra_before to total_levels
-   */
-  mat_scalar = -0.5*a;
-  _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
-                         op->position,total_levels,1,0);
-  /*
-   * Add (C^T C* cross I) to the superoperator matrix, A
-   * Which is (I_before cross C^T C* cross I_after cross I_total)
-   * Since this is an additional I_total after, we simply
-   * set extra_after to total_levels
-   */
-  _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
-                         op->position,1,total_levels,1);
+    /*
+     * Add (I cross C^t C) to the superoperator matrix, A
+     * Which is (I_total cross I_before cross C^t C cross I_after)
+     * Since this is an additional I_total before, we simply
+     * set extra_before to total_levels
+     */
+    mat_scalar = -0.5*a;
+    _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+                           op->position,total_levels,1,0);
+    /*
+     * Add (C^T C* cross I) to the superoperator matrix, A
+     * Which is (I_before cross C^T C* cross I_after cross I_total)
+     * Since this is an additional I_total after, we simply
+     * set extra_after to total_levels
+     */
+    _add_to_PETSc_kron_lin(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+                           op->position,1,total_levels,1);
 
-  /*
-   * Add (C'* cross C') to the superoperator matrix, A, where C' is the full space
-   * representation of C. Let I_b = I_before and I_a = I_after
-   * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
-   * or (I_b cross C* cross I_ab cross C cross I_a)
-   * This is just like add_to_ham_comb, with n_between = n_after*n_before
-   */
-  mat_scalar = a;
-  _add_to_PETSc_kron_lin_comb(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
-                              op->position);
+    /*
+     * Add (C'* cross C') to the superoperator matrix, A, where C' is the full space
+     * representation of C. Let I_b = I_before and I_a = I_after
+     * This simplifies to (I_b cross C cross I_a cross I_b cross C cross I_a)
+     * or (I_b cross C* cross I_ab cross C cross I_a)
+     * This is just like add_to_ham_comb, with n_between = n_after*n_before
+     */
+    mat_scalar = a;
+    _add_to_PETSc_kron_lin_comb(full_A,mat_scalar,op->n_before,op->my_levels,op->my_op_type,
+                                op->position);
+  }
+  PetscLogEventEnd(add_lin_event,0,0,0,0);
   return;
 }
 

@@ -28,6 +28,20 @@ void QuaC_initialize(int argc,char **args){
   MPI_Comm_size(PETSC_COMM_WORLD,&np);
 
   petsc_initialized = 1;
+  PetscLogStageRegister("Pre-solve",&pre_solve_stage);
+  PetscLogStageRegister("Solve",&solve_stage);
+  PetscLogStageRegister("Post-solve",&post_solve_stage);
+  /* Register events */
+  PetscClassIdRegister("QuaC Class",&quac_class_id);
+  PetscLogEventRegister("add_lin",quac_class_id,&add_lin_event);
+  PetscLogEventRegister("add_to_ham",quac_class_id,&add_to_ham_event);
+  PetscLogEventRegister("add_lin_recovery",quac_class_id,&add_lin_recovery_event);
+  PetscLogEventRegister("_qc_event",quac_class_id,&_qc_event_function_event);
+  PetscLogEventRegister("_qc_postevent",quac_class_id,&_qc_postevent_function_event);
+  PetscLogEventRegister("_apply_gate",quac_class_id,&_apply_gate_event);
+
+  PetscLogStagePush(pre_solve_stage);
+
 }
 
 /*
@@ -71,6 +85,7 @@ void QuaC_finalize(){
     MatDestroy(&_time_dep_list[i].mat);
   }
   /* Finalize Petsc */
+  PetscLogStagePop();
   PetscFinalize();
   return;
 }
