@@ -379,7 +379,8 @@ int main(int argc,char **args){
   print_dm(rho,h_dim);
   if(nid==0) printf("Final PTraced DM: C\n");
   print_dm(rho_tmp,2);
-
+  QuaC_finalize();
+  return 0;
   destroy_dm(rho_init);
   destroy_dm(rho_tmp);
   for (i=0;i<num_qubits;i++){
@@ -393,21 +394,21 @@ int main(int argc,char **args){
 
 PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec rho,void *ctx){
   double fidelity,*populations;  int num_pop,i;
-  num_pop = get_num_populations();
-  populations = malloc(num_pop*sizeof(double));
-  get_populations(rho,&populations);
-  if (nid==0){
+ ///num_pop = get_num_populations();
+  //populations = malloc(num_pop*sizeof(double));
+  //get_populations(rho,&populations);
+  //if (nid==0){
     /* Print populations to file */
-    fprintf(f_pop,"%e",time);
-    for(i=0;i<num_pop;i++){
-      fprintf(f_pop," %e ",populations[i]);
-    }
-    fprintf(f_pop,"\n");
-  }
-  partial_trace_keep(rho,rho_tmp,1,qubits[final_qubit]);
-  get_fidelity(rho_init,rho_tmp,&fidelity);
-  if(nid==0) printf("%f %f\n",time,fidelity);
-  free(populations);
+  //  fprintf(f_pop,"%e",time);
+  //  for(i=0;i<num_pop;i++){
+  //    fprintf(f_pop," %e ",populations[i]);
+  //  }
+   // fprintf(f_pop,"\n");
+  //}
+  //partial_trace_keep(rho,rho_tmp,1,qubits[final_qubit]);
+  //get_fidelity(rho_init,rho_tmp,&fidelity);
+  if(nid==0) printf("%f \n",time);
+  //free(populations);
   /* destroy_dm(&rho_tmp2); */
   /* printf("Sparse dm: \n"); */
   /* printf("\n"); */
