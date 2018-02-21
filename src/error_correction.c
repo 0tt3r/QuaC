@@ -123,17 +123,17 @@ void destroy_stabilizer(stabilizer *stab){
  *        none
  */
 
-void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int n_stabilizers,...){
+void add_lin_recovery(PetscScalar a,PetscInt same_rate,operator error,char commutation_string[],int n_stabilizers,...){
   va_list ap;
-  PetscScalar mat_scalar,add_to_mat,op_val;
-  PetscInt   i,Istart,Iend,this_i,i_stab,j_stab,k_stab,l_stab;
-  PetscInt i1,i2,j1,j2,num_nonzero1,num_nonzero2,i_comb,j_comb;
+  PetscScalar mat_scalar,add_to_mat,op_val,mat_scalar2;
+  PetscInt   i,Istart,Iend,this_i,i_stab,j_stab,k_stab,l_stab,new_method;
+  PetscInt i1,i2,j1,j2,num_nonzero1,num_nonzero2,i_comb,j_comb,error_i;
   /*
    * The following arrays are used in C* C calculationsg
    * Maybe this is memory inefficient, but it takes
    * far less memory than the DM, so it should be fine
    */
-  PetscScalar this_row1[total_levels],this_row2[total_levels];
+  PetscScalar this_row1[total_levels],this_row2[total_levels],error_val;
   PetscInt row_nonzeros1[total_levels],row_nonzeros2[total_levels];
   stabilizer     *stabs;
 
@@ -184,19 +184,19 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
      * Since all M_i are constructed of tensor products (like I \cross Z \cross Z), and each of
      * the submatrices are very sparse, we can use tricks (like in combine_ops_to_mat) to
      * efficiently generate each of the members of the sum.
+     *
+     * Due to the form of commutation strings, if all of the error rates for each of
+     * the recover operators are the same, you only need to add the U* cross U terms
      */
 
     mat_scalar = -1/pow(2,n_stabilizers) * 0.5 * a; //Store the common multiplier for all terms, -0.5*a*1/4^n
-
     /* First, do I cross C^t C and (C^t C)* cross I */
-
     /*
      * We break it up into different numbers of stabilizers, for the different
      * numbers of terms (i.e., M_i or M_i*M_j, or M_i*M_j*M_k, etc)
      * There should be a general way to do this that supports any number,
-     * but we code only to a maxmimum of 4 for now.
+     * but we code only to a maximum of 4 for now.
      */
-
     /* I terms - a * (I cross I + I cross I) = 2*a*I in the total space*/
     MatGetOwnershipRange(full_A,&Istart,&Iend);
     for (i=Istart;i<Iend;i++){
@@ -204,130 +204,149 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
       MatSetValue(full_A,i,i,add_to_mat,ADD_VALUES);
     }
 
-    /* Single M_i terms */
-    // FIXME Consider distributing this loop in some smart fashion
-    for (i=0;i<total_levels;i++){
-      for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-        /* First loop through i_stab's ops */
-        /* Reset this_i and op_val to identity */
-        this_i = i; // The leading index which we check
-        op_val = 1.0;
-        _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+    if (same_rate==0) {
+      /* Single M_i terms */
+      for (i=Istart;i<Iend;i++){
+        for (i_stab=0;i_stab<2;i_stab++){//n_stabilizers;i_stab++){
+          /* First loop through i_stab's ops */
+          /* Reset this_i and op_val to identity */
+          this_i = i; // The leading index which we check
+          op_val = 1.0;
+          // Add I cross U
+          _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
+          add_to_mat = op_val * mat_scalar;
+          /* printf("add_to_mat: %f i: %d this_i: %d\n",add_to_mat,i,this_i); */
+          MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
 
-        /*
-         * Now we have the matrix form of M_i_stab, but we need still need to
-         * expand it to add it to the superoperator space.
-         */
-        /* I cross C^t C part */
-        add_to_mat = op_val * mat_scalar; // Include common prefactor terms
-        _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
-
-        /* (C^t C)* cross I part */
-        add_to_mat = PetscConjComplex(add_to_mat);
-        _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
-      }
-    }
-
-    if (n_stabilizers > 1) {
-      /* M_i*M_j terms */
-      for (i=0;i<total_levels;i++){
-        for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-          for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
-            /* Reset this_i and op_val to identity */
-            this_i = i; // The leading index which we check
-            op_val = 1.0;
-            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
-            if (op_val!= 0.0) {
-              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
-            }
-            /*
-             * Now we have an element of the matrix form of M_i*M_j but we need still need to
-             * expand it to add it to the superoperator space.
-             */
-            /* I cross C^t C part */
-            add_to_mat = op_val * mat_scalar; // Include common prefactor terms
-            _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
-
-            /* (C^t C)* cross I part */
-            add_to_mat = PetscConjComplex(add_to_mat);
-            _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
-          }
+          // Add  U* cross I
+          /* Reset this_i and op_val to identity */
+          this_i = i; // The leading index which we check
+          op_val = 1.0;
+          _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],1);
+          add_to_mat = op_val * mat_scalar;
+          MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
         }
       }
-    }
-    if (n_stabilizers>2) {
-      /* M_i*M_j*M_k terms */
-      for (i=0;i<total_levels;i++){
-        for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-          for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
-            for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
+
+      if (n_stabilizers > 1) {
+        /* M_i*M_j terms */
+        for (i=Istart;i<Iend;i++){
+          for (i_stab=0;i_stab<n_stabilizers;i_stab++){
+            for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
+              /* First loop through i_stab's ops */
               /* Reset this_i and op_val to identity */
+              // Add I cross U
               this_i = i; // The leading index which we check
               op_val = 1.0;
-              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
               if (op_val!= 0.0) {
-                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
+                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],-1);
               }
+              add_to_mat = op_val * mat_scalar;
+              MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
+
+              // Add U* cross I
+              this_i = i; // The leading index which we check
+              op_val = 1.0;
+              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],1);
               if (op_val!= 0.0) {
-                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
+                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],1);
               }
-
-              /*
-               * Now we have an element of the matrix form of M_i*M_j but we need still need to
-               * expand it to add it to the superoperator space.
-               */
-              /* I cross C^t C part */
-              add_to_mat = op_val * mat_scalar; // Include common prefactor terms
-              _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
-
-              /* (C^t C)* cross I part */
-              add_to_mat = PetscConjComplex(add_to_mat);
-              _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
+              add_to_mat = op_val * mat_scalar;
+              MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
             }
           }
         }
       }
-    }
-
-    if (n_stabilizers>3) {
-      /* M_i*M_j*M_k*M_l terms */
-      for (i=0;i<total_levels;i++){
-        for (i_stab=0;i_stab<n_stabilizers;i_stab++){
-          for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
-            for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
-              for (l_stab=k_stab+1;l_stab<n_stabilizers;l_stab++){
+      if (n_stabilizers>2) {
+        /* M_i*M_j*M_k terms */
+        for (i=Istart;i<Iend;i++){
+          for (i_stab=0;i_stab<n_stabilizers;i_stab++){
+            for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
+              for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
+                // Add I cross U
                 /* Reset this_i and op_val to identity */
                 this_i = i; // The leading index which we check
                 op_val = 1.0;
-                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
                 if (op_val!= 0.0) {
-                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],-1);
                 }
                 if (op_val!= 0.0) {
-                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab],-1);
                 }
-                if (op_val!= 0.0) {
-                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab]);
-                }
+                add_to_mat = op_val * mat_scalar;
+                MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
 
-                /*
-                 * Now we have an element of the matrix form of M_i*M_j but we need still need to
-                 * expand it to add it to the superoperator space.
-                 */
-                /* I cross C^t C part */
-                add_to_mat = op_val * mat_scalar; // Include common prefactor terms
-                _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,total_levels,1,total_levels);
+                // Add I cross U
+                /* Reset this_i and op_val to identity */
+                this_i = i; // The leading index which we check
+                op_val = 1.0;
+                _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],1);
+                if (op_val!= 0.0) {
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],1);
+                }
+                if (op_val!= 0.0) {
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab],1);
+                }
+                add_to_mat = op_val * mat_scalar;
+                MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
+              }
+            }
+          }
+        }
+      }
 
-                /* (C^t C)* cross I part */
-                add_to_mat = PetscConjComplex(add_to_mat);
-                _add_to_PETSc_kron_ij(full_A,add_to_mat,i,this_i,1,total_levels,total_levels);
+      if (n_stabilizers>3) {
+        /* M_i*M_j*M_k*M_l terms */
+        for (i=Istart;i<Iend;i++){
+          for (i_stab=0;i_stab<n_stabilizers;i_stab++){
+            for (j_stab=i_stab+1;j_stab<n_stabilizers;j_stab++){
+              for (k_stab=j_stab+1;k_stab<n_stabilizers;k_stab++){
+                for (l_stab=k_stab+1;l_stab<n_stabilizers;l_stab++){
+                  // Add I cross U
+                  /* Reset this_i and op_val to identity */
+                  this_i = i; // The leading index which we check
+                  op_val = 1.0;
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
+                  if (op_val!= 0.0) {
+                    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],-1);
+                  }
+                  if (op_val!= 0.0) {
+                    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab],-1);
+                  }
+                  if (op_val!= 0.0) {
+                    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab],-1);
+                  }
+
+                  add_to_mat = op_val * mat_scalar;
+                  MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
+
+                  // Add U* cross I
+                  /* Reset this_i and op_val to identity */
+                  this_i = i; // The leading index which we check
+                  op_val = 1.0;
+                  _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],1);
+                  if (op_val!= 0.0) {
+                    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],1);
+                  }
+                  if (op_val!= 0.0) {
+                    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab],1);
+                  }
+                  if (op_val!= 0.0) {
+                    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab],1);
+                  }
+
+                  add_to_mat = op_val * mat_scalar;
+                  MatSetValue(full_A,i,this_i,add_to_mat,ADD_VALUES);
+
+                }
               }
             }
           }
         }
       }
     }
-
     if (n_stabilizers>4) {
       if (nid==0){
         printf("ERROR! A maximum of 4 stabilizers is supported at this time!\n");
@@ -357,29 +376,50 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
     // Store common prefactors. 2*n_stab because C* cross C
     mat_scalar = 1/pow(2,2*n_stabilizers) * a;
     // FIXME Consider distributing this loop in some smart fashion
-    for (i1=0;i1<total_levels;i1++){
-      /* Get the nonzeros for row i1 of C */
+    /* for (i1=0;i1<total_levels;i1++){ */
+    /*   /\* Get the nonzeros for row i1 of C *\/ */
+    /*   _get_row_nonzeros(this_row1,row_nonzeros1,&num_nonzero1,i1,error,commutation_string,n_stabilizers,stabs); */
+    /*   for (i2=0;i2<total_levels;i2++){ */
+    /*     /\* Get the nonzeros for row i2 of C *\/ */
+    /*     /\* FIXME: Consider skipping the i1=i2 spot *\/ */
+    /*     _get_row_nonzeros(this_row2,row_nonzeros2,&num_nonzero2,i2,error,commutation_string,n_stabilizers,stabs); */
+    /*     /\* */
+    /*      * Use the general formula for the kronecker product between */
+    /*      * two matrices to find the full value */
+    /*      *\/ */
+    /*     for (j1=0;j1<num_nonzero1;j1++){ */
+    /*       for (j2=0;j2<num_nonzero2;j2++){ */
+    /*         /\* Get the combind indices *\/ */
+    /*         i_comb = total_levels*i1 + i2; */
+    /*         j_comb = total_levels*row_nonzeros1[j1] + row_nonzeros2[j2]; */
+    /*         add_to_mat = mat_scalar * */
+    /*           PetscConjComplex(this_row1[row_nonzeros1[j1]])* */
+    /*           this_row2[row_nonzeros2[j2]]; */
+    /*         if (i_comb>=Istart&&i_comb<Iend) MatSetValue(full_A,i_comb,j_comb,add_to_mat,ADD_VALUES); */
+    /*       } */
+    /*     } */
+
+    /*   } */
+    /* } */
+
+    for (i=Istart;i<Iend;i++){
+      /* Calculate i1, i2 */
+      i1 = i/total_levels;
+      i2 = i%total_levels;
       _get_row_nonzeros(this_row1,row_nonzeros1,&num_nonzero1,i1,error,commutation_string,n_stabilizers,stabs);
-      for (i2=0;i2<total_levels;i2++){
-        /* Get the nonzeros for row i2 of C */
-        /* FIXME: Consider skipping the i1=i2 spot */
-        _get_row_nonzeros(this_row2,row_nonzeros2,&num_nonzero2,i2,error,commutation_string,n_stabilizers,stabs);
-        /*
-         * Use the general formula for the kronecker product between
-         * two matrices to find the full value
-         */
-        for (j1=0;j1<num_nonzero1;j1++){
-          for (j2=0;j2<num_nonzero2;j2++){
-            /* Get the combind indices */
-            i_comb = total_levels*i1 + i2;
-            j_comb = total_levels*row_nonzeros1[j1] + row_nonzeros2[j2];
-            add_to_mat = mat_scalar *
-              PetscConjComplex(this_row1[row_nonzeros1[j1]])*
-              this_row2[row_nonzeros2[j2]];
-            if (i_comb>=Istart&&i_comb<Iend) MatSetValue(full_A,i_comb,j_comb,add_to_mat,ADD_VALUES);
+      _get_row_nonzeros(this_row2,row_nonzeros2,&num_nonzero2,i2,error,commutation_string,n_stabilizers,stabs);
+      for (j1=0;j1<num_nonzero1;j1++){
+        for (j2=0;j2<num_nonzero2;j2++){
+          /* Get the combind indices */
+          i_comb = total_levels*i1 + i2;
+          j_comb = total_levels*row_nonzeros1[j1] + row_nonzeros2[j2];
+          add_to_mat = mat_scalar *
+            PetscConjComplex(this_row1[row_nonzeros1[j1]])*
+            this_row2[row_nonzeros2[j2]];
+          if (PetscAbsComplex(add_to_mat)>1e-5){
+            MatSetValue(full_A,i_comb,j_comb,add_to_mat,ADD_VALUES);
           }
         }
-
       }
     }
   }
@@ -387,8 +427,14 @@ void add_lin_recovery(PetscScalar a,operator error,char commutation_string[],int
   return;
 }
 
-/* Get the j and val from a stabilizer - essentially multiply the ops for a given row */
-void _get_this_i_and_val_from_stab(PetscInt *this_i, PetscScalar *op_val,stabilizer stab,char commutation_char){
+/* Get the j and val from a stabilizer - essentially multiply the ops for a given row
+* tensor_control - switch on which superoperator to compute
+*                  -1: I cross G
+*                   0: G* cross G
+*                   1: G* cross I
+*/
+void _get_this_i_and_val_from_stab(PetscInt *this_i, PetscScalar *op_val,stabilizer stab,
+                                   char commutation_char,PetscInt tensor_control){
   PetscInt j,this_j;
   PetscScalar val;
   PetscReal plus_or_minus_1=1.0;
@@ -407,7 +453,7 @@ void _get_this_i_and_val_from_stab(PetscInt *this_i, PetscScalar *op_val,stabili
 
 
   for (j=0;j<stab.n_ops;j++){
-    _get_val_j_from_global_i(*this_i,stab.ops[j],&this_j,&val); // Get the corresponding j and val
+    _get_val_j_from_global_i(*this_i,stab.ops[j],&this_j,&val,tensor_control); // Get the corresponding j and val
     if (this_j<0) {
       /*
        * Negative j says there is no nonzero value for a given this_i
@@ -420,7 +466,16 @@ void _get_this_i_and_val_from_stab(PetscInt *this_i, PetscScalar *op_val,stabili
       *op_val = *op_val*val;
     }
   }
-  *op_val = *op_val*plus_or_minus_1; //Include commutation information
+
+  if (tensor_control!=0){
+    /*
+     * We don't need to apply plus_or_minus_1 if tensor
+     * control is 0 because we would apply it twice (U* and U),
+     * always leading to +1
+     */
+    *op_val = *op_val*plus_or_minus_1; //Include commutation information
+  }
+
 
 }
 
@@ -429,9 +484,10 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
   PetscScalar error_val,op_val;
   PetscInt j,this_i,error_i,i_stab,j_stab,k_stab,l_stab,found;
   /* Get the error terms nonzero for this i */
-  _get_val_j_from_global_i(i,error,&error_i,&error_val); // Get the corresponding j and val
+  _get_val_j_from_global_i(i,error,&error_i,&error_val,-1); // Get the corresponding j and val
   this_i = error_i; // The leading index which we check
   op_val = error_val;
+
   /*
    * Reset num_nonzero. We need not reset the arrays because
    * we will only access the indices described in the list,
@@ -444,8 +500,6 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
   row_nonzeros[*num_nonzero] = this_i;
   *num_nonzero = *num_nonzero + 1;
 
-
-
   /*
    * Single E * M_i terms. The error term is included from the
    * fact tht this_i and op_val are reset to the error
@@ -455,7 +509,7 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
     /* Reset this_i and op_val to error values */
     this_i = error_i; // The leading index which we check
     op_val = error_val;
-    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+    _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
     if (op_val!=0.0) {
       /*
        * Check if we already have a value in this spot.
@@ -492,10 +546,10 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
         this_i = error_i; // The leading index which we check
         op_val = error_val;
 
-        _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+        _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
 
         if (op_val!= 0.0) {
-          _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
+          _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],-1);
         }
 
         /*
@@ -542,14 +596,14 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
           this_i = error_i; // The leading index which we check
           op_val = error_val;
 
-          _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+          _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
 
           if (op_val!= 0.0) {
-            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
+            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],-1);
           }
 
           if (op_val!= 0.0) {
-            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
+            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab],-1);
           }
 
           /*
@@ -597,18 +651,18 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
             this_i = error_i; // The leading index which we check
             op_val = error_val;
 
-            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab]);
+            _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[i_stab],commutation_string[i_stab],-1);
 
             if (op_val!= 0.0) {
-              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab]);
+              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[j_stab],commutation_string[j_stab],-1);
             }
 
             if (op_val!= 0.0) {
-              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab]);
+              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[k_stab],commutation_string[k_stab],-1);
             }
 
             if (op_val!= 0.0) {
-              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab]);
+              _get_this_i_and_val_from_stab(&this_i,&op_val,stabs[l_stab],commutation_string[l_stab],-1);
             }
 
             /*
@@ -898,10 +952,10 @@ void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correcti
     create_stabilizer(&S1,2,qubit0->sig_z,qubit1->sig_z);
     create_stabilizer(&S2,2,qubit1->sig_z,qubit2->sig_z);
 
-    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit0->sig_x,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit1->sig_x,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit2->sig_x,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -914,10 +968,10 @@ void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correcti
     create_stabilizer(&S1,2,qubit0->sig_x,qubit1->sig_x);
     create_stabilizer(&S2,2,qubit1->sig_x,qubit2->sig_x);
 
-    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit0->sig_z,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit1->sig_z,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit2->sig_z,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -934,32 +988,32 @@ void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correcti
     create_stabilizer(&S3,4,qubit2->sig_x,qubit3->sig_z,qubit4->sig_z,qubit0->sig_x);
     create_stabilizer(&S4,4,qubit3->sig_x,qubit4->sig_z,qubit0->sig_z,qubit1->sig_x);
 
-    add_lin_recovery(correction_rate,qubit0->eye,"1111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->eye,"1111",4,S1,S2,S3,S4);
 
     //Qubit 0 errors
-    add_lin_recovery(correction_rate,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
 
     //Qubit 1 errors
-    add_lin_recovery(correction_rate,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
 
     //Qubit 2 errors
-    add_lin_recovery(correction_rate,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
 
     //Qubit 3 errors
-    add_lin_recovery(correction_rate,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
 
     //Qubit 4 errors
-    add_lin_recovery(correction_rate,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -988,10 +1042,10 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
     create_stabilizer(&S1,2,qubit0->sig_z,qubit1->sig_z);
     create_stabilizer(&S2,2,qubit1->sig_z,qubit2->sig_z);
 
-    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit0->sig_x,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit1->sig_x,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit2->sig_x,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -1002,10 +1056,10 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
 
     create_stabilizer(&S1,2,qubit0->sig_x,qubit1->sig_x);
     create_stabilizer(&S2,2,qubit1->sig_x,qubit2->sig_x);
-    add_lin_recovery(correction_rate,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit0->sig_z,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit1->sig_z,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,qubit2->sig_z,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -1022,32 +1076,32 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
     create_stabilizer(&S3,4,qubit2->sig_x,qubit3->sig_z,qubit4->sig_z,qubit0->sig_x);
     create_stabilizer(&S4,4,qubit3->sig_x,qubit4->sig_z,qubit0->sig_z,qubit1->sig_x);
 
-    add_lin_recovery(correction_rate,qubit0->eye,"1111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->eye,"1111",4,S1,S2,S3,S4);
 
     //Qubit 0 errors
-    add_lin_recovery(correction_rate,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
 
     //Qubit 1 errors
-    add_lin_recovery(correction_rate,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
 
     //Qubit 2 errors
-    add_lin_recovery(correction_rate,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
 
     //Qubit 3 errors
-    add_lin_recovery(correction_rate,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
 
     //Qubit 4 errors
-    add_lin_recovery(correction_rate,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);

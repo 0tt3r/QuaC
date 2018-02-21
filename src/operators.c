@@ -15,7 +15,7 @@
  * - check if input DM is a valid DM (trace, hermitian, etc)
  */
 
-#define MAX_NNZ_PER_ROW 128
+#define MAX_NNZ_PER_ROW 600
 
 int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -944,7 +944,7 @@ void combine_ops_to_mat(Mat *matrix_out,int number_of_ops,...){
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<number_of_ops;j++){
-      _get_val_j_from_global_i(this_i,op[j],&this_j,&val); // Get the corresponding j and val
+      _get_val_j_from_global_i(this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i
@@ -1229,15 +1229,18 @@ void _check_initialized_A(){
           d_nz[i] = MAX_NNZ_PER_ROW;
           o_nz[i] = MAX_NNZ_PER_ROW;
         }
+
       }
 
-      MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz);
-      MatSeqAIJSetPreallocation(full_A,0,d_nz);
+      /* MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz); */
+      /* MatSeqAIJSetPreallocation(full_A,0,d_nz); */
+      MatMPIAIJSetPreallocation(full_A,4*MAX_NNZ_PER_ROW/np,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL);
     } else {
       if (MAX_NNZ_PER_ROW>total_levels*total_levels) {
         MatMPIAIJSetPreallocation(full_A,total_levels,NULL,total_levels,NULL);
       } else {
-        MatMPIAIJSetPreallocation(full_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
+        //MatMPIAIJSetPreallocation(full_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
+        MatMPIAIJSetPreallocation(full_A,4*MAX_NNZ_PER_ROW/np,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL);
       }
     }
 
@@ -1251,94 +1254,95 @@ void _check_initialized_A(){
 
     MatSetUp(full_A); // This might not be necessary?
 
-    MatCreate(PETSC_COMM_WORLD,&full_stiff_A);
-    MatSetType(full_stiff_A,MATMPIAIJ);
-    MatSetSizes(full_stiff_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
-    MatSetFromOptions(full_stiff_A);
+    /* MatCreate(PETSC_COMM_WORLD,&full_stiff_A); */
+    /* MatSetType(full_stiff_A,MATMPIAIJ); */
+    /* MatSetSizes(full_stiff_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim); */
+    /* MatSetFromOptions(full_stiff_A); */
 
-
-    if (nid==0){
-      /*
-       * Only the first row has extra nonzeros, from the stabilization.
-       * We want to allocate extra memory for that row, but not for any others.
-       * Since we put total_levels extra elements (spread evenly), we
-       * add a fraction to the diagonal part and the remaining to the
-       * off diagonal part. We assume that core 0 owns roughly dim/np
-       * rows.
-       */
-      /*
-       * If the system is small enough, we can just allocate a lot of
-       * memory for it. Fixes a bug from PETSc when you try to preallocate bigger
-       * the row size
-       */
-      if (total_levels<MAX_NNZ_PER_ROW) {
-        d_nz[0] = total_levels;
-        o_nz[0] = total_levels;
-        for (i=1;i<(dim/np)*5;i++){
-          d_nz[i] = total_levels;
-          o_nz[i] = total_levels;
-        }
-      } else {
-        d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
-        o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
-        for (i=1;i<(dim/np)*5;i++){
-          d_nz[i] = MAX_NNZ_PER_ROW;
-          o_nz[i] = MAX_NNZ_PER_ROW;
-        }
-      }
-
-      MatMPIAIJSetPreallocation(full_stiff_A,0,d_nz,0,o_nz);
-      MatSeqAIJSetPreallocation(full_stiff_A,0,d_nz);
-
-      PetscFree(d_nz);
-      PetscFree(o_nz);
-
-    } else {
-      if (MAX_NNZ_PER_ROW>total_levels*total_levels) {
-        MatMPIAIJSetPreallocation(full_stiff_A,total_levels,NULL,total_levels,NULL);
-      } else {
-        MatMPIAIJSetPreallocation(full_stiff_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
-      }
-    }
 
     /* if (nid==0){ */
-    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
-    /*                       ,NULL,,NULL,&full_stiff_A);CHKERRQ(ierr); */
+    /*   /\* */
+    /*    * Only the first row has extra nonzeros, from the stabilization. */
+    /*    * We want to allocate extra memory for that row, but not for any others. */
+    /*    * Since we put total_levels extra elements (spread evenly), we */
+    /*    * add a fraction to the diagonal part and the remaining to the */
+    /*    * off diagonal part. We assume that core 0 owns roughly dim/np */
+    /*    * rows. */
+    /*    *\/ */
+    /*   /\* */
+    /*    * If the system is small enough, we can just allocate a lot of */
+    /*    * memory for it. Fixes a bug from PETSc when you try to preallocate bigger */
+    /*    * the row size */
+    /*    *\/ */
+    /*   if (total_levels<MAX_NNZ_PER_ROW) { */
+    /*     d_nz[0] = total_levels; */
+    /*     o_nz[0] = total_levels; */
+    /*     for (i=1;i<(dim/np)*5;i++){ */
+    /*       d_nz[i] = total_levels; */
+    /*       o_nz[i] = total_levels; */
+    /*     } */
+    /*   } else { */
+    /*     d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5; */
+    /*     o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5; */
+    /*     for (i=1;i<(dim/np)*5;i++){ */
+    /*       d_nz[i] = MAX_NNZ_PER_ROW; */
+    /*       o_nz[i] = MAX_NNZ_PER_ROW; */
+    /*     } */
+    /*   } */
+
+    /*   /\* MatMPIAIJSetPreallocation(full_stiff_A,0,d_nz,0,o_nz); *\/ */
+    /*   /\* MatSeqAIJSetPreallocation(full_stiff_A,0,d_nz); *\/ */
+    /*   MatMPIAIJSetPreallocation(full_stiff_A,2*MAX_NNZ_PER_ROW/np,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL); */
+    /*   PetscFree(d_nz); */
+    /*   PetscFree(o_nz); */
+
     /* } else { */
-    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
-    /*                       10,NULL,10,NULL,&full_stiff_A);CHKERRQ(ierr); */
+    /*   if (MAX_NNZ_PER_ROW>total_levels*total_levels) { */
+    /*     MatMPIAIJSetPreallocation(full_stiff_A,total_levels,NULL,total_levels,NULL); */
+    /*   } else { */
+    /*     //MatMPIAIJSetPreallocation(full_stiff_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL); */
+    /*     MatMPIAIJSetPreallocation(full_stiff_A,2*MAX_NNZ_PER_ROW/np,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL); */
+    /*   } */
     /* } */
 
-    MatSetUp(full_stiff_A); // This might not be necessary?
+    /* /\* if (nid==0){ *\/ */
+    /* /\*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, *\/ */
+    /* /\*                       ,NULL,,NULL,&full_stiff_A);CHKERRQ(ierr); *\/ */
+    /* /\* } else { *\/ */
+    /* /\*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, *\/ */
+    /* /\*                       10,NULL,10,NULL,&full_stiff_A);CHKERRQ(ierr); *\/ */
+    /* /\* } *\/ */
+
+    /* MatSetUp(full_stiff_A); // This might not be necessary? */
 
 
-    /* Setup ham_A matrix */
-    MatCreate(PETSC_COMM_WORLD,&ham_A);
-    MatSetType(ham_A,MATMPIAIJ);
-    MatSetSizes(ham_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
-    MatSetFromOptions(ham_A);
-    if (MAX_NNZ_PER_ROW>total_levels/2) {
-      if (np==1){
-        MatMPIAIJSetPreallocation(ham_A,total_levels,NULL,0,NULL);
-      } else {
-        MatMPIAIJSetPreallocation(ham_A,total_levels/2,NULL,total_levels/2,NULL);
-      }
-    } else {
-      MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
-    }
-    MatSetUp(ham_A); // This might not be necessary?
+    /* /\* Setup ham_A matrix *\/ */
+    /* MatCreate(PETSC_COMM_WORLD,&ham_A); */
+    /* MatSetType(ham_A,MATMPIAIJ); */
+    /* MatSetSizes(ham_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels); */
+    /* MatSetFromOptions(ham_A); */
+    /* if (MAX_NNZ_PER_ROW>total_levels/2) { */
+    /*   if (np==1){ */
+    /*     MatMPIAIJSetPreallocation(ham_A,total_levels,NULL,0,NULL); */
+    /*   } else { */
+    /*     MatMPIAIJSetPreallocation(ham_A,total_levels/2,NULL,total_levels/2,NULL); */
+    /*   } */
+    /* } else { */
+    /*   MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL); */
+    /* } */
+    /* MatSetUp(ham_A); // This might not be necessary? */
 
-    /* Setup ham_stiff_A matrix */
-    MatCreate(PETSC_COMM_WORLD,&ham_stiff_A);
-    MatSetType(ham_stiff_A,MATMPIAIJ);
-    MatSetSizes(ham_stiff_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
-    MatSetFromOptions(ham_stiff_A);
-    if (MAX_NNZ_PER_ROW>total_levels/2) {
-      MatMPIAIJSetPreallocation(ham_stiff_A,total_levels/2,NULL,total_levels/2,NULL);
-    } else {
-      MatMPIAIJSetPreallocation(ham_stiff_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
-    }
-    MatSetUp(ham_stiff_A); // This might not be necessary?
+    /* /\* Setup ham_stiff_A matrix *\/ */
+    /* MatCreate(PETSC_COMM_WORLD,&ham_stiff_A); */
+    /* MatSetType(ham_stiff_A,MATMPIAIJ); */
+    /* MatSetSizes(ham_stiff_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels); */
+    /* MatSetFromOptions(ham_stiff_A); */
+    /* if (MAX_NNZ_PER_ROW>total_levels/2) { */
+    /*   MatMPIAIJSetPreallocation(ham_stiff_A,total_levels/2,NULL,total_levels/2,NULL); */
+    /* } else { */
+    /*   MatMPIAIJSetPreallocation(ham_stiff_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL); */
+    /* } */
+    /* MatSetUp(ham_stiff_A); // This might not be necessary? */
 
   }
 

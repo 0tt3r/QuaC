@@ -420,7 +420,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   /*   } */
   /*   MatRestoreRow(solve_A,i,&ncols,&cols,&vals); */
   /* } */
-
+  /* exit(0); */
   if(_stiff_solver){
     MatView(solve_stiff_A,mat_view);
   }

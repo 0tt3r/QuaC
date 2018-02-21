@@ -6,7 +6,7 @@
 
 long   _get_loop_limit(op_type,int);
 PetscScalar _get_val_in_subspace(long,op_type,int,long*,long*);
-void _get_val_j_from_global_i(PetscInt,operator,PetscInt*,PetscScalar*);
+void _get_val_j_from_global_i(PetscInt,operator,PetscInt*,PetscScalar*,PetscInt);
 void   _add_to_PETSc_kron(Mat,PetscScalar,int,int,op_type,int,int,int,int);
 void   _add_to_PETSc_kron_comb(Mat,PetscScalar,int,int,op_type,int,int,int,
                                op_type,int,int,int,int,int);

@@ -160,13 +160,20 @@ PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_
  * Inputs:
  *      long i:             global i
  *      operator:           operator to get
+ *      tensor_control - switch on which superoperator to compute
+ *                          -1: I cross G or just G (the difference is controlled by the passed in i's, but
+ *                                           the internal logic is exactly the same)
+ *                           0: G* cross G
+ *                           1: G* cross I
  * Outputs:
  *      long *j:            global j for nonzero of given i; or negative if none
  *      double *val:        value of op for global i,j
   */
 
-void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScalar *val){
-  int i_sub,n_after,tmp_int,k1,k2;
+void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScalar *val,PetscInt tensor_control){
+  PetscInt i_sub,n_after,tmp_int,k1,k2,extra_after,j_i1,j_i2,i1,i2;
+  PetscScalar val_i1,val_i2;
+
   /*
    * We store our operators as a type and number of levels;
    * we use the stored information to calculate the global j location
@@ -177,163 +184,205 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
    * If it is a raising operator, it is sub diagonal.
    */
 
-  n_after = total_levels/(this_op->my_levels*this_op->n_before);
-  i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
-
-  if (this_op->my_op_type==LOWER) {
-    /*
-     * Lowering operator
-     * From i, use the generating function from the kronecker product:
-     *    i = i_sub * n_af + k1 + k2*n_l*n_af
-     *    j = (i_sub+1) * n_af + k1 + k2*n_l*n_af
-     * We work out k1 and k2 from i to get j.
-     */
-    if (i_sub>=(this_op->my_levels-1)){
-      //There is no nonzero value for given global i; return -1 as flag
-      *j = -1;
-      *val = 0.0;
+  if (tensor_control!= 0) {
+    if (tensor_control==1) {
+      extra_after = total_levels;
     } else {
-      tmp_int = i - i_sub * n_after;
-      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
-      k1      = tmp_int%(this_op->my_levels*n_after);
-      *j = (i_sub + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
-      *val   = sqrt((double)i_sub+1.0);
-    }
-  } else if (this_op->my_op_type==RAISE){
-    /*
-     * Raising operator
-     *
-     * From i, use the generating function from the kronecker product:
-     *    i = (i_sub+1) * n_af + k1 + k2*n_me*n_af
-     *    j = i_sub * n_af + k1 + k2*n_me*n_af
-     * We work out k1 and k2 from i to get j.
-     */
-    i_sub = i_sub - 1;
-    if(i_sub<0){
-      //There is no nonzero value for given global i; return -1 as flag
-      *j = -1;
-      *val = 0.0;
-    } else {
-      tmp_int = i - (i_sub+1) * n_after;
-      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
-      k1      = tmp_int%(this_op->my_levels*n_after);
-      *j = i_sub * n_after + k1 + k2*this_op->my_levels*n_after;
-      *val   = sqrt((double)i_sub+1.0);
-    }
-  } else if (this_op->my_op_type==SIGMA_X){
-    /*
-     * SIGMA_X
-     * if (i==1)
-     *    i = 1 * n_af + k1 + k2*n_me*n_af
-     *    j = 0 * n_af + k1 + k2*n_me*n_af
-     * if (i==0)
-     *    i = 0 * n_af + k1 + k2*n_l*n_af
-     *    j = 1 * n_af + k1 + k2*n_l*n_af
-     * We work out k1 and k2 from i to get j.
-     */
-    if (i_sub==0) {
-      tmp_int = i - 0 * n_after;
-      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
-      k1      = tmp_int%(this_op->my_levels*n_after);
-      *j = (0 + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
-      *val   = 1.0;
-    } else if (i_sub==1) {
-      tmp_int = i - (0+1) * n_after;
-      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
-      k1      = tmp_int%(this_op->my_levels*n_after);
-      *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
-      *val   = 1.0;
-    } else {
-      if (nid==0){
-        printf("ERROR! Pauli Operators are only defined for qubits\n");
-        exit(0);
-      }
-    }
-  } else if (this_op->my_op_type==SIGMA_Y){
-    /*
-     * SIGMA_Y
-     * if (i==1)
-     *    i = 1 * n_af + k1 + k2*n_me*n_af
-     *    j = 0 * n_af + k1 + k2*n_me*n_af
-     * if (i==0)
-     *    i = 0 * n_af + k1 + k2*n_l*n_af
-     *    j = 1 * n_af + k1 + k2*n_l*n_af
-     * We work out k1 and k2 from i to get j.
-     */
-    if (i_sub==0) {
-      tmp_int = i - 0 * n_after;
-      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
-      k1      = tmp_int%(this_op->my_levels*n_after);
-      *j = (0 + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
-      *val   = -PETSC_i;
-    } else if (i_sub==1) {
-      tmp_int = i - (0+1) * n_after;
-      k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
-      k1      = tmp_int%(this_op->my_levels*n_after);
-      *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
-      *val   = PETSC_i;
-    } else {
-      if (nid==0){
-        printf("ERROR! Pauli Operators are only defined for qubits\n");
-        exit(0);
-      }
+      extra_after = 1;
     }
 
-  } else if (this_op->my_op_type==NUMBER){
-    /* Number operator */
-    if (i_sub!=0){
-      *j = i; //Diagonal, even in global space
-      *val   = (double)i_sub;
-    } else {
-      //There is no nonzero value for given global i; return -1 as flag
-      *j = -1;
-      *val = 0.0;
-    }
-  } else if (this_op->my_op_type==IDENTITY){
-    /* Identity operator */
-    /* diagonal, even in global space */
-    *j = i;
-    *val = 1.0;
-  } else if (this_op->my_op_type==SIGMA_Z){
-    /*
-     * SIGMA_Z
-     * diagonal, even in global space
-     * if (i==0) val = 1.0
-     * if (i==1) val = -1.0
-     * We work out k1 and k2 from i to get j.
-     */
-    if (i_sub==0) {
+    n_after = total_levels/(this_op->my_levels*this_op->n_before)*extra_after;
+    i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
+
+    if (this_op->my_op_type==LOWER) {
+      /*
+       * Lowering operator
+       * From i, use the generating function from the kronecker product:
+       *    i = i_sub * n_af + k1 + k2*n_l*n_af
+       *    j = (i_sub+1) * n_af + k1 + k2*n_l*n_af
+       * We work out k1 and k2 from i to get j.
+       */
+      if (i_sub>=(this_op->my_levels-1)){
+        //There is no nonzero value for given global i; return -1 as flag
+        *j = -1;
+        *val = 0.0;
+      } else {
+        tmp_int = i - i_sub * n_after;
+        k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+        k1      = tmp_int%(this_op->my_levels*n_after);
+        *j = (i_sub + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
+        *val   = sqrt((double)i_sub+1.0);
+      }
+    } else if (this_op->my_op_type==RAISE){
+      /*
+       * Raising operator
+       *
+       * From i, use the generating function from the kronecker product:
+       *    i = (i_sub+1) * n_af + k1 + k2*n_me*n_af
+       *    j = i_sub * n_af + k1 + k2*n_me*n_af
+       * We work out k1 and k2 from i to get j.
+       */
+      i_sub = i_sub - 1;
+      if(i_sub<0){
+        //There is no nonzero value for given global i; return -1 as flag
+        *j = -1;
+        *val = 0.0;
+      } else {
+        tmp_int = i - (i_sub+1) * n_after;
+        k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+        k1      = tmp_int%(this_op->my_levels*n_after);
+        *j = i_sub * n_after + k1 + k2*this_op->my_levels*n_after;
+        *val   = sqrt((double)i_sub+1.0);
+      }
+    } else if (this_op->my_op_type==SIGMA_X){
+      /*
+       * SIGMA_X
+       * if (i==1)
+       *    i = 1 * n_af + k1 + k2*n_me*n_af
+       *    j = 0 * n_af + k1 + k2*n_me*n_af
+       * if (i==0)
+       *    i = 0 * n_af + k1 + k2*n_l*n_af
+       *    j = 1 * n_af + k1 + k2*n_l*n_af
+       * We work out k1 and k2 from i to get j.
+       */
+      if (i_sub==0) {
+        tmp_int = i - 0 * n_after;
+        k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+        k1      = tmp_int%(this_op->my_levels*n_after);
+        *j = (0 + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
+        *val   = 1.0;
+      } else if (i_sub==1) {
+        tmp_int = i - (0+1) * n_after;
+        k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+        k1      = tmp_int%(this_op->my_levels*n_after);
+        *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
+        *val   = 1.0;
+      } else {
+        if (nid==0){
+          printf("ERROR! Pauli Operators are only defined for qubits\n");
+          exit(0);
+        }
+      }
+    } else if (this_op->my_op_type==SIGMA_Y){
+      /*
+       * SIGMA_Y
+       * if (i==1)
+       *    i = 1 * n_af + k1 + k2*n_me*n_af
+       *    j = 0 * n_af + k1 + k2*n_me*n_af
+       * if (i==0)
+       *    i = 0 * n_af + k1 + k2*n_l*n_af
+       *    j = 1 * n_af + k1 + k2*n_l*n_af
+       * We work out k1 and k2 from i to get j.
+       */
+      if (i_sub==0) {
+        tmp_int = i - 0 * n_after;
+        k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+        k1      = tmp_int%(this_op->my_levels*n_after);
+        *j = (0 + 1) * n_after + k1 + k2*this_op->my_levels*n_after;
+        *val   = -PETSC_i;
+      } else if (i_sub==1) {
+        tmp_int = i - (0+1) * n_after;
+        k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+        k1      = tmp_int%(this_op->my_levels*n_after);
+        *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
+        *val   = PETSC_i;
+      } else {
+        if (nid==0){
+          printf("ERROR! Pauli Operators are only defined for qubits\n");
+          exit(0);
+        }
+      }
+
+    } else if (this_op->my_op_type==NUMBER){
+      /* Number operator */
+      if (i_sub!=0){
+        *j = i; //Diagonal, even in global space
+        *val   = (double)i_sub;
+      } else {
+        //There is no nonzero value for given global i; return -1 as flag
+        *j = -1;
+        *val = 0.0;
+      }
+    } else if (this_op->my_op_type==IDENTITY){
+      /* Identity operator */
+      /* diagonal, even in global space */
       *j = i;
-      *val   = 1.0;
-    } else if (i_sub==1) {
-      *j = i;
-      *val   = -1.0;
-    } else {
-      if (nid==0){
-        printf("ERROR! Pauli Operators are only defined for qubits\n");
-        exit(0);
+      *val = 1.0;
+    } else if (this_op->my_op_type==SIGMA_Z){
+      /*
+       * SIGMA_Z
+       * diagonal, even in global space
+       * if (i==0) val = 1.0
+       * if (i==1) val = -1.0
+       * We work out k1 and k2 from i to get j.
+       */
+      if (i_sub==0) {
+        *j = i;
+        *val   = 1.0;
+      } else if (i_sub==1) {
+        *j = i;
+        *val   = -1.0;
+      } else {
+        if (nid==0){
+          printf("ERROR! Pauli Operators are only defined for qubits\n");
+          exit(0);
+        }
       }
-    }
-  } else {
+    } else {
 
-    /* Vec operator */
-    /*
-     * Since we assume 1 vec operator means |e><e|,
-     * the only i,j pair is on the diagonal, at it's position
-     * And the value is 1
-     */
+      /* Vec operator */
+      /*
+       * Since we assume 1 vec operator means |e><e|,
+       * the only i,j pair is on the diagonal, at it's position
+       * And the value is 1
+       */
       if (nid==0){
         printf("ERROR! Vec Operators not currently supported for _get_val_j_from_global_i\n");
         printf("       (maybe from get_expectation_value)\n");
         exit(0);
       }
-    /* *i_op = position; */
-    /* *j_op = position; */
-    /* *val   = 1.0; */
-  }
+      /* *i_op = position; */
+      /* *j_op = position; */
+      /* *val   = 1.0; */
+    }
 
+    if (tensor_control==1){
+      //Take complex conjugate of answer
+      *val = PetscConjComplex(*val);
+    }
+  } else {
+    /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/total_levels;
+    i2 = i%total_levels;
+
+    /* Now, get js for U* (i1) by calling this function */
+    _get_val_j_from_global_i(i1,this_op,&j_i1,&val_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    _get_val_j_from_global_i(i2,this_op,&j_i2,&val_i2,-1);
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *j = total_levels * j_i1 + j_i2;
+    *val = val_i1*val_i2;
+  }
   return;
 }
+
+
 
 /*
  * _add_to_PETSc_kron_ij is the main driver of the kronecker

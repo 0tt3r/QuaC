@@ -232,7 +232,7 @@ void partial_trace_keep(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   if (dm_size!=pow(total_levels,2)){
     if (nid==0){
       printf("ERROR! You need to use the full Hilbert space sized DM in \n");
-      printf("       partial_trace_over!\n");
+      printf("       partial_trace_keep!\n");
       exit(0);
     }
   }
@@ -1164,7 +1164,7 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<number_of_ops;j++){
-      _get_val_j_from_global_i(this_i,op[j],&this_j,&val); // Get the corresponding j and val
+      _get_val_j_from_global_i(this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i
