@@ -2,6 +2,7 @@
 #include "quac_p.h"
 #include "error_correction.h"
 #include "operators.h"
+#include "quantum_gates.h"
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -843,6 +844,13 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
   int num_qubits=0,qubit,i;
   va_list ap;
   encoded_qubit *encoders;
+
+  if (_gate_array_initialized==0){
+    //Initialize the array of gate function pointers
+    _initialize_gate_function_array();
+    _gate_array_initialized = 1;
+  }
+
   if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE) {
     num_qubits = 1;
   } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX){
@@ -881,6 +889,7 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
   (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
   (*circ).gate_list[(*circ).num_gates].time = time;
   (*circ).gate_list[(*circ).num_gates].my_gate_type = my_gate_type;
+  (*circ).gate_list[(*circ).num_gates]._get_val_j_from_global_i = _get_val_j_functions_gates[my_gate_type+_min_gate_enum];
 
   // Loop through and store qubits
   for (i=0;i<num_qubits;i++){
