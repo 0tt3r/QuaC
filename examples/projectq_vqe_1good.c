@@ -84,7 +84,11 @@ int main(int argc,char **args){
       printf("%d %f %f %f %f %f %f \n",i,gamma_1[i],gamma_2[i],sigma_x[i],sigma_y[i],sigma_z[i],omega[i]);
     }
   }
-
+  //Add lindblad terms
+  for (i=0;i<num_qubits;i++){
+    add_lin(gamma_1[i],qubits[i]);
+    add_lin(gamma_2[i],qubits[i]->n);
+  }
   time_max  = projectq_read.num_gates + 1;
   dt        = 0.01;
   steps_max = 1000;
