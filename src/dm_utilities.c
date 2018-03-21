@@ -16,7 +16,7 @@ void print_dm(Vec rho,int h_dim){
   for (i=0;i<h_dim;i++){
     for (j=0;j<h_dim;j++){
       get_dm_element(rho,i,j,&val);
-      PetscPrintf(PETSC_COMM_WORLD,"%f + %fi ",PetscRealPart(val),
+      PetscPrintf(PETSC_COMM_WORLD,"%e + %ei ",PetscRealPart(val),
                   PetscImaginaryPart(val));
     }
     PetscPrintf(PETSC_COMM_WORLD,"\n");
@@ -36,7 +36,7 @@ void print_dm_sparse(Vec rho,int h_dim){
     for (j=0;j<h_dim;j++){
       get_dm_element(rho,i,j,&val);
       if (PetscAbsComplex(val)>1e-10){
-        PetscPrintf(PETSC_COMM_WORLD,"%d %d %f %f i\n",i,j,PetscRealPart(val),PetscImaginaryPart(val));
+        PetscPrintf(PETSC_COMM_WORLD,"%d %d %e %e i\n",i,j,PetscRealPart(val),PetscImaginaryPart(val));
       }
     }
   }
