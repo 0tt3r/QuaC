@@ -1,0 +1,263 @@
+#include "quantum_gates.h"
+#include "quac_p.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <petsc.h>
+#include <stdarg.h>
+#include "qasm_parser.h"
+#include "error_correction.h"""
+#include <ctype.h>
+
+void projectq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
+  FILE *fp;
+  int ch = 0,lines=0,finished_allocate=0,i,j;
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  PetscReal time=1.0;
+
+  fp = fopen(filename,"r");
+
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in projectq_qasm_read!\n");
+    }
+  }
+
+  //Count number of lines
+  while(!feof(fp)){
+    ch = fgetc(fp);
+    if(ch == '\n')
+      {
+        lines++;
+      }
+  }
+  //Rewind file
+  rewind(fp);
+
+  *num_qubits = 0;
+  while ((read = getline(&line, &len, fp)) != -1){
+    if (!finished_allocate){
+      if (strstr(line,"Allocate")){
+        //Get number of qubits by reading number of lines with 'Allocate'
+        *num_qubits = *num_qubits+1;
+      } else {
+        /*Subtract off the allocate lines to get the total number
+         * of gates.
+         * Factor of 2 because the end has DEALLOCATE statements
+         * WARNING! Comments will be included, too - not too big of a problem,
+         * just will overallocate a bit */
+        lines = lines - 2*(*num_qubits);
+        //Allocate the circuit
+        create_circuit(circ,lines);
+        finished_allocate = 1;
+        //Add the first gate to list
+        _projectq_qasm_add_gate(line,circ,time);
+        time = time + 1.0;
+        //        gate_list[0]
+      }
+    } else if (strstr(line,"Deallocate")){
+      //Breakout since we've finished going through the circuit
+      break;
+    } else {
+      _projectq_qasm_add_gate(line,circ,time);
+      time = time + 1.0;
+    }
+
+  }
+
+  fclose(fp);
+  if (line) free(line);
+  return;
+}
+
+
+void _projectq_qasm_add_gate(char *line,circuit *circ,PetscReal time){
+  char *token=NULL,*token2=NULL,a[20]={0};
+  int i,j,qubit1,qubit2;
+  PetscReal angle;
+  gate_type my_gate_type;
+  // Split string on | to separate gate type and qubits
+  while (token=strsep(&line,"|")) {
+    //Strip whitespace
+    for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+    //Do direct strcmp for some, strstr for others
+    //FIXME: Not exhaustive
+    if (strstr(token,"Qureg")){
+      // qubit numbers
+      if (my_gate_type<0){
+        //Multiqubit gate
+        sscanf(token,"(Qureg[%d],Qureg[%d])",&qubit1,&qubit2);
+        add_gate_to_circuit(circ,time,my_gate_type,qubit1,qubit2);
+      } else {
+        //Single qubit gate
+        sscanf(token,"Qureg[%d]",&qubit1);
+        if (my_gate_type==6||my_gate_type==7||my_gate_type==8){
+          //Rotation gate
+          add_gate_to_circuit(circ,time,my_gate_type,qubit1,angle);
+        } else {
+          add_gate_to_circuit(circ,time,my_gate_type,qubit1);
+        }
+      }
+    } else {
+      // gate types
+      if (strcmp(token,"CX")==0){
+        my_gate_type = CNOT;
+      } else if (strcmp(token,"H")==0) {
+        my_gate_type = HADAMARD;
+      } else if (strcmp(token,"Z")==0) {
+        my_gate_type = SIGMAZ;
+      } else if (strcmp(token,"X")==0) {
+        my_gate_type = SIGMAX;
+      } else if (strcmp(token,"Y")==0) {
+        my_gate_type = SIGMAY;
+      } else if (strstr(token,"Rx")) {
+        my_gate_type = RX;
+        sscanf(token,"Rx(%lf)",&angle);
+      } else if (strstr(token,"Ry")) {
+        my_gate_type = RY;
+        sscanf(token,"Ry(%lf)",&angle);
+      } else if (strstr(token,"Rz")) {
+        sscanf(token,"Rz(%lf)",&angle);
+        my_gate_type = RZ;
+      }
+    }
+  }
+}
+
+void projectq_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val){
+  FILE *fp;
+  char *token=NULL,*token2=NULL;
+  char *line = NULL,gate_char;
+  size_t len = 0;
+  ssize_t read;
+  int token_number,num_ops,qubit_number;
+  operator ops[100];
+  PetscReal scalar_multiply;
+  PetscScalar temp_trace_val;
+  fp = fopen(filename,"r");
+  *trace_val = 0.0;
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+    }
+  }
+
+  while ((read = getline(&line, &len, fp)) != -1){
+    token_number = 0;
+    while (token=strsep(&line,"[")) {
+      if(token_number==0){
+        //Strip whitespace
+        for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+        scalar_multiply = atof(token);
+        token_number = 1;
+      } else {
+        token2=strsep(&token,"]");
+        num_ops = 0;
+        while (token=strsep(&token2," ")) {
+          if (strcmp(token,"")==0){
+            *trace_val = *trace_val + scalar_multiply;
+          } else {
+            //Assume qubit number in file is global system number
+            //FIXME: Put logical->physical qubit mapping here
+            sscanf(token,"%c%d",&gate_char,&qubit_number);
+            if (gate_char=='X'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_x;
+            } else if (gate_char=='Y'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_y;
+            } else if (gate_char=='Z'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_z;
+            }
+            num_ops = num_ops + 1;
+          }
+        }
+        if (num_ops!=0){
+          if (num_ops>4){
+            if (nid==0) {
+              printf("ERROR! vqe_get_expectation only supports 4 ops for now\n");
+              exit(0);
+            }
+          }
+          get_expectation_value(rho,&temp_trace_val,num_ops,ops[0],ops[1],ops[2],ops[3]);
+          temp_trace_val = temp_trace_val * scalar_multiply;
+          *trace_val = *trace_val + temp_trace_val;
+        }
+      }
+    }
+  }
+  return;
+}
+
+void projectq_vqe_get_expectation_encoded(char filename[],Vec rho,PetscScalar *trace_val,
+                                          PetscInt num_encoders,...){
+  FILE *fp;
+  char *token=NULL,*token2=NULL;
+  char *line = NULL,gate_char;
+  size_t len = 0;
+  ssize_t read;
+  int token_number,num_ops,qubit_number;
+  va_list ap;
+  operator ops[100];
+  PetscInt i;
+  PetscReal scalar_multiply;
+  PetscScalar temp_trace_val;
+  encoded_qubit encoders[50]; //50 is more systems than we will be able to do
+
+  va_start(ap,num_encoders);
+  for (i=0;i<num_encoders;i++){
+    encoders[i] = va_arg(ap,encoded_qubit);
+  }
+
+  fp = fopen(filename,"r");
+  *trace_val = 0.0;
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+    }
+  }
+
+  while ((read = getline(&line, &len, fp)) != -1){
+    token_number = 0;
+    while (token=strsep(&line,"[")) {
+      if(token_number==0){
+        //Strip whitespace
+        for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+        scalar_multiply = atof(token);
+        token_number = 1;
+      } else {
+        token2=strsep(&token,"]");
+        num_ops = 0;
+        while (token=strsep(&token2," ")) {
+          if (strcmp(token,"")==0){
+            *trace_val = *trace_val + scalar_multiply;
+          } else {
+            //Assume qubit number in file is global system number
+            //FIXME: Put logical->physical qubit mapping here
+            sscanf(token,"%c%d",&gate_char,&qubit_number);
+            qubit_number = encoders[qubit_number].qubits[0];
+            if (gate_char=='X'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_x;
+            } else if (gate_char=='Y'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_y;
+            } else if (gate_char=='Z'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_z;
+            }
+            num_ops = num_ops + 1;
+          }
+        }
+        if (num_ops!=0){
+          if (num_ops>4){
+            if (nid==0) {
+              printf("ERROR! vqe_get_expectation only supports 4 ops for now\n");
+              exit(0);
+            }
+          }
+          get_expectation_value(rho,&temp_trace_val,num_ops,ops[0],ops[1],ops[2],ops[3]);
+          temp_trace_val = temp_trace_val * scalar_multiply;
+          *trace_val = *trace_val + temp_trace_val;
+        }
+      }
+    }
+  }
+  return;
+}
