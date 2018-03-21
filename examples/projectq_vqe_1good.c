@@ -101,11 +101,10 @@ int main(int argc,char **args){
   mat_val = 1.0;
   add_value_to_dm(rho,0,0,mat_val);
   assemble_dm(rho);
-  encode_state(rho,4,L0,L1,L2,L3);
+
   if (nid==0){
     printf("num_gates: %d \n",projectq_read.num_gates);
   }
-
 
   start_circuit_at_time(&projectq_read,0.0);
 
