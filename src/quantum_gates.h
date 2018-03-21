@@ -17,7 +17,10 @@ typedef enum {
   SIGMAX = 2,
   SIGMAY = 3,
   SIGMAZ = 4,
-  EYE    = 5
+  EYE    = 5,
+  RX     = 6,
+  RY     = 7,
+  RZ     = 8
 } gate_type;
 
 struct quantum_gate_struct{
@@ -25,6 +28,7 @@ struct quantum_gate_struct{
   gate_type my_gate_type;
   int *qubit_numbers;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+  PetscReal theta; //Only used for rotation gates
 };
 
 typedef struct circuit{
@@ -58,6 +62,7 @@ void _get_val_j_from_global_i_super_gates(PetscInt,struct quantum_gate_struct,Pe
                                           PetscScalar*,PetscInt*,PetscScalar*,PetscInt);
 void combine_circuit_to_super_mat(Mat*,circuit);
 void _initialize_gate_function_array();
+void _check_gate_type(gate_type,int*);
 void _get_n_after_2qbit(PetscInt*,int[],PetscInt,PetscInt*,PetscInt*,PetscInt*,PetscInt*);
 void _get_n_after_1qbit(PetscInt,int,PetscInt,PetscInt*,PetscInt*);
 void HADAMARD_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
@@ -66,6 +71,9 @@ void SIGMAX_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt
 void SIGMAY_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void SIGMAZ_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void EYE_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void RX_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void RY_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void RZ_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 
 #define MAX_GATES 100 // Consider not making this a define
 
