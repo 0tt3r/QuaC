@@ -108,7 +108,7 @@ void create_stabilizer(stabilizer *stab,int n_ops,...){
  *       stabilizer *stab - pointer to stabilizer to be freed
  */
 void destroy_stabilizer(stabilizer *stab){
-  free(*stab->ops);
+  free((*stab).ops);
 }
 /*
  * add_lin_recovery adds a Lindblad L(C) term to the system of equations, where
@@ -844,6 +844,7 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
   int num_qubits=0,qubit,i;
   va_list ap;
   encoded_qubit *encoders;
+  PetscReal theta;
 
   if (_gate_array_initialized==0){
     //Initialize the array of gate function pointers
@@ -851,16 +852,8 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
     _gate_array_initialized = 1;
   }
 
-  if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE) {
-    num_qubits = 1;
-  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX){
-    num_qubits = 2;
-  } else {
-    if (nid==0){
-      printf("ERROR! Gate type not recognized in add_encoded_gate_to_circuit\n");
-      exit(0);
-    }
-  }
+  _check_gate_type(my_gate_type,&num_qubits);
+
   if ((*circ).num_gates==(*circ).gate_list_size){
     if (nid==0){
       printf("ERROR! Gate list not large enough (encoded)!\n");
@@ -870,7 +863,11 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
 
   PetscMalloc1(num_qubits,&encoders);
 
-  va_start(ap,num_qubits);
+  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
+    va_start(ap,num_qubits+1);
+  } else {
+    va_start(ap,num_qubits);
+  }
 
   //First, get the encoders
   for (i=0;i<num_qubits;i++){
@@ -885,6 +882,7 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
     }
   }
 
+  // FIXME: Call add_gate_to_circuit here
   // Store arguments for the logical operation in list
   (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
   (*circ).gate_list[(*circ).num_gates].time = time;
@@ -895,6 +893,15 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
   for (i=0;i<num_qubits;i++){
     qubit = encoders[i].qubits[0]; //assumes we decode to the first of the list
     (*circ).gate_list[(*circ).num_gates].qubit_numbers[i] = qubit;
+  }
+
+  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
+    //Get the theta parameter from the last argument passed in
+    theta = va_arg(ap,PetscReal);
+    (*circ).gate_list[(*circ).num_gates].theta = theta;
+  } else {
+    //Set theta to 0
+    (*circ).gate_list[(*circ).num_gates].theta = 0;
   }
 
   (*circ).num_gates = (*circ).num_gates + 1;
@@ -951,6 +958,7 @@ void decode_state(Vec rho,PetscInt num_logical_qubits,...){
 void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correction_rate){
   stabilizer     S1,S2,S3,S4;
   operator       qubit0,qubit1,qubit2,qubit3,qubit4;
+
   if (this_qubit.my_encoder_type == NONE){
     //No encoding, no error correction needed
   } else if (this_qubit.my_encoder_type == BIT){
@@ -1167,3 +1175,37 @@ PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_lis
   TSSetSolution(ts,U);
   return(0);
 }
+
+//Take an old circuit and encode it
+void encode_circuit(circuit old_circ,circuit *encoded_circ,PetscInt num_encoders,...){
+  PetscInt i,j,num_qubits=0;
+  PetscReal time,theta;
+  va_list ap;
+  gate_type my_gate_type;
+  encoded_qubit encoders[50]; //50 is more systems than we will be able to do
+  int qubit_numbers[50];
+
+  va_start(ap,num_encoders);
+  for (i=0;i<num_encoders;i++){
+    encoders[i] = va_arg(ap,encoded_qubit);
+  }
+
+  for (i=0;i<old_circ.num_gates;i++){
+    time = old_circ.gate_list[i].time;
+    my_gate_type = old_circ.gate_list[i].my_gate_type;
+    _check_gate_type(my_gate_type,&num_qubits);
+    theta = old_circ.gate_list[i].theta;
+    for (j=0;j<num_qubits;j++){
+      qubit_numbers[j] = old_circ.gate_list[i].qubit_numbers[j];
+    }
+    if (num_qubits==1){
+      // Get the encoder for that qubit
+      add_encoded_gate_to_circuit(encoded_circ,time,my_gate_type,encoders[qubit_numbers[0]],theta);
+    } else {
+      add_encoded_gate_to_circuit(encoded_circ,time,my_gate_type,
+                                  encoders[qubit_numbers[0]],encoders[qubit_numbers[1]]);
+    }
+  }
+  return;
+}
+
