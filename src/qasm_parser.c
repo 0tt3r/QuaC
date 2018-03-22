@@ -172,13 +172,15 @@ void projectq_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val
           }
         }
         if (num_ops!=0){
-          if (num_ops>4){
-            if (nid==0) {
-              printf("ERROR! vqe_get_expectation only supports 4 ops for now\n");
-              exit(0);
-            }
-          }
-          get_expectation_value(rho,&temp_trace_val,num_ops,ops[0],ops[1],ops[2],ops[3]);
+          //This is a hack where I pass many ops, even though many of them
+          //may not exist or be valid; they won't be accessed, at least.
+          //Consider passing the array instead, and iterating inside?
+          get_expectation_value(rho,&temp_trace_val,num_ops,
+                                ops[0],ops[1],ops[2],ops[3],
+                                ops[4],ops[5],ops[6],ops[7],
+                                ops[8],ops[9],ops[10],ops[11],
+                                ops[12],ops[13],ops[14],ops[15],
+                                ops[16],ops[17],ops[18],ops[19]);
           temp_trace_val = temp_trace_val * scalar_multiply;
           *trace_val = *trace_val + temp_trace_val;
         }
