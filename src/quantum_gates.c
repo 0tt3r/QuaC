@@ -158,7 +158,11 @@ void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
 
   PetscLogEventBegin(_apply_gate_event,0,0,0,0);
 
-  dim = total_levels*total_levels;
+  if (_lindblad_terms){
+    dim = total_levels*total_levels;
+  } else {
+    dim = total_levels;
+  }
 
   VecDuplicate(rho,&tmp_answer); //Create a new vec with the same size as rho
 
@@ -171,7 +175,13 @@ void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
   MatGetOwnershipRange(gate_mat,&Istart,&Iend);
 
   for (i=Istart;i<Iend;i++){
-    this_gate._get_val_j_from_global_i(i,this_gate,&num_js,these_js,op_vals,0); // Get the corresponding j and val
+    if (_lindblad_terms){
+      // Get the corresponding j and val for the superoperator U* cross U
+      this_gate._get_val_j_from_global_i(i,this_gate,&num_js,these_js,op_vals,0);
+    } else {
+      // Get the corresponding j and val for just the matrix U
+      this_gate._get_val_j_from_global_i(i,this_gate,&num_js,these_js,op_vals,-1);
+    }
     MatSetValues(gate_mat,1,&i,num_js,these_js,op_vals,ADD_VALUES);
   }
   MatAssemblyBegin(gate_mat,MAT_FINAL_ASSEMBLY);
@@ -184,7 +194,6 @@ void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
   MatDestroy(&gate_mat);
 
   PetscLogEventEnd(_apply_gate_event,0,0,0,0);
-
 }
 
 /*z

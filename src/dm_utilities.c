@@ -1105,10 +1105,21 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
   PetscInt this_loc;
   PetscScalar dm_element,val,op_val;
 
+  va_start(ap,number_of_ops);
+  op = malloc(number_of_ops*sizeof(struct operator));
+  /* Loop through passed in ops and store in list */
+  for (i=0;i<number_of_ops;i++){
+    op[i] = va_arg(ap,operator);
+  }
+  va_end(ap);
+
   if(_lindblad_terms) {
     dim = total_levels*total_levels;
   } else {
     dim = total_levels;
+
+    _get_expectation_value_psi(rho,trace_val,number_of_ops,op);
+    return;
     if (nid==0){
       printf("ERROR! Expectation values does not support the Schrodinger solver!\n");
       exit(0);
@@ -1125,13 +1136,6 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
     }
   }
 
-  va_start(ap,number_of_ops);
-  op = malloc(number_of_ops*sizeof(struct operator));
-  /* Loop through passed in ops and store in list */
-  for (i=0;i<number_of_ops;i++){
-    op[i] = va_arg(ap,operator);
-  }
-  va_end(ap);
 
   /*
    * Calculate Tr(ABC...*rho) using the following observations:
@@ -1526,4 +1530,46 @@ void sqrt_mat(Mat dm_mat){
   PetscFree(rwork);
   PetscFree(evec);
   PetscFree(eigs);
+}
+
+void _get_expectation_value_psi(Vec psi,PetscScalar *trace_val,int number_of_ops,operator *ops){
+  PetscInt Istart,Iend,location[1],i,j,this_j,this_i;
+  PetscScalar val_array[1],val,op_val;
+  Vec op_psi;
+  *trace_val = 0.0;
+  VecGetOwnershipRange(psi,&Istart,&Iend);
+  VecDuplicate(psi,&op_psi);
+  //Calculate A * B * Psi
+  for (i=0;i<total_levels;i++){
+    this_i = i; // The leading index which we check
+    op_val = 1.0;
+    for (j=0;j<number_of_ops;j++){
+      _get_val_j_from_global_i(this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+      if (this_j<0) {
+        /*
+         * Negative j says there is no nonzero value for a given this_i
+         * As such, we can immediately break the loop for i
+         */
+        op_val = 0.0;
+        break;
+      } else {
+        this_i = this_j;
+        op_val = op_val*val;
+      }
+    }
+    //Now we have op1*op2*op3...
+    if (this_i>=Istart&&this_i<Iend&&op_val!=0.0){
+      //this val belongs to me, do the (local) multiplication
+      location[0] = this_i;
+      VecGetValues(psi,1,location,val_array);
+      op_val = op_val * val_array[0];
+      //Add the value to the op_psi
+      VecSetValue(op_psi,i,op_val,ADD_VALUES);
+    }
+  }
+  // Now, calculate the inner product between psi^H * OP_psi
+  VecAssemblyBegin(op_psi);
+  VecAssemblyEnd(op_psi);
+  VecDot(op_psi,psi,trace_val);
+  VecDestroy(&op_psi);
 }

@@ -15,7 +15,7 @@
  * - check if input DM is a valid DM (trace, hermitian, etc)
  */
 
-#define MAX_NNZ_PER_ROW 1600
+#define MAX_NNZ_PER_ROW 4
 
 int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -1327,21 +1327,21 @@ void _check_initialized_A(){
     /* MatSetUp(full_stiff_A); // This might not be necessary? */
 
 
-    /* /\* Setup ham_A matrix *\/ */
-    /* MatCreate(PETSC_COMM_WORLD,&ham_A); */
-    /* MatSetType(ham_A,MATMPIAIJ); */
-    /* MatSetSizes(ham_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels); */
-    /* MatSetFromOptions(ham_A); */
-    /* if (MAX_NNZ_PER_ROW>total_levels/2) { */
-    /*   if (np==1){ */
-    /*     MatMPIAIJSetPreallocation(ham_A,total_levels,NULL,0,NULL); */
-    /*   } else { */
-    /*     MatMPIAIJSetPreallocation(ham_A,total_levels/2,NULL,total_levels/2,NULL); */
-    /*   } */
-    /* } else { */
-    /*   MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL); */
-    /* } */
-    /* MatSetUp(ham_A); // This might not be necessary? */
+    /* Setup ham_A matrix */
+    MatCreate(PETSC_COMM_WORLD,&ham_A);
+    MatSetType(ham_A,MATMPIAIJ);
+    MatSetSizes(ham_A,PETSC_DECIDE,PETSC_DECIDE,total_levels,total_levels);
+    MatSetFromOptions(ham_A);
+    if (MAX_NNZ_PER_ROW>total_levels/2) {
+      if (np==1){
+        MatMPIAIJSetPreallocation(ham_A,total_levels,NULL,0,NULL);
+      } else {
+        MatMPIAIJSetPreallocation(ham_A,total_levels/2,NULL,total_levels/2,NULL);
+      }
+    } else {
+      MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
+    }
+    MatSetUp(ham_A); // This might not be necessary?
 
     /* /\* Setup ham_stiff_A matrix *\/ */
     /* MatCreate(PETSC_COMM_WORLD,&ham_stiff_A); */
