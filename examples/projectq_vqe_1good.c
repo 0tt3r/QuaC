@@ -21,18 +21,17 @@ PetscInt final_qubit;
 encoded_qubit L0,L1,L2,L3;
 
 int main(int argc,char **args){
-  PetscReal time_max,dt,*gamma_1,*gamma_2,*omega,*sigma_x,*sigma_y,*sigma_z;
-  PetscReal *gamma_1L,*gamma_2L,*sigma_xL,*sigma_yL,*sigma_zL;
+  PetscReal time_max,dt,*gamma_1,*gamma_2;
   PetscReal gate_time_step,theta,fidelity,t1,t2;
   PetscScalar mat_val;
-  PetscInt  steps_max;
+  PetscInt  steps_max,good_qubit;
   Vec rho,rho_base,rho_base2,rho_base3;
   int num_qubits,i,j,h_dim,system,dm_place,logical_qubits,prev_qb,prev_qb2,num_qubits2;
   circuit projectq_read,encoded_projectq;
   Mat     encoder_mat;
   char           string[10],filename[128];
   stabilizer     S1,S2,S3,S4;
-  PetscReal *r_str;
+  PetscReal *r_str,gam,dep;
   char           encoder_str[128];
   encoder_type   encoder_type0,encoder_type1,encoder_type2,encoder_type3;
   struct quantum_gate_struct *gate_list;
@@ -48,41 +47,29 @@ int main(int argc,char **args){
   qubits  = malloc(num_qubits*sizeof(struct operator)); //Only need 3 qubits for teleportation
   gamma_1 = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
   gamma_2 = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
-  sigma_x = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
-  sigma_y = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
-  sigma_z = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
-  omega   = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
 
   for (i=0;i<num_qubits;i++){
     create_op(2,&qubits[i]);
-    omega[i]   = 0.0;
     gamma_1[i] = 0;
     gamma_2[i] = 0;
-    sigma_x[i] = 0;
-    sigma_y[i] = 0;
-    sigma_z[i] = 0;
   }
-
+  gam = 0;
+  dep = 0;
+  PetscOptionsGetReal(NULL,NULL,"-gam",&gam,NULL);
+  PetscOptionsGetReal(NULL,NULL,"-dep",&dep,NULL);
   for (i=0; i<num_qubits;i++){
-    sprintf(string, "-gam%d",i);
-    PetscOptionsGetReal(NULL,NULL,string,&gamma_1[i],NULL);
-    sprintf(string, "-dep%d",i);
-    PetscOptionsGetReal(NULL,NULL,string,&gamma_2[i],NULL);
-    sprintf(string, "-sigx%d",i);
-    PetscOptionsGetReal(NULL,NULL,string,&sigma_x[i],NULL);
-    sprintf(string, "-sigy%d",i);
-    PetscOptionsGetReal(NULL,NULL,string,&sigma_y[i],NULL);
-    sprintf(string, "-sigz%d",i);
-    PetscOptionsGetReal(NULL,NULL,string,&sigma_z[i],NULL);
-    sprintf(string, "-om%d",i);
-    PetscOptionsGetReal(NULL,NULL,string,&omega[i],NULL);
+    gamma_1[i] = gam;
+    gamma_2[i] = dep;
+  }
+  good_qubit = 0;
+  PetscOptionsGetInt(NULL,NULL,"-good_qubit",&good_qubit,NULL);
+  if (good_qubit!=num_qubits){
+    gamma_1[good_qubit] = 0.0;
+    gamma_2[good_qubit] = 0.0;
   }
 
   if (nid==0){
-    printf("qubit gam dep sigx sigy sigz om r1 r2 r3\n");
-    for (i=0;i<num_qubits;i++){
-      printf("%d %f %f %f %f %f %f \n",i,gamma_1[i],gamma_2[i],sigma_x[i],sigma_y[i],sigma_z[i],omega[i]);
-    }
+    printf("qubit: %d gam: %f dep: %f\n",good_qubit,gam,dep);
   }
   //Add lindblad terms
   for (i=0;i<num_qubits;i++){
@@ -120,7 +107,7 @@ int main(int argc,char **args){
   for (i=0;i<num_qubits;i++){
     destroy_op(&qubits[i]);
   }
-  destroy_dm(&rho);
+  destroy_dm(rho);
   QuaC_finalize();
   return 0;
 }
