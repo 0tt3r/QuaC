@@ -53,8 +53,8 @@ int main(int argc,char **args){
     gamma_1[i] = 0;
     gamma_2[i] = 0;
   }
-  gam = 0;
-  dep = 0;
+  gam = 0.0;
+  dep = 0.0;
   PetscOptionsGetReal(NULL,NULL,"-gam",&gam,NULL);
   PetscOptionsGetReal(NULL,NULL,"-dep",&dep,NULL);
   for (i=0; i<num_qubits;i++){
@@ -73,8 +73,12 @@ int main(int argc,char **args){
   }
   //Add lindblad terms
   for (i=0;i<num_qubits;i++){
-    add_lin(gamma_1[i],qubits[i]);
-    add_lin(gamma_2[i],qubits[i]->n);
+    if (gamma_1[i]>0){
+      add_lin(gamma_1[i],qubits[i]);
+    }
+    if (gamma_2[i]>0){
+      add_lin(gamma_2[i],qubits[i]->n);
+    }
   }
   time_max  = projectq_read.num_gates + 1;
   dt        = 0.01;
@@ -100,8 +104,9 @@ int main(int argc,char **args){
   start_circuit_at_time(&projectq_read,0.0);
 
   time_step(rho,time_max,dt,steps_max);
+  /* get_expectation_value(rho,&mat_val,2,qubits[0]->sig_z,qubits[0]->sig_z); */
   projectq_vqe_get_expectation("vqe_ev",rho,&mat_val);
-  /* printf("Energy: %.18lf\n",PetscRealPart(mat_val)); */
+
   if (nid==0) printf("Energy: %.18lf\n",PetscRealPart(mat_val));
   //print_dm_sparse(rho,16);
   for (i=0;i<num_qubits;i++){
