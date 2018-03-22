@@ -15,7 +15,7 @@
  * - check if input DM is a valid DM (trace, hermitian, etc)
  */
 
-#define MAX_NNZ_PER_ROW 4
+#define MAX_NNZ_PER_ROW 100
 
 int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
@@ -1234,18 +1234,11 @@ void _check_initialized_A(){
 
       /* MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz); */
       /* MatSeqAIJSetPreallocation(full_A,0,d_nz); */
-      if (10*MAX_NNZ_PER_ROW/np<80) {
-        local = 80;
-      } else {
-        local = 10*MAX_NNZ_PER_ROW/np;
-      }
+      local = 100;//*MAX_NNZ_PER_ROW/np;
+      
       MatMPIAIJSetPreallocation(full_A,local,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL);
     } else {
-      if (10*MAX_NNZ_PER_ROW/np<40) {
-        local = 80;
-      } else {
-        local = 10*MAX_NNZ_PER_ROW/np;
-      }
+        local = 100;//*MAX_NNZ_PER_ROW/np;
 
       if (MAX_NNZ_PER_ROW>total_levels*total_levels) {
         MatMPIAIJSetPreallocation(full_A,total_levels,NULL,total_levels,NULL);
