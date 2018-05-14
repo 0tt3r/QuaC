@@ -444,7 +444,6 @@ void create_dm(Vec* new_dm,PetscInt size){
  *
  */
 void create_full_dm(Vec* new_dm){
-  PetscInt size = total_levels;
 
   _check_initialized_A();
 
@@ -475,7 +474,7 @@ void create_full_dm(Vec* new_dm){
  *      Vec x
  */
 void set_dm_from_initial_pop(Vec x){
-  PetscInt    i,j,init_row_op=0,n_after,i_sub,j_sub,n_before;
+  PetscInt    i,j,init_row_op=0,n_after,i_sub,j_sub;
   PetscScalar mat_tmp_val;
   PetscInt    *index_array;
   Mat         subspace_dm,rho_mat;
@@ -665,13 +664,11 @@ void add_to_dm_from_string(Vec rho,PetscScalar val,char string[]){
  *      Vec x
  */
 void set_initial_dm_2qds_first_plus_pop(Vec x,Vec rho_2qds){
-  PetscInt    i,j,init_row_op=0,n_after,i_sub,j_sub,n_before;
+  PetscInt    i,j,n_after,i_sub,j_sub;
   PetscScalar mat_tmp_val;
   PetscInt    *index_array;
   Mat         subspace_dm,rho_mat;
-  int         simple_init_pop=1;
   MatScalar   *rho_mat_array;
-  PetscReal   vec_pop;
 
   /*
    * See if there are any vec operators
