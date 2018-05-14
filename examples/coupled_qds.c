@@ -21,7 +21,7 @@ int main(int argc,char **args){
   PetscReal time_max,dt;
   PetscScalar val;
   PetscInt  steps_max;
-  PetscInt num_plasmon=10,num_qd=2,i;
+  PetscInt num_qd=2,i;
 
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
