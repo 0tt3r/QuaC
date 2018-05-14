@@ -35,7 +35,8 @@ PetscErrorCode _QG_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,voi
 /* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
  * to apply that event.
 */
-PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,
+                                     Vec U,PetscBool forward,void* ctx) {
 
    /* We only have one event at the moment, so we do not need to branch.
     * If we had more than one event, we would put some logic here.
@@ -82,7 +83,8 @@ PetscErrorCode _QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,voi
 /* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
  * to apply that event.
 */
-PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],
+                                     PetscReal t,Vec U,PetscBool forward,void* ctx) {
   PetscInt current_gate,num_gates;
   PetscReal gate_time;
    /* We only have one event at the moment, so we do not need to branch.

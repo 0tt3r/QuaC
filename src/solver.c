@@ -356,7 +356,11 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
 
   if(_stiff_solver) {
-    TSSetIFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+    /* TSSetIFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL); */
+    if (nid==0) {
+      printf("Stiff solver not implemented!\n");
+      exit(0);
+    }
     if(nid==0) printf("Using stiff solver - TSROSW\n");
   }
 
@@ -401,7 +405,11 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
     if (_stiff_solver){
       MatAssemblyBegin(solve_stiff_A,MAT_FINAL_ASSEMBLY);
       MatAssemblyEnd(solve_stiff_A,MAT_FINAL_ASSEMBLY);
-      TSSetIJacobian(ts,solve_stiff_A,solve_stiff_A,TSComputeRHSJacobianConstant,NULL);
+      /* TSSetIJacobian(ts,solve_stiff_A,solve_stiff_A,TSComputeRHSJacobianConstant,NULL); */
+      if (nid==0) {
+        printf("Stiff solver not implemented!\n");
+        exit(0);
+      }
     }
     if (nid==0) printf("Matrix Assembled.\n");
     TSSetRHSJacobian(ts,solve_A,solve_A,TSComputeRHSJacobianConstant,NULL);

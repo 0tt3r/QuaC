@@ -44,10 +44,10 @@ void _construct_gate_mat(gate_type,int*,Mat);
 void _apply_gate(struct quantum_gate_struct,Vec);
 void _change_basis_ij_pair(PetscInt*,PetscInt*,PetscInt,PetscInt);
 PetscErrorCode _QG_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
-PetscErrorCode _QG_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,void*);
+PetscErrorCode _QG_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,PetscBool,void*);
 
 PetscErrorCode _QC_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
-PetscErrorCode _QC_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,void*);
+PetscErrorCode _QC_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,PetscBool,void*);
 
 void create_circuit(circuit*,PetscInt);
 void add_gate_to_circuit(circuit*,PetscReal,gate_type,...);

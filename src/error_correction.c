@@ -1156,7 +1156,7 @@ PetscErrorCode _DQEC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,v
 /* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
  * to apply that event.
 */
-PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,PetscBool forward,void* ctx) {
   PetscInt i,i_ev;
   Mat ec_mat;
   Vec tmp_answer;
