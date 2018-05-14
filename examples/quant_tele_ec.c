@@ -8,6 +8,7 @@
 #include "dm_utilities.h"
 #include "quantum_gates.h"
 #include "petsc.h"
+#include "qasm_parser.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
@@ -23,9 +24,9 @@ int main(int argc,char **args){
   PetscReal *gamma_1L,*gamma_2L,*sigma_xL,*sigma_yL,*sigma_zL;
   PetscReal gate_time_step,theta,fidelity,t1,t2;
   PetscScalar mat_val;
-  PetscInt  steps_max;
+  PetscInt  steps_max,num_qubits;
   Vec rho,rho_base,rho_base2,rho_base3;
-  int num_qubits,i,j,h_dim,system,dm_place,logical_qubits,prev_qb,prev_qb2;
+  int i,j,h_dim,system,dm_place,logical_qubits,prev_qb,prev_qb2;
   circuit teleportation,encoder1;
   Mat     encoder_mat;
   char           string[10];
@@ -33,9 +34,12 @@ int main(int argc,char **args){
   PetscReal *r_str;
   char           encoder_str[128];
   encoder_type   encoder_type0,encoder_type1,encoder_type2;
+  struct quantum_gate_struct *gate_list;
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
+  projectq_qasm_read((char *)"h2_example",&num_qubits,&teleportation);
+  exit(0);
   num_qubits = 0;
   /* Get the encoding strategies for each qubit */
 
@@ -354,7 +358,7 @@ int main(int argc,char **args){
   add_encoded_gate_to_circuit(&teleportation,8*gate_time_step,HADAMARD,L2); //Hadamard on 2
 
   if (nid==0){
-    printf("num_gates: %d\n",teleportation.num_gates);
+    printf("num_gates: %ld\n",teleportation.num_gates);
   }
 
 
@@ -365,7 +369,7 @@ int main(int argc,char **args){
   add_continuous_error_correction(L1,r_str[1]);
   add_continuous_error_correction(L2,r_str[2]);
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
 
   //  osteady_state(rho);:
   //partial_trace_over(rho,rho_tmp,5,qubits[0],qubits[1],qubits[2],qubits[3],qubits[5]);

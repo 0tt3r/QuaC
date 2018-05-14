@@ -28,5 +28,7 @@ void get_fidelity(Vec,Vec,double*);
 void print_psi(Vec,int);
 void print_dm(Vec,int);
 void print_dm_sparse(Vec,int);
+void print_dm_sparse_to_file(Vec,int,char[]);
 void _get_expectation_value_psi(Vec,PetscScalar*,int,operator*);
+void measure_dm(Vec,operator);
 #endif

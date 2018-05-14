@@ -25,9 +25,9 @@ int main(int argc,char **args){
   PetscReal *gamma_1L,*gamma_2L,*sigma_xL,*sigma_yL,*sigma_zL;
   PetscReal gate_time_step,theta,fidelity,t1,t2;
   PetscScalar mat_val;
-  PetscInt  steps_max;
+  PetscInt  steps_max,num_qubits2;
   Vec rho,rho_base,rho_base2,rho_base3;
-  int num_qubits,i,j,h_dim,system,dm_place,logical_qubits,prev_qb,prev_qb2,num_qubits2;
+  int num_qubits,i,j,h_dim,system,dm_place,logical_qubits,prev_qb,prev_qb2;
   circuit projectq_read,encoded_projectq;
   Mat     encoder_mat;
   char           string[10],filename[128];
@@ -363,7 +363,7 @@ int main(int argc,char **args){
   assemble_dm(rho);
   encode_state(rho,4,L0,L1,L2,L3);
   if (nid==0){
-    printf("num_gates: %d %d\n",encoded_projectq.num_gates,projectq_read.num_gates);
+    printf("num_gates: %ld %ld\n",encoded_projectq.num_gates,projectq_read.num_gates);
   }
 
   printf("correction_strength: %f %f %f %f\n",r_str[0],r_str[1],r_str[2],r_str[3]);
@@ -375,17 +375,17 @@ int main(int argc,char **args){
   start_circuit_at_time(&encoded_projectq,0.0);
   //start_circuit_at_time(&projectq_read,0.0);
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   decode_state(rho,4,L0,L1,L2,L3);
-  /* projectq_vqe_get_expectation("vqe_ev",rho,&mat_val); */
+  /* projectq_vqe_get_expectation((char *)"vqe_ev",rho,&mat_val); */
   /* printf("Energy: %.18lf\n",PetscRealPart(mat_val)); */
-  projectq_vqe_get_expectation_encoded("vqe_ev",rho,&mat_val,4,L0,L1,L2,L3);
+  projectq_vqe_get_expectation_encoded((char *)"vqe_ev",rho,&mat_val,4,L0,L1,L2,L3);
   if (nid==0) printf("Energy: %.18lf\n",PetscRealPart(mat_val));
   //print_dm_sparse(rho,16);
   for (i=0;i<num_qubits;i++){
     destroy_op(&qubits[i]);
   }
-  destroy_dm(&rho);
+  destroy_dm(rho);
   QuaC_finalize();
   return 0;
 }

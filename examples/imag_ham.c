@@ -80,7 +80,7 @@ void imag_ham_dm_test(double **final_populations,int *num_pop){
     fprintf(f_pop,"#Time Populations: qd, ph\n");
   }
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   *num_pop = get_num_populations();
   (*final_populations) = malloc((*num_pop)*sizeof(double));
   get_populations(rho,&(*final_populations));
@@ -154,7 +154,7 @@ void imag_ham_psi_test(double **final_populations,int *num_pop){
     fprintf(f_pop,"#Time Populations: qd, ph\n");
   }
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   *num_pop = get_num_populations();
   (*final_populations) = malloc((*num_pop)*sizeof(double));
   get_populations(rho,&(*final_populations));
@@ -224,7 +224,7 @@ void real_ham_dm_test(double **final_populations,int *num_pop){
     fprintf(f_pop,"#Time Populations: qd, ph\n");
   }
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   *num_pop = get_num_populations();
   (*final_populations) = malloc((*num_pop)*sizeof(double));
   get_populations(rho,&(*final_populations));
@@ -294,7 +294,7 @@ void real_ham_psi_test(double **final_populations,int *num_pop){
     fprintf(f_pop,"#Time Populations: qd, ph\n");
   }
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   *num_pop = get_num_populations();
   (*final_populations) = malloc((*num_pop)*sizeof(double));
   get_populations(rho,&(*final_populations));

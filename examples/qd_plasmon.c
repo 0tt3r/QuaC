@@ -133,7 +133,7 @@ int main(int argc,char **args){
     fprintf(f_pop,"#Time Populations\n");
   }
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   /* steady_state(rho); */
 
   destroy_op(&a);

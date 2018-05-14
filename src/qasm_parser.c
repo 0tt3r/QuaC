@@ -5,7 +5,7 @@
 #include <petsc.h>
 #include <stdarg.h>
 #include "qasm_parser.h"
-#include "error_correction.h"""
+#include "error_correction.h"
 #include <ctype.h>
 
 void projectq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){

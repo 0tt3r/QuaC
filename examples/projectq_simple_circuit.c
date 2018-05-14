@@ -92,7 +92,7 @@ int main(int argc,char **args){
   //Start out circuit at time 0.0, first gate will be at 1.0
   start_circuit_at_time(&projectq_read,0.0);
   //Run the evolution, with error and with the circuit
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
 
   //Clean up memory
   for (i=0;i<num_qubits;i++){

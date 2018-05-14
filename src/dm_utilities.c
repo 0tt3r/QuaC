@@ -36,11 +36,32 @@ void print_dm_sparse(Vec rho,int h_dim){
     for (j=0;j<h_dim;j++){
       get_dm_element(rho,i,j,&val);
       if (PetscAbsComplex(val)>1e-10){
-        PetscPrintf(PETSC_COMM_WORLD,"%d %d %e %e i\n",i,j,PetscRealPart(val),PetscImaginaryPart(val));
+        PetscPrintf(PETSC_COMM_WORLD,"%d %d %e %e\n",i,j,PetscRealPart(val),PetscImaginaryPart(val));
       }
     }
   }
+}
 
+
+/*
+ * Print the DM as a sparse matrix.
+ * Not recommended for large matrices.
+ * NOTE: Should be called from all cores!
+ */
+void print_dm_sparse_to_file(Vec rho,int h_dim,char filename[]){
+  PetscScalar val;
+  int i,j;
+  FILE *fp;
+
+  fp = fopen(filename,"w");
+  for (i=0;i<h_dim;i++){
+    for (j=0;j<h_dim;j++){
+      get_dm_element(rho,i,j,&val);
+      if (PetscAbsComplex(val)>1e-10){
+        PetscFPrintf(PETSC_COMM_WORLD,fp,"%d %d %e %e\n",i,j,PetscRealPart(val),PetscImaginaryPart(val));
+      }
+    }
+  }
 }
 
 /*
@@ -191,6 +212,52 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
   return;
 }
 
+
+
+/*
+ *Measure a dm by a given operator, forcing a change:
+ *    dm -> U^\dag dm U
+ * or, in vectored notation
+ *    dm -> (U* cross U) dm
+ */
+void measure_dm(Vec dm,operator op){
+  Mat tmp_op_mat;
+  PetscInt Istart,Iend,i,j,dim;
+  PetscScalar val;
+  Vec tmp_dm;
+  dim = total_levels*total_levels;
+  MatCreate(PETSC_COMM_WORLD,&tmp_op_mat);
+  MatSetType(tmp_op_mat,MATMPIAIJ);
+  MatSetSizes(tmp_op_mat,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+  MatSetFromOptions(tmp_op_mat);
+  MatMPIAIJSetPreallocation(tmp_op_mat,5,NULL,5,NULL);
+  MatGetOwnershipRange(tmp_op_mat,&Istart,&Iend);
+  VecDuplicate(dm,&tmp_dm);
+  //Construct U* cross U
+  for (i=Istart;i<Iend;i++){
+    _get_val_j_from_global_i(i,op,&j,&val,0); // Get the corresponding j and val
+    MatSetValue(tmp_op_mat,i,j,val,INSERT_VALUES);
+  }
+  MatAssemblyBegin(tmp_op_mat,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(tmp_op_mat,MAT_FINAL_ASSEMBLY);
+
+
+  //Do (U* cross U) * dm
+  MatMult(tmp_op_mat,dm,tmp_dm);
+  //Normalize resulting density matrix
+  //Get trace(tmp_dm)
+  //FIXME: assumes op has identity; I think all do, but vec_ops might break here?
+  get_expectation_value(tmp_dm,&val,1,subsystem_list[0]->eye);
+  //Divide all elements by trace val
+  VecScale(tmp_dm,1/val);
+
+  VecCopy(tmp_dm,dm);
+
+  //Cleanup tmp objects
+  MatDestroy(&tmp_op_mat);
+  VecDestroy(&tmp_dm);
+  return;
+}
 
 /*
  * partial_trace_keep does the partial trace, keeping only a list of operators
@@ -751,7 +818,6 @@ void get_dm_element_local(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
   location[0] = row;
   VecGetSize(dm,&dm_size);
   location[0] = sqrt(dm_size)*row + col;
-
   VecGetOwnershipRange(dm,&my_start,&my_end);
   if (location[0]>=my_start&&location[0]<my_end) {
     VecGetValues(dm,1,location,val_array);

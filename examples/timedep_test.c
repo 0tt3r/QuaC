@@ -29,7 +29,7 @@ void timedep_test(double **final_populations,int *num_pop){
   add_to_ham_mult2(-g,a->dag,b);
   /* add_to_ham(1.0,a->dag); */
   /* add_to_ham(1.0,a); */
-   add_to_ham_time_dep(pulse,2,a->dag,a);
+  add_to_ham_time_dep(pulse,2,a->dag,a);
   kappa1 = 1.5;
   add_lin(kappa1,a);
 
@@ -52,7 +52,7 @@ void timedep_test(double **final_populations,int *num_pop){
     fprintf(f_pop,"#Time Populations\n");
   }
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   *num_pop = get_num_populations();
   (*final_populations) = malloc((*num_pop)*sizeof(double));
   get_populations(rho,&(*final_populations));

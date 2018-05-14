@@ -5,7 +5,7 @@
 #include <petscts.h>
 
 void steady_state(Vec);
-void time_step(Vec,PetscReal,PetscReal,PetscInt);
+void time_step(Vec,PetscReal,PetscReal,PetscReal,PetscInt);
 void set_ts_monitor(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*));
 
 #endif

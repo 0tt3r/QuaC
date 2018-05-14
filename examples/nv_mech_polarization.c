@@ -36,7 +36,7 @@ int main(int argc,char **args){
   PetscOptionsGetInt(NULL,NULL,"-num_phonon",&num_phonon,NULL);
   PetscOptionsGetInt(NULL,NULL,"-n_th",&n_th,NULL);
 
-  if (nid==0) printf("Num_phonon: %d n_th: %d \n",num_phonon,n_th);
+  if (nid==0) printf("Num_phonon: %ld n_th: %ld \n",num_phonon,n_th);
   /* Define scalars to add to Ham */
   lambda     = 1*kHz*2*M_PI;
   T2star     = 1*MHz;
@@ -102,7 +102,7 @@ int main(int argc,char **args){
   }
 
   set_ts_monitor(ts_monitor);
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   /* steady_state(); */
 
   destroy_op(&a);

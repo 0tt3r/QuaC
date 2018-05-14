@@ -21,7 +21,7 @@ int main(int argc,char **args){
   PetscReal time_max,dt;
   PetscScalar val;
   PetscInt  steps_max;
-  int num_plasmon=10,num_qd=2,i;
+  PetscInt num_plasmon=10,num_qd=2,i;
 
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
@@ -46,8 +46,11 @@ int main(int argc,char **args){
   for (i=0;i<num_qd;i++){
     add_to_ham(omega,qd[i]->n); // omega qdt qd
     /* qd decay */
-    add_lin(gamma_pi/2,qd[i]);
-    add_lin(gamma_di,qd[i]->n);
+    /* add_lin(gamma_pi/2,qd[i]); */
+    /* add_lin(gamma_di,qd[i]->n); */
+    add_lin(gamma_di,qd[i]->sig_x);
+    /* add_lin(gamma_di,qd[i]->n); */
+    /* add_lin(gamma_di,qd[i]->n); */
   }
 
 
@@ -87,7 +90,7 @@ int main(int argc,char **args){
 
   }
 
-  time_step(antisym_bell_dm,time_max,dt,steps_max);
+  time_step(antisym_bell_dm,0.0,time_max,dt,steps_max);
   /* steady_state(antisym_bell_dm); */
 
   for (i=0;i<num_qd;i++){
