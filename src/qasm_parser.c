@@ -11,7 +11,7 @@
 
 void projectq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
   FILE *fp;
-  int ch = 0,lines=0,finished_allocate=0,i,j;
+  int ch = 0,lines=0,finished_allocate=0;
   char *line = NULL;
   size_t len = 0;
   ssize_t read;
@@ -74,8 +74,8 @@ void projectq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
 
 
 void _projectq_qasm_add_gate(char *line,circuit *circ,PetscReal time){
-  char *token=NULL,*token2=NULL,a[20]={0};
-  int i,j,qubit1,qubit2;
+  char *token=NULL;
+  int qubit1,qubit2;
   PetscReal angle;
   gate_type my_gate_type;
   // Split string on | to separate gate type and qubits
