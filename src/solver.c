@@ -244,9 +244,6 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   double         *populations;
   Mat            solve_A,solve_stiff_A;
 
-  PetscInt          ncols;
-  const PetscInt    *cols;
-  const PetscScalar *vals;
 
   PetscLogStagePop();
   PetscLogStagePush(solve_stage);
@@ -418,6 +415,11 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  
+  /* PetscInt          ncols; */
+  /* const PetscInt    *cols; */
+  /* const PetscScalar *vals; */
+
   /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); */
   /* MatView(solve_A,mat_view); */
   /* for(i=0;i<total_levels*total_levels;i++){ */
