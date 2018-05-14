@@ -126,15 +126,15 @@ void destroy_stabilizer(stabilizer *stab){
 
 void add_lin_recovery(PetscScalar a,PetscInt same_rate,operator error,char commutation_string[],int n_stabilizers,...){
   va_list ap;
-  PetscScalar mat_scalar,add_to_mat,op_val,mat_scalar2;
-  PetscInt   i,Istart,Iend,this_i,i_stab,j_stab,k_stab,l_stab,new_method;
-  PetscInt i1,i2,j1,j2,num_nonzero1,num_nonzero2,i_comb,j_comb,error_i;
+  PetscScalar mat_scalar,add_to_mat,op_val;
+  PetscInt   i,Istart,Iend,this_i,i_stab,j_stab,k_stab,l_stab;
+  PetscInt i1,i2,j1,j2,num_nonzero1,num_nonzero2,i_comb,j_comb;
   /*
    * The following arrays are used in C* C calculationsg
    * Maybe this is memory inefficient, but it takes
    * far less memory than the DM, so it should be fine
    */
-  PetscScalar this_row1[total_levels],this_row2[total_levels],error_val;
+  PetscScalar this_row1[total_levels],this_row2[total_levels];
   PetscInt row_nonzeros1[total_levels],row_nonzeros2[total_levels];
   stabilizer     *stabs;
 
@@ -919,7 +919,7 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
 
 //The ... are the encoders, assumes we encode from the first of the list in the encoder
 void encode_state(Vec rho,PetscInt num_logical_qubits,...){
-  PetscInt qubit,i,j;
+  PetscInt i,j;
   va_list ap;
   encoded_qubit this_qubit;
   va_start(ap,num_logical_qubits);
@@ -937,7 +937,7 @@ void encode_state(Vec rho,PetscInt num_logical_qubits,...){
 
 //The ... are the encoders, assumes we encode from the first of the list in the encoder
 void decode_state(Vec rho,PetscInt num_logical_qubits,...){
-  PetscInt qubit,i,j;
+  PetscInt i,j;
   va_list ap;
   encoded_qubit this_qubit;
 
@@ -1140,7 +1140,6 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
  */
 PetscErrorCode _DQEC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
   /* Check if the time has passed a gate */
-  PetscInt i;
 
   /* /\* We signal that we passed the time by returning a negative number *\/ */
   /* for (i=0;i<_num_DQEC;i++){ */
@@ -1158,7 +1157,6 @@ PetscErrorCode _DQEC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,v
 */
 PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,PetscBool forward,void* ctx) {
   PetscInt i,i_ev;
-  Mat ec_mat;
   Vec tmp_answer;
 
   VecDuplicate(U,&tmp_answer);
