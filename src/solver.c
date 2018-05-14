@@ -428,13 +428,14 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   PetscViewerPopFormat(mat_view);
   PetscViewerDestroy(&mat_view);
 
-  TSSetInitialTimeStep(ts,0.0,dt);
+  TSSetTimeStep(ts,dt);
 
   /*
    * Set default options, can be changed at runtime
    */
 
-  TSSetDuration(ts,steps_max,time_max);
+  TSSetMaxSteps(ts,steps_max);
+  TSSetMaxTime(ts,time_max);
   TSSetTime(ts,init_time);
   TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
   if (_stiff_solver) {
@@ -483,7 +484,7 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   /* } */
   TSSetFromOptions(ts);
   TSSolve(ts,x);
-  TSGetTimeStepNumber(ts,&steps);
+  TSGetStepNumber(ts,&steps);
 
   num_pop = get_num_populations();
   populations = malloc(num_pop*sizeof(double));
