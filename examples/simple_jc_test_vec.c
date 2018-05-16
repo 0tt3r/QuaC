@@ -4,7 +4,7 @@
 #include "operators.h"
 #include "solver.h"
 #include "petsc.h"
-
+#include "dm_utilities.h"
 /*
  * This simple test adds does a JC like Hamiltonian with a vec op, combines them in ways
  * similar to Jaynes-Cummings for the Hamiltonian and includes

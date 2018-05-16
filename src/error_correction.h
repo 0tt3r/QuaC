@@ -32,7 +32,7 @@ void encode_state(Vec,PetscInt,...);
 void decode_state(Vec,PetscInt,...);
 void add_continuous_error_correction(encoded_qubit,PetscReal);
 void encode_circuit(circuit,circuit*,PetscInt,...);
-PetscErrorCode _DQEC_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,void*);
+PetscErrorCode _DQEC_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,PetscBool,void*);
 PetscErrorCode _DQEC_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
 extern int _discrete_ec;
 #endif

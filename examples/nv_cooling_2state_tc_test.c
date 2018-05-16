@@ -4,6 +4,8 @@
 #include "operators.h"
 #include "solver.h"
 #include "petsc.h"
+#include "dm_utilities.h"
+
 
 int main(int argc,char **args){
   /* tc is whether to do Tavis Cummings or not */
@@ -30,7 +32,7 @@ int main(int argc,char **args){
   PetscOptionsGetInt(NULL,NULL,"-tc",&tc,NULL);
   PetscOptionsGetInt(NULL,NULL,"-nv_levels",&nv_levels,NULL);
 
-  if (nid==0) printf("Num_phonon: %d n_th: %d num_nv: %d nv_levels: %d Tavis Cummings?: %d\n",num_phonon,n_th,num_nv,nv_levels,tc);
+  if (nid==0) printf("Num_phonon: %ld n_th: %ld num_nv: %ld nv_levels: %ld Tavis Cummings?: %ld\n",num_phonon,n_th,num_nv,nv_levels,tc);
   /* Define scalars to add to Ham */
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency
   gamma_eff  = 145.1*MHz; //Effective dissipation rate

@@ -35,7 +35,8 @@ PetscErrorCode _QG_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,voi
 /* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
  * to apply that event.
 */
-PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+PetscErrorCode _QG_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,
+                                     Vec U,PetscBool forward,void* ctx) {
 
    /* We only have one event at the moment, so we do not need to branch.
     * If we had more than one event, we would put some logic here.
@@ -82,7 +83,8 @@ PetscErrorCode _QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,voi
 /* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
  * to apply that event.
 */
-PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],
+                                     PetscReal t,Vec U,PetscBool forward,void* ctx) {
   PetscInt current_gate,num_gates;
   PetscReal gate_time;
    /* We only have one event at the moment, so we do not need to branch.
@@ -688,8 +690,7 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
  * Assumes whole circuit happens at time
  */
 void add_circuit_to_circuit(circuit *circ,circuit circ_to_add,PetscReal time){
-  int num_qubits=0,qubit,i,j;
-  va_list ap;
+  int num_qubits=0,i,j;
 
   // Check that we can fit the circuit in
   if (((*circ).num_gates+circ_to_add.num_gates-1)==(*circ).gate_list_size){
@@ -1542,9 +1543,9 @@ void combine_circuit_to_mat(Mat *matrix_out,circuit circ){
 
 
 void combine_circuit_to_super_mat(Mat *matrix_out,circuit circ){
-  PetscScalar val1=0,val2=0,op_vals[4];
+  PetscScalar op_vals[4];
   PetscInt Istart,Iend,i_mat,dim;
-  PetscInt i,this_j1=0,this_j2=0,these_js[4],num_js;
+  PetscInt i,these_js[4],num_js;
   Mat tmp_mat1,tmp_mat2,tmp_mat3;
 
   // Should this inherit its stucture from full_A?
@@ -1893,8 +1894,8 @@ void CXZ_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,Pets
 
 void CZ_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                   PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
-  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[2],js_i2[2];
-  PetscInt control,i_tmp,my_levels,j_sub,moved_system,j1;
+  PetscInt n_after,i_sub,k1,k2,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[2],js_i2[2];
+  PetscInt control,i_tmp,my_levels,moved_system;
   PetscScalar vals_i1[2],vals_i2[2];
 
   /* The controlled-Z gate has two inputs, a target and a control.
@@ -1994,8 +1995,8 @@ void CZ_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,Petsc
 
 void CmZ_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                   PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
-  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[2],js_i2[2];
-  PetscInt control,i_tmp,my_levels,j_sub,moved_system,j1;
+  PetscInt n_after,i_sub,k1,k2,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[2],js_i2[2];
+  PetscInt control,i_tmp,my_levels,moved_system;
   PetscScalar vals_i1[2],vals_i2[2];
 
   /* The controlled-mZ gate has two inputs, a target and a control.
@@ -2338,7 +2339,7 @@ void HADAMARD_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate
 
 void EYE_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                       PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
-  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2];
+  PetscInt n_after,i_sub,k1,k2,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2];
   PetscScalar vals_i1[2],vals_i2[2];
 
   /*
@@ -2397,7 +2398,7 @@ void EYE_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,Pets
 
 void SIGMAZ_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                       PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
-  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],my_levels;
+  PetscInt n_after,i_sub,k1,k2,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],my_levels;
   PetscScalar vals_i1[2],vals_i2[2];
 
   /*
@@ -2470,7 +2471,7 @@ void SIGMAZ_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,P
 
 void RZ_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                       PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
-  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],my_levels;
+  PetscInt n_after,i_sub,k1,k2,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],my_levels;
   PetscScalar vals_i1[2],vals_i2[2];
   PetscReal theta;
   /*
@@ -2887,7 +2888,7 @@ void SIGMAX_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,P
 
 void _get_n_after_2qbit(PetscInt *i,int qubit_numbers[],PetscInt tensor_control,PetscInt *n_after, PetscInt *control, PetscInt *moved_system, PetscInt *i_sub){
   operator this_op1,this_op2;
-  PetscInt n_before1,n_before2,extra_after,i_tmp,my_levels=4,j1; //4 is hardcoded because 2 qbits
+  PetscInt n_before1,n_before2,extra_after,my_levels=4,j1; //4 is hardcoded because 2 qbits
   if (tensor_control==1) {
     extra_after = total_levels;
   } else {

@@ -119,6 +119,7 @@ void steady_state(Vec x){
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
   MatView(full_A,mat_view);
+  PetscViewerPopFormat(mat_view);
   PetscViewerDestroy(&mat_view);
   /*
    * Create parallel vectors.
@@ -230,7 +231,7 @@ void steady_state(Vec x){
  *       double time_max: the maximum time to integrate to
  *       int steps_max:   max number of steps to take
  */
-void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
+void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   PetscViewer    mat_view;
   TS             ts; /* timestepping context */
   PetscInt       i,j,Istart,Iend,steps,row,col;
@@ -243,15 +244,12 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   double         *populations;
   Mat            solve_A,solve_stiff_A;
 
-  PetscInt          ncols;
-  const PetscInt    *cols;
-  const PetscScalar *vals;
 
   PetscLogStagePop();
   PetscLogStagePush(solve_stage);
   if (_lindblad_terms) {
     if (nid==0) {
-      printf("Lindblad terms found, using Lindblad solver.\n");
+      //printf("Lindblad terms found, using Lindblad solver.\n");
     }
     solve_A = full_A;
     if (_stiff_solver) {
@@ -317,7 +315,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
    * this fixes a 'matrix in wrong state' message that PETSc
    * gives if the diagonal was never initialized.
    */
-  if (nid==0) printf("Adding 0 to diagonal elements...\n");
+  //if (nid==0) printf("Adding 0 to diagonal elements...\n");
   for (i=Istart;i<Iend;i++){
     mat_tmp = 0 + 0.*PETSC_i;
     MatSetValue(solve_A,i,i,mat_tmp,ADD_VALUES);
@@ -355,7 +353,11 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
 
   if(_stiff_solver) {
-    TSSetIFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+    /* TSSetIFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL); */
+    if (nid==0) {
+      printf("Stiff solver not implemented!\n");
+      exit(0);
+    }
     if(nid==0) printf("Using stiff solver - TSROSW\n");
   }
 
@@ -386,7 +388,7 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     /* Tell PETSc to assemble the matrix */
     MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
-    if (nid==0) printf("Matrix Assembled.\n");
+    //    if (nid==0) printf("Matrix Assembled.\n");
 
     MatDuplicate(solve_A,MAT_COPY_VALUES,&AA);
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
@@ -400,7 +402,11 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
     if (_stiff_solver){
       MatAssemblyBegin(solve_stiff_A,MAT_FINAL_ASSEMBLY);
       MatAssemblyEnd(solve_stiff_A,MAT_FINAL_ASSEMBLY);
-      TSSetIJacobian(ts,solve_stiff_A,solve_stiff_A,TSComputeRHSJacobianConstant,NULL);
+      /* TSSetIJacobian(ts,solve_stiff_A,solve_stiff_A,TSComputeRHSJacobianConstant,NULL); */
+      if (nid==0) {
+        printf("Stiff solver not implemented!\n");
+        exit(0);
+      }
     }
     if (nid==0) printf("Matrix Assembled.\n");
     TSSetRHSJacobian(ts,solve_A,solve_A,TSComputeRHSJacobianConstant,NULL);
@@ -409,8 +415,13 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
+  
+  /* PetscInt          ncols; */
+  /* const PetscInt    *cols; */
+  /* const PetscScalar *vals; */
+
   /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); */
-  MatView(solve_A,mat_view);
+  /* MatView(solve_A,mat_view); */
   /* for(i=0;i<total_levels*total_levels;i++){ */
   /*   MatGetRow(solve_A,i,&ncols,&cols,&vals); */
   /*   for (j=0;j<ncols;j++){ */
@@ -424,15 +435,18 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   if(_stiff_solver){
     MatView(solve_stiff_A,mat_view);
   }
+  PetscViewerPopFormat(mat_view);
   PetscViewerDestroy(&mat_view);
 
-  TSSetInitialTimeStep(ts,0.0,dt);
+  TSSetTimeStep(ts,dt);
 
   /*
    * Set default options, can be changed at runtime
    */
 
-  TSSetDuration(ts,steps_max,time_max);
+  TSSetMaxSteps(ts,steps_max);
+  TSSetMaxTime(ts,time_max);
+  TSSetTime(ts,init_time);
   TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
   if (_stiff_solver) {
     TSSetType(ts,TSROSW);
@@ -480,20 +494,20 @@ void time_step(Vec x, PetscReal time_max,PetscReal dt,PetscInt steps_max){
   /* } */
   TSSetFromOptions(ts);
   TSSolve(ts,x);
-  TSGetTimeStepNumber(ts,&steps);
+  TSGetStepNumber(ts,&steps);
 
   num_pop = get_num_populations();
   populations = malloc(num_pop*sizeof(double));
   get_populations(x,&populations);
-  if(nid==0){
-    printf("Final populations: ");
-    for(i=0;i<num_pop;i++){
-      printf(" %e ",populations[i]);
-    }
-    printf("\n");
-  }
+  /* if(nid==0){ */
+  /*   printf("Final populations: "); */
+  /*   for(i=0;i<num_pop;i++){ */
+  /*     printf(" %e ",populations[i]); */
+  /*   } */
+  /*   printf("\n"); */
+  /* } */
 
-  PetscPrintf(PETSC_COMM_WORLD,"Steps %D\n",steps);
+  /* PetscPrintf(PETSC_COMM_WORLD,"Steps %D\n",steps); */
 
   /* Free work space */
   TSDestroy(&ts);

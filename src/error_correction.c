@@ -126,15 +126,15 @@ void destroy_stabilizer(stabilizer *stab){
 
 void add_lin_recovery(PetscScalar a,PetscInt same_rate,operator error,char commutation_string[],int n_stabilizers,...){
   va_list ap;
-  PetscScalar mat_scalar,add_to_mat,op_val,mat_scalar2;
-  PetscInt   i,Istart,Iend,this_i,i_stab,j_stab,k_stab,l_stab,new_method;
-  PetscInt i1,i2,j1,j2,num_nonzero1,num_nonzero2,i_comb,j_comb,error_i;
+  PetscScalar mat_scalar,add_to_mat,op_val;
+  PetscInt   i,Istart,Iend,this_i,i_stab,j_stab,k_stab,l_stab;
+  PetscInt i1,i2,j1,j2,num_nonzero1,num_nonzero2,i_comb,j_comb;
   /*
    * The following arrays are used in C* C calculationsg
    * Maybe this is memory inefficient, but it takes
    * far less memory than the DM, so it should be fine
    */
-  PetscScalar this_row1[total_levels],this_row2[total_levels],error_val;
+  PetscScalar this_row1[total_levels],this_row2[total_levels];
   PetscInt row_nonzeros1[total_levels],row_nonzeros2[total_levels];
   stabilizer     *stabs;
 
@@ -919,7 +919,7 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
 
 //The ... are the encoders, assumes we encode from the first of the list in the encoder
 void encode_state(Vec rho,PetscInt num_logical_qubits,...){
-  PetscInt qubit,i,j;
+  PetscInt i,j;
   va_list ap;
   encoded_qubit this_qubit;
   va_start(ap,num_logical_qubits);
@@ -937,7 +937,7 @@ void encode_state(Vec rho,PetscInt num_logical_qubits,...){
 
 //The ... are the encoders, assumes we encode from the first of the list in the encoder
 void decode_state(Vec rho,PetscInt num_logical_qubits,...){
-  PetscInt qubit,i,j;
+  PetscInt i,j;
   va_list ap;
   encoded_qubit this_qubit;
 
@@ -969,10 +969,10 @@ void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correcti
     create_stabilizer(&S1,2,qubit0->sig_z,qubit1->sig_z);
     create_stabilizer(&S2,2,qubit1->sig_z,qubit2->sig_z);
 
-    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit0->sig_x,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit1->sig_x,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit2->sig_x,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,(char *)"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,(char *)"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,(char *)"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,(char *)"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -985,10 +985,10 @@ void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correcti
     create_stabilizer(&S1,2,qubit0->sig_x,qubit1->sig_x);
     create_stabilizer(&S2,2,qubit1->sig_x,qubit2->sig_x);
 
-    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit0->sig_z,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit1->sig_z,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit2->sig_z,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,(char *)"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,(char *)"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,(char *)"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,(char *)"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -1005,32 +1005,32 @@ void add_continuous_error_correction(encoded_qubit this_qubit,PetscReal correcti
     create_stabilizer(&S3,4,qubit2->sig_x,qubit3->sig_z,qubit4->sig_z,qubit0->sig_x);
     create_stabilizer(&S4,4,qubit3->sig_x,qubit4->sig_z,qubit0->sig_z,qubit1->sig_x);
 
-    add_lin_recovery(correction_rate,1,qubit0->eye,"1111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->eye,(char *)"1111",4,S1,S2,S3,S4);
 
     //Qubit 0 errors
-    add_lin_recovery(correction_rate,1,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,(char *)"1110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_y,(char *)"0100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,(char *)"0101",4,S1,S2,S3,S4);
 
     //Qubit 1 errors
-    add_lin_recovery(correction_rate,1,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,(char *)"0111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_y,(char *)"0010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,(char *)"1010",4,S1,S2,S3,S4);
 
     //Qubit 2 errors
-    add_lin_recovery(correction_rate,1,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,(char *)"0011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_y,(char *)"1101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,(char *)"0001",4,S1,S2,S3,S4);
 
     //Qubit 3 errors
-    add_lin_recovery(correction_rate,1,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_x,(char *)"1001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_y,(char *)"0110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_z,(char *)"0000",4,S1,S2,S3,S4);
 
     //Qubit 4 errors
-    add_lin_recovery(correction_rate,1,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_x,(char *)"1100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_y,(char *)"1011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_z,(char *)"1000",4,S1,S2,S3,S4);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -1059,10 +1059,10 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
     create_stabilizer(&S1,2,qubit0->sig_z,qubit1->sig_z);
     create_stabilizer(&S2,2,qubit1->sig_z,qubit2->sig_z);
 
-    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit0->sig_x,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit1->sig_x,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit2->sig_x,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,(char *)"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,(char *)"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,(char *)"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,(char *)"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -1073,10 +1073,10 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
 
     create_stabilizer(&S1,2,qubit0->sig_x,qubit1->sig_x);
     create_stabilizer(&S2,2,qubit1->sig_x,qubit2->sig_x);
-    add_lin_recovery(correction_rate,1,qubit0->eye,"11",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit0->sig_z,"01",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit1->sig_z,"00",2,S1,S2);
-    add_lin_recovery(correction_rate,1,qubit2->sig_z,"10",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->eye,(char *)"11",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,(char *)"01",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,(char *)"00",2,S1,S2);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,(char *)"10",2,S1,S2);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -1093,32 +1093,32 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
     create_stabilizer(&S3,4,qubit2->sig_x,qubit3->sig_z,qubit4->sig_z,qubit0->sig_x);
     create_stabilizer(&S4,4,qubit3->sig_x,qubit4->sig_z,qubit0->sig_z,qubit1->sig_x);
 
-    add_lin_recovery(correction_rate,1,qubit0->eye,"1111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->eye,(char *)"1111",4,S1,S2,S3,S4);
 
     //Qubit 0 errors
-    add_lin_recovery(correction_rate,1,qubit0->sig_x,"1110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit0->sig_y,"0100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit0->sig_z,"0101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_x,(char *)"1110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_y,(char *)"0100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit0->sig_z,(char *)"0101",4,S1,S2,S3,S4);
 
     //Qubit 1 errors
-    add_lin_recovery(correction_rate,1,qubit1->sig_x,"0111",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit1->sig_y,"0010",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit1->sig_z,"1010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_x,(char *)"0111",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_y,(char *)"0010",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit1->sig_z,(char *)"1010",4,S1,S2,S3,S4);
 
     //Qubit 2 errors
-    add_lin_recovery(correction_rate,1,qubit2->sig_x,"0011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit2->sig_y,"1101",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit2->sig_z,"0001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_x,(char *)"0011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_y,(char *)"1101",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit2->sig_z,(char *)"0001",4,S1,S2,S3,S4);
 
     //Qubit 3 errors
-    add_lin_recovery(correction_rate,1,qubit3->sig_x,"1001",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit3->sig_y,"0110",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit3->sig_z,"0000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_x,(char *)"1001",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_y,(char *)"0110",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit3->sig_z,(char *)"0000",4,S1,S2,S3,S4);
 
     //Qubit 4 errors
-    add_lin_recovery(correction_rate,1,qubit4->sig_x,"1100",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit4->sig_y,"1011",4,S1,S2,S3,S4);
-    add_lin_recovery(correction_rate,1,qubit4->sig_z,"1000",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_x,(char *)"1100",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_y,(char *)"1011",4,S1,S2,S3,S4);
+    add_lin_recovery(correction_rate,1,qubit4->sig_z,(char *)"1000",4,S1,S2,S3,S4);
 
     destroy_stabilizer(&S1);
     destroy_stabilizer(&S2);
@@ -1140,7 +1140,6 @@ void add_discrete_error_correction(encoded_qubit this_qubit,PetscReal correction
  */
 PetscErrorCode _DQEC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
   /* Check if the time has passed a gate */
-  PetscInt i;
 
   /* /\* We signal that we passed the time by returning a negative number *\/ */
   /* for (i=0;i<_num_DQEC;i++){ */
@@ -1156,9 +1155,8 @@ PetscErrorCode _DQEC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,v
 /* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
  * to apply that event.
 */
-PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,void* ctx) {
+PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],PetscReal t,Vec U,PetscBool forward,void* ctx) {
   PetscInt i,i_ev;
-  Mat ec_mat;
   Vec tmp_answer;
 
   VecDuplicate(U,&tmp_answer);
@@ -1178,7 +1176,8 @@ PetscErrorCode _DQEC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_lis
 
 //Take an old circuit and encode it
 void encode_circuit(circuit old_circ,circuit *encoded_circ,PetscInt num_encoders,...){
-  PetscInt i,j,num_qubits=0;
+  PetscInt i,j;
+  int num_qubits=0;
   PetscReal time,theta;
   va_list ap;
   gate_type my_gate_type;

@@ -76,7 +76,7 @@ int main(int argc,char **args){
 
   set_ts_monitor(ts_monitor);
   //  steady_state(rho);
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
 
   for (i=0;i<num_tls;i++){
     destroy_op(&tls[i]);

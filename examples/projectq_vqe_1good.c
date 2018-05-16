@@ -24,9 +24,9 @@ int main(int argc,char **args){
   PetscReal time_max,dt,*gamma_1,*gamma_2,*therm_1,*coup_1,*coup_on;
   PetscReal gate_time_step,theta,fidelity,t1,t2,n_therm;
   PetscScalar mat_val;
-  PetscInt  steps_max,good_qubit;
+  PetscInt  steps_max,good_qubit,num_qubits;
   Vec rho,rho_base,rho_base2,rho_base3;
-  int num_qubits,i,j,h_dim,system,dm_place,logical_qubits,prev_qb,prev_qb2,num_qubits2;
+  int i,j,h_dim,system,dm_place,logical_qubits,prev_qb,prev_qb2,num_qubits2;
   circuit projectq_read,encoded_projectq;
   Mat     encoder_mat;
   char           string[10],filename[128];
@@ -87,7 +87,7 @@ int main(int argc,char **args){
   }
 
   if (nid==0){
-    printf("qubit: %d gam: %f dep: %f\n",good_qubit,gam,dep);
+    printf("qubit: %ld gam: %f dep: %f\n",good_qubit,gam,dep);
   }
   //Add lindblad terms
   for (i=0;i<num_qubits;i++){
@@ -138,12 +138,12 @@ int main(int argc,char **args){
   assemble_dm(rho);
 
   if (nid==0){
-    printf("num_gates: %d \n",projectq_read.num_gates);
+    printf("num_gates: %ld \n",projectq_read.num_gates);
   }
 
   start_circuit_at_time(&projectq_read,0.0);
 
-  time_step(rho,time_max,dt,steps_max);
+  time_step(rho,0.0,time_max,dt,steps_max);
   /* get_expectation_value(rho,&mat_val,2,qubits[0]->sig_z,qubits[0]->sig_z); */
   projectq_vqe_get_expectation(filename,rho,&mat_val);
 

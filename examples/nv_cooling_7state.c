@@ -5,12 +5,12 @@
 #include "operators.h"
 #include "solver.h"
 #include "petsc.h"
-
+#include "dm_utilities.h"
 
 void add_nv_terms(vec_op,operator,double);
 
 int main(int argc,char **args){
-  int      N_th,num_phonon,num_nv,i;
+  PetscInt      N_th,num_phonon,num_nv,i;
   double   w_m,lambda_s;
   double   Q,kHz,MHz,GHz,rate;
   operator a;
@@ -38,7 +38,7 @@ int main(int argc,char **args){
   PetscOptionsGetInt(NULL,NULL,"-num_phonon",&num_phonon,NULL);
   PetscOptionsGetInt(NULL,NULL,"-n_th",&N_th,NULL);
 
-  if (nid==0) printf("Num_phonon: %d N_th %d num_nv: %d\n",num_phonon,N_th,num_nv);
+  if (nid==0) printf("Num_phonon: %ld N_th %ld num_nv: %ld\n",num_phonon,N_th,num_nv);
   lambda_s   = 500*1.06*kHz*2*M_PI;
 
   nv = malloc(num_nv*sizeof(vec_op));
@@ -71,7 +71,6 @@ int main(int argc,char **args){
   add_lin(rate,a->dag);
 
   create_full_dm(&rho);
-  //  time_step();
   steady_state(rho);
 
 

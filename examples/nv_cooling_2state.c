@@ -4,6 +4,7 @@
 #include "operators.h"
 #include "solver.h"
 #include "petsc.h"
+#include "dm_utilities.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 FILE *f_pop;
@@ -40,7 +41,7 @@ int main(int argc,char **args){
   PetscOptionsGetInt(NULL,NULL,"-init_phonon",&init_phonon,NULL);
   PetscOptionsGetInt(NULL,NULL,"-steady_state",&steady_state_solve,NULL);
 
-  if (nid==0) printf("Num_phonon: %d N_th: %d num_nv: %d alpha: %f\n",num_phonon,N_th,num_nv,alpha);
+  if (nid==0) printf("Num_phonon: %ld N_th: %ld num_nv: %ld alpha: %f\n",num_phonon,N_th,num_nv,alpha);
   /* Define scalars to add to Ham */
   w_m        = 475*MHz*2*M_PI; //Mechanical resonator frequency
   gamma_eff  = 145.1*MHz; //Effective dissipation rate
@@ -96,7 +97,7 @@ int main(int argc,char **args){
     time_max  = 100;
     dt        = 1;
     steps_max = 10000;
-    time_step(rho,time_max,dt,steps_max);
+    time_step(rho,0.0,time_max,dt,steps_max);
   }
 
   destroy_op(&a);

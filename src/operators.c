@@ -202,8 +202,7 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
  *        none
  */
 void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
-  PetscScalar mat_scalar;
-  PetscInt    dim,i,nnz;
+  PetscInt    i;
   operator    op;
   va_list     ap;
   _check_initialized_A();

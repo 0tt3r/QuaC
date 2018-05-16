@@ -4,6 +4,7 @@
 #include "operators.h"
 #include "solver.h"
 #include "petsc.h"
+#include "dm_utilities.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 FILE *f_pop;
@@ -49,7 +50,7 @@ int main(int argc,char **args){
   PetscOptionsGetReal(NULL,NULL,"-gam_eff",&gam_eff,NULL);
   PetscOptionsGetReal(NULL,NULL,"-gam_dep",&gam_dep,NULL);
 
-  if (nid==0) printf("Num_phonon: %d N_th: %d Num_phonon2: %d N_th2: %d gam_res: %f gam_eff %f gam_dep %f\n",num_phonon,N_th,num_phonon2,N_th2,gam_res,gam_eff,gam_dep);
+  if (nid==0) printf("Num_phonon: %ld N_th: %ld Num_phonon2: %ld N_th2: %ld gam_res: %f gam_eff %f gam_dep %f\n",num_phonon,N_th,num_phonon2,N_th2,gam_res,gam_eff,gam_dep);
   /* Define scalars to add to Ham */
   w_m        = 175*MHz*2*M_PI; //Mechanical resonator frequency
   lambda_s   = 0.1*MHz*2*M_PI;
@@ -107,7 +108,7 @@ int main(int argc,char **args){
     time_max  = 150;
     dt        = 0.01;
     steps_max = 10000;
-    time_step(rho,time_max,dt,steps_max);
+    time_step(rho,0.0,time_max,dt,steps_max);
   }
 
   destroy_op(&a);
