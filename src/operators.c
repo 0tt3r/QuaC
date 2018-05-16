@@ -56,7 +56,7 @@ void print_dense_ham(){
  */
 
 void create_op(int number_of_levels,operator *new_op) {
-  operator temp = NULL;
+  operator temp = NULL,temp1 = NULL;
 
   _check_initialized_op();
 
@@ -69,6 +69,7 @@ void create_op(int number_of_levels,operator *new_op) {
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
   *new_op           = temp;
+  temp1             = temp;
 
   /* Make creation operator */
   temp              = malloc(sizeof(struct operator));
@@ -76,6 +77,7 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = RAISE;
+  temp->dag         = temp1; //Point dagger operator to LOWER op
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
   (*new_op)->dag    = temp;
@@ -757,45 +759,9 @@ void add_lin_mult2(PetscScalar a,operator op1,operator op2){
 
     }
   } else {
-    /* Multiply two normal ops */
-    /* Only allow a a^\dagger terms from the same subspace - check that this is true*/
-    if (op1->n_before!=op2->n_before){
-      if (nid==0){
-        printf("ERROR! Operators must be from the same subspace to be multiplied\n");
-        printf("       in a Lindblad term!\n");
-        exit(0);
-      }
-    }
-    if (op1->my_op_type==RAISE&&op2->my_op_type==LOWER){
-      if (nid==0){
-        printf("ERROR! Please use provided a->n type terms to add the \n");
-        printf("       number operator to a Lindblad term!\n");
-        exit(0);
-      }
-    }
-    if (op1->my_op_type!=LOWER&&op2->my_op_type!=RAISE){
-      if (nid==0){
-        printf("ERROR! Only terms of the type a a^\\dagger are currently\n");
-        printf("       supported for multiplied Lindblad terms.\n");
-        exit(0);
-      }
-    }
-    /*
-     * Add (I cross C^t C) to the superoperator matrix, A
-     */
-    mat_scalar = -0.5*a;
-    _add_to_PETSc_kron_lin2(full_A,mat_scalar,op1->n_before,op1->my_levels,total_levels,1);
 
-    /*
-     * Add (C^t C cross I) to the superoperator matrix, A
-     */
-    mat_scalar = -0.5*a;
-    _add_to_PETSc_kron_lin2(full_A,mat_scalar,op1->n_before,op1->my_levels,1,total_levels);
-    /*
-     * Add (C' cross C') to the superoperator matrix, A, where C' is the full space
-     */
-    mat_scalar = a;
-    _add_to_PETSc_kron_lin2_comb(full_A,mat_scalar,op1->n_before,op1->my_levels);
+    /* Multiply two normal ops */
+    _add_to_PETSc_kron_lin2(full_A,a,op1,op2);
 
   }
 
