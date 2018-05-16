@@ -190,6 +190,71 @@ void projectq_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val
   return;
 }
 
+void projectq_vqe_get_expectation_squared(char filename[],Vec rho,PetscScalar *trace_val){
+  FILE *fp;
+  char *token=NULL,*token2=NULL;
+  char *line = NULL,gate_char;
+  size_t len = 0;
+  ssize_t read;
+  int token_number,num_ops,qubit_number;
+  operator ops[100];
+  PetscReal scalar_multiply;
+  PetscScalar temp_trace_val;
+  fp = fopen(filename,"r");
+  *trace_val = 0.0;
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+    }
+  }
+
+  while ((read = getline(&line, &len, fp)) != -1){
+    token_number = 0;
+    while (token=strsep(&line,"[")) {
+      if(token_number==0){
+        //Strip whitespace
+        for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+        scalar_multiply = atof(token);
+        token_number = 1;
+      } else {
+        token2=strsep(&token,"]");
+        num_ops = 0;
+        while (token=strsep(&token2," ")) {
+          if (strcmp(token,"")==0){
+            *trace_val = *trace_val + scalar_multiply;
+          } else {
+            //Assume qubit number in file is global system number
+            //FIXME: Put logical->physical qubit mapping here
+            sscanf(token,"%c%d",&gate_char,&qubit_number);
+            if (gate_char=='X'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_x;
+            } else if (gate_char=='Y'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_y;
+            } else if (gate_char=='Z'){
+              ops[num_ops] = subsystem_list[qubit_number]->sig_z;
+            }
+            num_ops = num_ops + 1;
+          }
+        }
+        if (num_ops!=0){
+          //This is a hack where I pass many ops, even though many of them
+          //may not exist or be valid; they won't be accessed, at least.
+          //Consider passing the array instead, and iterating inside?
+          get_expectation_value(rho,&temp_trace_val,num_ops,
+                                ops[0],ops[1],ops[2],ops[3],
+                                ops[4],ops[5],ops[6],ops[7],
+                                ops[8],ops[9],ops[10],ops[11],
+                                ops[12],ops[13],ops[14],ops[15],
+                                ops[16],ops[17],ops[18],ops[19]);
+          temp_trace_val = temp_trace_val * scalar_multiply;
+          *trace_val = *trace_val + temp_trace_val;
+        }
+      }
+    }
+  }
+  return;
+}
+
 void projectq_vqe_get_expectation_encoded(char filename[],Vec rho,PetscScalar *trace_val,
                                           PetscInt num_encoders,...){
   FILE *fp;
