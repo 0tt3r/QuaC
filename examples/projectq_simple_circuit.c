@@ -52,6 +52,7 @@ int main(int argc,char **args){
     sprintf(string, "-gam%d",i);
     PetscOptionsGetReal(NULL,NULL,string,&gamma_1[i],NULL);
     sprintf(string, "-dep%d",i);
+    PetscOptionsGetReal(NULL,NULL,string,&gamma_2[i],NULL);
   }
 
   //Add errors to lindblad term
