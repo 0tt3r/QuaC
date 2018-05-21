@@ -21,8 +21,8 @@ PetscInt final_qubit;
 encoded_qubit L0,L1,L2,L3;
 
 int main(int argc,char **args){
-  PetscReal time_max,dt,*gamma_1,*gamma_2;
-  PetscReal gate_time_step,theta,fidelity,t1,t2;
+  PetscReal time_max,dt,*gamma_1,*gamma_2,*therm_1,*coup_1,*coup_on;
+  PetscReal gate_time_step,theta,fidelity,t1,t2,n_therm;
   PetscScalar mat_val;
   PetscInt  steps_max,good_qubit,num_qubits;
   Vec rho,rho_base,rho_base2,rho_base3;
@@ -31,7 +31,7 @@ int main(int argc,char **args){
   Mat     encoder_mat;
   char           string[10],filename[128];
   stabilizer     S1,S2,S3,S4;
-  PetscReal *r_str,gam,dep;
+  PetscReal *r_str,gam,dep,therm,coup;
   char           encoder_str[128];
   encoder_type   encoder_type0,encoder_type1,encoder_type2,encoder_type3;
   struct quantum_gate_struct *gate_list;
@@ -44,28 +44,46 @@ int main(int argc,char **args){
   PetscOptionsGetString(NULL,NULL,"-file_circ",filename,sizeof(filename),NULL);
   projectq_qasm_read(filename,&num_qubits,&projectq_read);
 
+  strcpy(filename,"NULL");
+  PetscOptionsGetString(NULL,NULL,"-file_ev",filename,sizeof(filename),NULL);
+
   qubits  = malloc(num_qubits*sizeof(struct operator)); //Only need 3 qubits for teleportation
   gamma_1 = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
   gamma_2 = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
-
+  therm_1 = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
+  coup_1 = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
+  coup_on = malloc(num_qubits*sizeof(PetscReal)); //Only need 3 qubits for teleportation
   for (i=0;i<num_qubits;i++){
     create_op(2,&qubits[i]);
     gamma_1[i] = 0;
     gamma_2[i] = 0;
+    therm_1[i] = 0;
+    coup_1[i] = 0;
+    coup_on[i] = 1.0;
+    printf("MY_OP_TYPE op %d qubits[i]->dag %d qubits[i]->dag->dag %d\n",qubits[i]->my_op_type,qubits[i]->dag->my_op_type,qubits[i]->dag->dag->my_op_type);
   }
+
   gam = 0.0;
   dep = 0.0;
+  therm = 0.0;
+  coup = 0.0;
   PetscOptionsGetReal(NULL,NULL,"-gam",&gam,NULL);
   PetscOptionsGetReal(NULL,NULL,"-dep",&dep,NULL);
+  PetscOptionsGetReal(NULL,NULL,"-therm",&therm,NULL);
+  PetscOptionsGetReal(NULL,NULL,"-coup",&coup,NULL);
   for (i=0; i<num_qubits;i++){
     gamma_1[i] = gam;
     gamma_2[i] = dep;
+    therm_1[i] = therm;
+    coup_1[i]  = coup;
   }
   good_qubit = 0;
   PetscOptionsGetInt(NULL,NULL,"-good_qubit",&good_qubit,NULL);
   if (good_qubit!=num_qubits){
     gamma_1[good_qubit] = 0.0;
     gamma_2[good_qubit] = 0.0;
+    therm_1[good_qubit]   = 0.0;
+    coup_on[good_qubit]   = 0.0;
   }
 
   if (nid==0){
@@ -74,15 +92,37 @@ int main(int argc,char **args){
   //Add lindblad terms
   for (i=0;i<num_qubits;i++){
     if (gamma_1[i]>0){
+      //Spontaneous emission
       add_lin(gamma_1[i],qubits[i]);
     }
     if (gamma_2[i]>0){
+      //Dephasing
       add_lin(gamma_2[i],qubits[i]->n);
     }
+    if (therm_1[i]>0){
+      //Thermal - n=1/2
+      n_therm = 0.5;
+      add_lin(therm_1[i]*(n_therm + 1),qubits[i]);
+      add_lin(therm_1[i]*(n_therm),qubits[i]->dag);
+    }
+    if (coup_1[i]>0){
+      //Coupling (correlated) terms
+      for (j=0;j<num_qubits;j++){
+        if (j!=i) {
+          printf("coupling %d %d %f\n",i,j,coup_1[i]*coup_on[i]*coup_on[j]);
+          add_lin_mult2(coup_1[i]*coup_on[i]*coup_on[j],qubits[i]->dag,qubits[j]);
+          add_lin_mult2(coup_1[i]*coup_on[i]*coup_on[j],qubits[i],qubits[j]->dag);
+        }
+      }
+    }
   }
+  /* add_lin_mult2(1.0,qubits[0]->dag,qubits[1]); */
+  /* add_lin_mult2(1.0,qubits[0],qubits[1]->dag); */
+
   time_max  = projectq_read.num_gates + 1;
-  dt        = 0.01;
-  steps_max = 1000;
+
+  dt        = 1;
+  steps_max = 10000000;
 
   /* Set the ts_monitor to print results at each time step */
   set_ts_monitor(ts_monitor);
@@ -105,7 +145,7 @@ int main(int argc,char **args){
 
   time_step(rho,0.0,time_max,dt,steps_max);
   /* get_expectation_value(rho,&mat_val,2,qubits[0]->sig_z,qubits[0]->sig_z); */
-  projectq_vqe_get_expectation((char *)"vqe_ev",rho,&mat_val);
+  projectq_vqe_get_expectation(filename,rho,&mat_val);
 
   if (nid==0) printf("Energy: %.18lf\n",PetscRealPart(mat_val));
   //print_dm_sparse(rho,16);

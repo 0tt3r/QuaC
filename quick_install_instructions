@@ -9,9 +9,9 @@ export PETSC_ARCH=linux-gnu-c-complex
 ## This compiles PETSc in optimized mode, which is significantly faster than
 ## with debugging information on
 ##If you do not have blas/lapack or mpich, use below.
-#./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --download-fblaslapack --download-mpich  --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-fortran-kernels=generic
+#./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --download-fblaslapack --download-mpich  --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices 
 ##If you are on an HPC cluster where MPI is already configured, use:
-# ./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-fortran-kernels=generic
+# ./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} test
 

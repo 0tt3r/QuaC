@@ -1155,8 +1155,7 @@ void _add_to_PETSc_kron_lin_mat(Mat matrix,PetscScalar a, Mat matrix_to_add,
 
 
 /*
- * WARNING: A LITTLE BIT OF A HACK
- * _add_to_PETSc_kron_lin2 assumes op = a a^\dag and
+ * _add_to_PETSc_kron_lin2 
  * expands an op^dag op given a Hilbert space size
  * before and after and adds that to the Petsc matrix full_A
  *
@@ -1170,28 +1169,107 @@ void _add_to_PETSc_kron_lin_mat(Mat matrix,PetscScalar a, Mat matrix_to_add,
  *      none, but adds to PETSc matrix
  */
 
-void _add_to_PETSc_kron_lin2(Mat matrix,PetscScalar a,int n_before,int my_levels,
-                             int extra_before,int extra_after){
+void _add_to_PETSc_kron_lin2(Mat matrix,PetscScalar a,operator op1,operator op2){
   long i,i_op,j_op,n_after;
-  PetscReal    val;
-  PetscScalar add_to_mat;
+  PetscScalar add_to_mat,val,op_val;
+  PetscInt Istart,Iend,this_i,this_j;
 
-
-  n_after    = total_levels/(my_levels*n_before);
-
-  for (i=1;i<my_levels;i++){
-    /*
-     * For this term, we have to calculate Ct C.
-     * We are assuming that C = aa^\dagger, so we
-     * exploit that structure directly
-     */
-    i_op = i-1;
-    j_op = i-1;
-    val  = (double)i*(double)i;
-    add_to_mat = a*val;
-    _add_to_PETSc_kron_ij(matrix,add_to_mat,i_op,j_op,n_before*extra_before,
-                          n_after*extra_after,my_levels);
+  //Check operator type for op2
+  if ((op1->my_op_type!=RAISE && op2->my_op_type!=LOWER)&&(op2->my_op_type!=RAISE && op1->my_op_type!=LOWER)){
+    if (nid==0){
+      printf("ERROR! kron_lin2 only supports raising and lowering operators for now.\n");
+      exit(0);
+    }
   }
+
+
+
+  MatGetOwnershipRange(matrix,&Istart,&Iend);
+
+  for (i=Istart;i<Iend;i++){
+
+    /* First get
+     * I cross C^t C = I cross b^t a^t a b
+     * since C = a b, and a = op1, b = op2
+     */
+    this_i = i; // The leading index which we check
+    op_val = -0.5*a;
+
+    // b^t
+    _get_val_j_from_global_i(this_i,op2->dag,&this_j,&val,-1); // Get the corresponding j and val for op1
+    op_val = val*op_val;
+    this_i = this_j;
+    // a^t
+    _get_val_j_from_global_i(this_i,op1->dag,&this_j,&val,-1); // Get the corresponding j and val for op2
+    op_val = val*op_val;
+    this_i = this_j;
+    // a
+    _get_val_j_from_global_i(this_i,op1,&this_j,&val,-1); // Get the corresponding j and val for op2
+    op_val = val*op_val;
+    this_i = this_j;
+    // b
+    _get_val_j_from_global_i(this_i,op2,&this_j,&val,-1); // Get the corresponding j and val for op2
+    op_val = val*op_val;
+    this_i = this_j;
+
+    if (PetscAbsComplex(op_val)!=0) {
+      //Add to matrix if appropriate
+      MatSetValue(matrix,i,this_i,op_val,ADD_VALUES);
+    }
+
+    /* Now get
+     * (C^t C)* cross I = (b^t a^t a b)* cross I
+     * since C = a b, and a = op1, b = op2
+     */
+    this_i = i; // The leading index which we check
+    op_val = -0.5*a;
+
+    // b^t
+    _get_val_j_from_global_i(this_i,op2->dag,&this_j,&val,1); // Get the corresponding j and val for op1
+    op_val = val*op_val;
+    this_i = this_j;
+    // a^t
+    _get_val_j_from_global_i(this_i,op1->dag,&this_j,&val,1); // Get the corresponding j and val for op2
+    op_val = val*op_val;
+    this_i = this_j;
+    // a
+    _get_val_j_from_global_i(this_i,op1,&this_j,&val,1); // Get the corresponding j and val for op2
+    op_val = val*op_val;
+    this_i = this_j;
+    // b
+    _get_val_j_from_global_i(this_i,op2,&this_j,&val,1); // Get the corresponding j and val for op2
+    op_val = val*op_val;
+    op_val = PetscConjComplex(op_val);
+    this_i = this_j;
+    if (PetscAbsComplex(op_val)!=0) {
+      //Add to matrix if appropriate
+      MatSetValue(matrix,i,this_i,op_val,ADD_VALUES);
+    }
+
+    /* Now get
+     * C* cross C = a* b* cross a b
+     * since C = a b, and a = op1, b = op2
+     */
+    this_i = i; // The leading index which we check
+    op_val = -0.5*a;
+
+    // a* cross a
+    _get_val_j_from_global_i(this_i,op1,&this_j,&val,0); // Get the corresponding j and val for op1
+    op_val = val*op_val;
+    this_i = this_j;
+    // b* cross b
+    _get_val_j_from_global_i(this_i,op2,&this_j,&val,0); // Get the corresponding j and val for op2
+    op_val = val*op_val;
+    this_i = this_j;
+
+    if (PetscAbsComplex(op_val)!=0) {
+      //Add to matrix if appropriate
+      MatSetValue(matrix,i,this_i,op_val,ADD_VALUES);
+    }
+
+
+  }
+
 
   return;
 }
