@@ -9,6 +9,187 @@
 #include "dm_utilities.h"
 #include <ctype.h>
 
+void quil_read(char filename[],PetscInt *num_qubits,circuit *circ){
+  FILE *fp;
+  int ch = 0,lines=0,finished_allocate=0,num_pragma=0,this_qubit,max_qubit=-1;
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  PetscReal time=1.0;
+
+  fp = fopen(filename,"r");
+
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in projectq_qasm_read!\n");
+    }
+  }
+
+  //Count number of lines
+  while(!feof(fp)){
+    ch = fgetc(fp);
+    if(ch == '\n'){
+      lines++;
+    }
+  }
+  //Rewind file
+  rewind(fp);
+
+  *num_qubits = 0;
+  num_pragma  = 0;
+  this_qubit  = -1;
+  while ((read = getline(&line, &len, fp)) != -1){
+    if (strstr(line,"PRAGMA")){
+      //We will skip pragma lines
+      num_pragma = num_pragma + 1;
+    } else {
+      this_qubit = line[strlen(line) - 2] - '0';
+      if (this_qubit>max_qubit){
+        max_qubit = this_qubit;
+      }
+    }
+  }
+  *num_qubits = max_qubit+1;
+
+  lines = lines - num_pragma;
+
+  create_circuit(circ,lines);
+  rewind(fp); //Rewind the file (again)
+
+  while ((read = getline(&line, &len, fp)) != -1){
+    if (strstr(line,"PRAGMA")){
+      //We will skip pragma lines
+    } else if (strlen(line)>1){
+      _quil_add_gate(line,circ,time);
+      time = time + 1.0;
+    }
+  }
+
+  fclose(fp);
+  if (line) free(line);
+  return;
+}
+
+void _quil_get_angle_pi(char angle_pi[32],PetscReal *angle){
+  char numerator[32],denominator[32];
+  int found_denom=1,i_n,i_d,i,denom,numer,factor;
+  //Gate was printed with 'pi' or 'pi/2'
+  angle_pi[strlen(angle_pi)-1] = 0;
+  factor = 1;
+  //Search for digits
+  i_d = 0;   i_n = 0;
+  denom = 1; numer = 1;
+  for (i=0;angle_pi[i] != '\0'; i++){
+    if (angle_pi[i]=='-'){
+      //Found negative sign
+      factor = -1;
+    } else if (angle_pi[i]=="/") {
+      // Found division; all digits after this
+      // belong to the denominator
+      found_denom = 1;
+    } if (isdigit(angle_pi[i])){
+      if (found_denom==0){
+        //Numerator
+        numerator[i_n] = angle_pi[i];
+        i_n = i_n + 1;
+      } else {
+        //Denominator
+        denominator[i_n] = angle_pi[i];
+        i_d = i_d + 1;
+      }
+    }
+  }
+  if (i_d>0){
+    denom = atoi(denominator);
+  }
+  if (i_n>0){
+    numer = atoi(numerator);
+  }
+  *angle = factor * numer * PETSC_PI / denom;
+  return;
+}
+
+
+void _quil_add_gate(char *line,circuit *circ,PetscReal time){
+  char *token=NULL,*ptr=NULL;
+  const char s[2] = " ";
+  char angle_pi[32];
+  int qubit1=-1,qubit2=-1;
+  PetscReal angle;
+  gate_type my_gate_type;
+  // Split string on " " to separate the gate and the qubits
+  while (token=strsep(&line," ")) {
+    for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+    //FIXME: Not exhaustive
+    if (isdigit(token[0])){
+      // check qubit numbers
+      if (qubit1<0){
+        qubit1 = atoi(token);
+      } else {
+        qubit2 = atoi(token);
+      }
+    } else {
+      // gate types
+      if (strcmp(token,"CNOT")==0){
+        my_gate_type = CNOT;
+      } else if (strcmp(token,"I")==0){
+        my_gate_type = EYE;
+      } else if (strcmp(token,"CZ")==0){
+        my_gate_type = CZ;;
+      } else if (strcmp(token,"H")==0) {
+        my_gate_type = HADAMARD;
+      } else if (strcmp(token,"Z")==0) {
+        my_gate_type = SIGMAZ;
+      } else if (strcmp(token,"X")==0) {
+        my_gate_type = SIGMAX;
+      } else if (strcmp(token,"Y")==0) {
+        my_gate_type = SIGMAY;
+      } else if (strstr(token,"RX")) {
+        my_gate_type = RX;
+        if (strstr(token,"pi")){
+          sscanf(token,"RX(%s)",&angle_pi);
+          _quil_get_angle_pi(angle_pi,&angle);
+        } else {
+          //Not sure if quil prints like this
+          sscanf(token,"RX(%lf)",&angle);
+        }
+      } else if (strstr(token,"RY")) {
+        my_gate_type = RY;
+        if (strstr(token,"pi")){
+          sscanf(token,"RY(%s)",&angle_pi);
+          _quil_get_angle_pi(angle_pi,&angle);
+        } else {
+          //Not sure if quil prints like this
+          sscanf(token,"RY(%lf)",&angle);
+        }
+      } else if (strstr(token,"RZ")) {
+        if (strstr(token,"pi")){
+          sscanf(token,"RZ(%s)",&angle_pi);
+          _quil_get_angle_pi(angle_pi,&angle);
+        } else {
+          //Not sure if quil prints like this
+          sscanf(token,"RZ(%lf)",&angle);
+        }
+        my_gate_type = RZ;
+      }
+    }
+  }
+
+  if (qubit2>0){
+    //Multiqubit gate
+    add_gate_to_circuit(circ,time,my_gate_type,qubit1,qubit2);
+  } else {
+    //Single qubit gate
+    if (my_gate_type==6||my_gate_type==7||my_gate_type==8){
+      //Rotation gate
+      add_gate_to_circuit(circ,time,my_gate_type,qubit1,angle);
+    } else {
+      add_gate_to_circuit(circ,time,my_gate_type,qubit1);
+    }
+  }
+  return;
+}
+
 void projectq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
   FILE *fp;
   int ch = 0,lines=0,finished_allocate=0;
