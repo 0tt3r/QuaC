@@ -184,13 +184,12 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
    * If it is a raising operator, it is sub diagonal.
    */
 
-  if (tensor_control!= 0) {
+  if (tensor_control!=0) {
     if (tensor_control==1) {
       extra_after = total_levels;
     } else {
       extra_after = 1;
     }
-
     n_after = total_levels/(this_op->my_levels*this_op->n_before)*extra_after;
     i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
 
@@ -371,6 +370,97 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
 
     /* Now, get js for U (i2) by calling this function */
     _get_val_j_from_global_i(i2,this_op,&j_i2,&val_i2,-1);
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *j = total_levels * j_i1 + j_i2;
+    *val = val_i1*val_i2;
+  }
+  return;
+}
+
+void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this_op2,PetscInt *j,PetscScalar *val,PetscInt tensor_control){
+  PetscInt i_sub,n_after,tmp_int,k1,k2,extra_after,j_i1,j_i2,i1,i2;
+  PetscScalar val_i1,val_i2;
+
+  /*
+   * We store our vec operators as location only.
+   * we use the stored information to calculate the global j location
+   * and nonzero value for a given global i
+   */
+
+  //Check for correct operator types
+  if (this_op1->my_op_type!=VEC||this_op2->my_op_type!=VEC) {
+    if (nid==0){
+      printf("ERROR! Only Vec Operators are allowed in _get_val_j_from_global_i_vec_vec\n");
+      exit(0);
+    }
+  }
+
+  //Check that both operators are from the super hilbert space
+  if (this_op1->n_before!=this_op2->n_before) {
+    if (nid==0){
+      printf("ERROR! Vec Operators must be from the same Hilbert subspace in _get_val_j_from_global_i_vec_vec\n");
+      exit(0);
+    }
+  }
+
+
+  if (tensor_control!= 0) {
+    if (tensor_control==1) {
+      extra_after = total_levels;
+    } else {
+      extra_after = 1;
+    }
+
+    /*
+     * Because this is a vec vec, there is only one location in the subspace;
+     * namely, since it is |vec1><vec2|, i_s is the position of vec1 and
+     * j_s is the position of vec2.
+     *
+     * If the global lines up with this, we return the global j. If
+     * not, we return -1.
+     */
+
+    n_after = total_levels/(this_op1->my_levels*this_op1->n_before)*extra_after;
+    i_sub = i/n_after%this_op1->my_levels; //Use integer arithmetic to get floor function
+    if (i_sub==this_op1->position){
+      tmp_int = i - i_sub * n_after;
+      k2      = tmp_int/(this_op1->my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(this_op1->my_levels*n_after);
+      *j = this_op2->position * n_after + k1 + k2*this_op1->my_levels*n_after;
+    } else {
+      //There is no nonzero value for given global i; return -1 as flag
+      *j = -1;
+      *val = 0.0;
+    }
+    if (tensor_control==1){
+      //Take complex conjugate of answer
+      *val = PetscConjComplex(*val);
+    }
+  } else {
+    /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/total_levels;
+    i2 = i%total_levels;
+
+    /* Now, get js for U* (i1) by calling this function */
+    _get_val_j_from_global_i_vec_vec(i1,this_op1,this_op2,&j_i1,&val_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    _get_val_j_from_global_i_vec_vec(i2,this_op1,this_op2,&j_i2,&val_i2,-1);
 
     /*
      * Combine j's to get U* cross U
@@ -686,6 +776,7 @@ void _add_to_dense_kron_ij(PetscScalar a,int i_op,int j_op,
   }
 
 }
+
 
 /*
  * _add_to_PETSc_kron expands an operator given a Hilbert space size
