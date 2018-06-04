@@ -22,7 +22,9 @@ typedef struct operator{
   struct operator **vec_op_list;
 
 } *operator;
+
 typedef operator *vec_op; /* Treat vec_op as an array of operators  */
+
 typedef struct time_dep_struct{
   double (*time_dep_func)(double);
   double last_scalar;
@@ -34,6 +36,11 @@ typedef struct time_dep_struct{
 
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
+
+void add_to_ham_p(PetscScalar,PetscInt,...);
+
+
+
 void add_to_ham(PetscScalar,operator);
 void add_to_ham_stiff(PetscScalar,operator);
 void add_to_ham_time_dep(double(*pulse)(double),int,...);
