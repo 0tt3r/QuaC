@@ -38,7 +38,7 @@ void create_op(int,operator*);
 void create_vec(int,vec_op*);
 
 void add_to_ham_p(PetscScalar,PetscInt,...);
-
+void add_lin_p(PetscScalar,PetscInt,...);
 
 
 void add_to_ham(PetscScalar,operator);
