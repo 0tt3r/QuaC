@@ -1164,7 +1164,7 @@ void get_populations(Vec x,double **populations) {
 void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...){
   va_list ap;
   operator *op;
-  PetscInt i,j,this_i,this_j,my_j_start,my_j_end,my_start,my_end,dim,dm_size;
+  PetscInt i,j,this_i,this_j,my_j_start,my_j_end,my_start,my_end,dim,dm_size,j_op_tmp;
   PetscInt this_loc;
   PetscScalar dm_element,val,op_val;
 
@@ -1231,7 +1231,24 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<number_of_ops;j++){
-      _get_val_j_from_global_i(this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
+      if(op[j]->my_op_type==VEC){
+        /*
+         * Since this is a VEC operator, the next operator must also
+         * be a VEC operator; it is assumed they always come in pairs.
+         */
+        if (op[j+1]->my_op_type!=VEC){
+          if (nid==0){
+            printf("ERROR! VEC operators must come in pairs in get_expectation_value\n");
+            exit(0);
+          }
+        }
+        _get_val_j_from_global_i_vec_vec(this_i,op[j],op[j+1],&this_j,&val,-1);
+        //Increment j
+        j=j+1;
+      } else {
+        //Standard operator
+        _get_val_j_from_global_i(this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
+      }
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i
