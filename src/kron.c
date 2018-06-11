@@ -375,8 +375,14 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
      * Combine j's to get U* cross U
      * Must do all possible permutations
      */
-    *j = total_levels * j_i1 + j_i2;
-    *val = val_i1*val_i2;
+    if (j_i1==-1||j_i2==-1){
+      *j = -1;
+      *val = 0;
+    } else {
+      *j = total_levels * j_i1 + j_i2;
+      *val = val_i1*val_i2;
+    }
+
   }
   return;
 }
