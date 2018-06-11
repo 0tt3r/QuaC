@@ -763,7 +763,7 @@ void add_lin_p(PetscScalar a,PetscInt num_ops,...){
           //Increment j
           j=j+1;
 
-          //-1 means that it was 0 on a past operator multiplication, so we skip it if it is -1
+          //-1 for this_j* means that it was 0 on a past operator multiplication, so we skip it if it is -1
           if (this_j_ig!=-1){
             //Get I cross G
             _get_val_j_from_global_i_vec_vec(this_j_ig,this_op1,this_op2,&j_ig,&tmp_val,-1);
