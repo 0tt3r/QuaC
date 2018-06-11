@@ -1604,6 +1604,15 @@ void combine_circuit_to_super_mat(Mat *matrix_out,circuit circ){
 }
 
 
+/*
+ * No issue for js_i* = -1 because every row is guaranteed to have a 0
+ * in all the gates implemented below.
+ * See commit: 9956c78171fdac1fa0ef9e2f0a39cbffd4d755dc where this was an issue
+ * in _get_val_j_from_global_i for raising / lowering / number operators, where
+ * -1 was used to say there was no nonzero in that row.
+ */
+
+
 void CNOT_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                   PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
   PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[2],js_i2[2];
