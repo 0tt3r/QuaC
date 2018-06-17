@@ -10,7 +10,6 @@
 /* TODO? :
  * - put wrappers into quac.h
  * - variable number of arguments to add_to_ham and add_lin
- * - add_to_ham_mult4 for coupling between two vec subsystems
  * - add PetscLog for getting setup time
  * - check if input DM is a valid DM (trace, hermitian, etc)
  */
@@ -231,7 +230,7 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
  * add_to_ham_p adds a*op1*op2*...*opn to the hamiltonian
  * Inputs:
  *        PetscScalar a:    scalar to multiply op(s)
- *        PetscIng    num_ops:    number of ops in the list (can be vecs)
+ *        PetscInt    num_ops:    number of ops in the list (can be vecs)
  *        operator op1...: operators to multiply together and add
  * Outputs:
  *        none
@@ -267,7 +266,7 @@ void add_to_ham_p(PetscScalar a,PetscInt num_ops,...){
           this_op2 = va_arg(ap,operator);
           if (this_op2->my_op_type!=VEC){
             if (nid==0){
-              printf("ERROR! VEC operators must come in pairs in _add_to_PETSc_kron_parallel\n");
+              printf("ERROR! VEC operators must come in pairs in add_to_ham_p\n");
               exit(0);
             }
           }
