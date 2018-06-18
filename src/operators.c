@@ -270,15 +270,24 @@ void add_to_ham_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
  *        none
  */
 void add_to_ham_p(PetscScalar a,PetscInt num_ops,...){
-  va_list     ap;
-
+  va_list  ap;
+  operator *ops;
+  int      i;
   PetscLogEventBegin(add_to_ham_event,0,0,0,0);
   _check_initialized_A();
 
   if (PetscAbsComplex(a)!=0) { //Don't add zero numbers to the hamiltonian
-    va_start(ap,num_ops);
-    _add_ops_to_mat_ham(a,full_A,num_ops,ap);
+     ops = malloc(num_ops*sizeof(struct operator));
+
+     va_start(ap,num_ops);
+    //Loop through operators, store them
+    for (i=0;i<num_ops;i++){
+      ops[i] = va_arg(ap,operator);
+    }
     va_end(ap);
+
+    _add_ops_to_mat_ham(a,full_A,num_ops,ops);
+    free(ops);
   }
   PetscLogEventEnd(add_to_ham_event,0,0,0,0);
   return;

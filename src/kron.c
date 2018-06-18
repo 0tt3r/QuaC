@@ -684,19 +684,19 @@ void _get_val_j_from_global_i_lin_vec_vec(PetscInt i,operator this_op1,operator 
 
 
 
-void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,va_list ap){
+void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,j,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend;
   PetscScalar    val_ig,val_gi,tmp_val;
   PetscScalar add_to_mat;
-  operator    this_op1,this_op2,*ops;
+  operator    this_op1,this_op2;
 
   MatGetOwnershipRange(A,&Istart,&Iend);
 
-  ops = malloc(num_ops*sizeof(struct operator));
+  //  ops = malloc(num_ops*sizeof(struct operator));
   //Loop through operators, store them
-  for (j=0;j<num_ops;j++){
-    ops[j] = va_arg(ap,operator);
-  }
+  /* for (j=0;j<num_ops;j++){ */
+  /*   ops[j] = va_arg(ap,operator); */
+  /* } */
 
   for (i=Istart;i<Iend;i++){
     this_j_ig = i;
@@ -765,7 +765,7 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,va_list ap){
       MatSetValue(A,this_j_gi,i,add_to_mat,ADD_VALUES);
     }
   }
-  free(ops);
+  //  free(ops);
   return;
 }
 
