@@ -17,6 +17,7 @@ static int       matrix_assembled = 0;
 
 
 PetscErrorCode _RHS_time_dep_ham(TS,PetscReal,Vec,Mat,Mat,void*); // Move to header?
+PetscErrorCode _RHS_time_dep_ham_p(TS,PetscReal,Vec,Mat,Mat,void*); // Move to header?
 
 PetscErrorCode (*_ts_monitor)(TS,PetscInt,PetscReal,Vec,void*) = NULL;
 
@@ -236,6 +237,7 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   TS             ts; /* timestepping context */
   PetscInt       i,j,Istart,Iend,steps,row,col;
   PetscScalar    mat_tmp;
+  PetscReal      tmp_real;
   Mat            AA;
   PetscInt       nevents,direction;
   PetscBool      terminate;
@@ -363,27 +365,8 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
 
   if(_num_time_dep) {
     for(i=0;i<_num_time_dep;i++){
-      for(j=0;j<_time_dep_list[i].num_ops;j++){
-        op = _time_dep_list[i].ops[j];
-        if (_lindblad_terms) {
-          /*
-           * Add 0 terms to the hamiltonian where the time dependent
-           * H terms will be. This allows PETSc to be more efficient later
-           */
-          /* Add -i *(I cross H(t)) */
-          mat_tmp = 0.0 + 0.0*PETSC_i;
-          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
-                             op->my_op_type,op->position,total_levels,1,0);
-          /* Add i *(H(t)^T cross I) */
-          mat_tmp = 0.0 + 0.0*PETSC_i;
-          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
-                             op->my_op_type,op->position,1,total_levels,1);
-        } else {
-          mat_tmp = 0.0 + 0.0*PETSC_i;
-          _add_to_PETSc_kron(solve_A,mat_tmp,op->n_before,op->my_levels,
-                             op->my_op_type,op->position,1,1,0);
-        }
-      }
+      tmp_real = 0.0;
+      _add_ops_to_mat_ham(tmp_real,solve_A,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
     }
     /* Tell PETSc to assemble the matrix */
     MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
@@ -394,7 +377,7 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
 
-    TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham,NULL);
+    TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_p,NULL);
   } else {
     /* Tell PETSc to assemble the matrix */
     MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
@@ -415,13 +398,13 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   /* Print information about the matrix. */
   PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
   PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  
+  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); */
+  /* MatView(solve_A,mat_view); */
+
   /* PetscInt          ncols; */
   /* const PetscInt    *cols; */
   /* const PetscScalar *vals; */
 
-  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); */
-  /* MatView(solve_A,mat_view); */
   /* for(i=0;i<total_levels*total_levels;i++){ */
   /*   MatGetRow(solve_A,i,&ncols,&cols,&vals); */
   /*   for (j=0;j<ncols;j++){ */
@@ -572,6 +555,38 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
 
   MatAssemblyBegin(BB,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(BB,MAT_FINAL_ASSEMBLY);
+  if(AA!=BB) {
+    MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
+  }
+
+  PetscFunctionReturn(0);
+}
+
+/*
+ * _RHS_time_dep_ham_p adds the (user created) time dependent functions
+ * to the time independent hamiltonian. It is used internally by PETSc
+ * during time stepping.
+ */
+
+PetscErrorCode _RHS_time_dep_ham_p(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx){
+  double time_dep_val;
+  PetscScalar time_dep_scalar;
+  int i,j;
+  operator op;
+
+  MatZeroEntries(BB);
+
+  MatCopy(full_A,BB,SAME_NONZERO_PATTERN);
+
+  for (i=0;i<_num_time_dep;i++){
+    time_dep_val = _time_dep_list[i].time_dep_func(t);
+    _add_ops_to_mat_ham(time_dep_val,BB,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
+  }
+
+  MatAssemblyBegin(BB,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(BB,MAT_FINAL_ASSEMBLY);
+
   if(AA!=BB) {
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);

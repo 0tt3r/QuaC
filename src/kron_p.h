@@ -18,7 +18,7 @@ void _get_val_j_from_global_i_lin_vec_vec(PetscInt,operator,operator,
 
 
 void _add_ops_to_mat_ham(PetscScalar,Mat,PetscInt,operator*);
-
+void _add_ops_to_mat_lin(PetscScalar,Mat,PetscInt,operator*);
 
 void   _add_to_PETSc_kron(Mat,PetscScalar,int,int,op_type,int,int,int,int);
 void   _add_to_PETSc_kron_comb(Mat,PetscScalar,int,int,op_type,int,int,int,

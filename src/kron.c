@@ -692,12 +692,6 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
 
   MatGetOwnershipRange(A,&Istart,&Iend);
 
-  //  ops = malloc(num_ops*sizeof(struct operator));
-  //Loop through operators, store them
-  /* for (j=0;j<num_ops;j++){ */
-  /*   ops[j] = va_arg(ap,operator); */
-  /* } */
-
   for (i=Istart;i<Iend;i++){
     this_j_ig = i;
     this_j_gi = i;
@@ -713,7 +707,7 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
         this_op2 = ops[j+1];
         if (this_op2->my_op_type!=VEC){
           if (nid==0){
-            printf("ERROR! VEC operators must come in pairs in add_to_ham_p\n");
+            printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_ham\n");
             exit(0);
           }
         }
@@ -765,9 +759,137 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
       MatSetValue(A,this_j_gi,i,add_to_mat,ADD_VALUES);
     }
   }
-  //  free(ops);
+
   return;
 }
+
+void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
+  PetscInt i,j,j_ig,j_gi,j_gg,this_j_ig,this_j_gi,Istart,Iend,this_j_gg;
+  PetscScalar    val_ig,val_gi,val_gg,tmp_val;
+  PetscScalar add_to_mat;
+  operator    this_op1,this_op2;
+
+  MatGetOwnershipRange(A,&Istart,&Iend);
+  for (i=Istart;i<Iend;i++){
+    this_j_ig = i;
+    this_j_gi = i;
+    this_j_gg = i;
+    val_ig = 1.0;
+    val_gi = 1.0;
+    val_gg = 1.0;
+    //Loop through operators
+    for (j=0;j<num_ops;j++){
+      this_op1 = ops[j];
+
+      if(this_op1->my_op_type==VEC){
+        /*
+         * Since this is a VEC operator, the next operator must also
+         * be a VEC operator; it is assumed they always come in pairs.
+         */
+        this_op2 = ops[j+1];
+        if (this_op2->my_op_type!=VEC){
+          if (nid==0){
+            printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_lin\n");
+            exit(0);
+          }
+        }
+        //Increment j
+        j=j+1;
+
+        //-1 for this_j* means that it was 0 on a past operator multiplication, so we skip it if it is -1
+        if (this_j_ig!=-1){
+          //Get I cross G
+          _get_val_j_from_global_i_vec_vec(this_j_ig,this_op1,this_op2,&j_ig,&tmp_val,-1);
+          this_j_ig = j_ig;
+          val_ig = tmp_val * val_ig;
+        }
+
+        if (this_j_gi!=-1){
+          //Get G* cross I
+          _get_val_j_from_global_i_vec_vec(this_j_gi,this_op1,this_op2,&j_gi,&tmp_val,1);
+          this_j_gi = j_gi;
+          val_gi = tmp_val * val_gi;
+        }
+
+        if (this_j_gg!=-1){
+          //Get G* cross I
+          _get_val_j_from_global_i_vec_vec(this_j_gg,this_op1,this_op2,&j_gg,&tmp_val,0);
+          this_j_gg = j_gg;
+          val_gg = tmp_val * val_gg;
+        }
+
+      } else {
+        //Normal operator
+        if (this_j_ig!=-1){
+          //Get I cross G
+          _get_val_j_from_global_i(this_j_ig,this_op1,&j_ig,&tmp_val,-1);
+          this_j_ig = j_ig;
+          val_ig = tmp_val * val_ig;
+        }
+
+        if (this_j_gi!=-1){
+          //Get G* cross I
+          _get_val_j_from_global_i(this_j_gi,this_op1,&j_gi,&tmp_val,1);
+          this_j_gi = j_gi;
+          val_gi = tmp_val * val_gi;
+        }
+
+        if (this_j_gg!=-1){
+          //Get G* cross I
+          _get_val_j_from_global_i(this_j_gg,this_op1,&j_gg,&tmp_val,0);
+          this_j_gg = j_gg;
+          val_gg = tmp_val * val_gg;
+        }
+
+      }
+    }
+    /*
+     * From above, we only have I cross G = I cross G1 G2 ... Gn
+     * But, we really need is
+     * I cross (G1 G2 ... Gn)^t G1 G2 ... Gn
+     *
+     * First, get I cross G^t G by taking:
+     * (G^t G)_{ij} = sum_k G_^t_{ik}G_{kj}
+     * but, only one value per row:
+     *              = G^t_{ik} G_{kj}
+     *              = G_ki* G_kj
+     * but, again, only one value per row, so i=j
+     *              = G_ki* G_ki
+     * Generally, have G_ik; that is fine, we just
+     * end up calculating G_kk instead of G_ii - so,
+     * maybe we don't own it, but PETSc will figure it out
+     */
+
+    /*
+     * Add (I cross G^t G)
+     */
+    if (this_j_ig!=-1){
+      add_to_mat = -0.5*a*PetscConjComplex(val_ig)*val_ig;
+      MatSetValue(full_A,this_j_ig,this_j_ig,add_to_mat,ADD_VALUES);
+    }
+
+    /*
+     * Add ((G^t G)* cross I)
+     */
+    if (this_j_gi!=-1){
+      //The second conjugate is redundant here?
+      add_to_mat = -0.5*a*PetscConjComplex(val_gi)*val_gi;
+      MatSetValue(full_A,this_j_gi,this_j_gi,add_to_mat,ADD_VALUES);
+    }
+    /*
+     * Add (G* cross G) to the superoperator matrix, A
+     */
+    if (this_j_gg!=-1){
+      //The second conjugate is redundant here?
+      add_to_mat = a*val_gg;
+      MatSetValue(full_A,i,this_j_gg,add_to_mat,ADD_VALUES);
+    }
+  }
+
+  return;
+}
+
+
 
 
 /*
