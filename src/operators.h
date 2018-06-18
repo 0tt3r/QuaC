@@ -27,7 +27,6 @@ typedef operator *vec_op; /* Treat vec_op as an array of operators  */
 
 typedef struct time_dep_struct{
   double (*time_dep_func)(double);
-  double last_scalar;
   operator *ops;
   int num_ops;
   Mat mat;
