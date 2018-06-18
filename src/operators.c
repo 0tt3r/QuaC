@@ -225,6 +225,40 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
   return;
 }
 
+/*
+ * add_to_ham_time_dep_p adds a(t)*op to the time dependent hamiltonian list
+ * Inputs:
+ *        double (*time_dep_func)(double): time dependent function to multiply op
+ *        PetscInt    num_ops:    number of ops in the list (can be vecs)
+ *        operator op1...: operators to multiply together and add
+ * Outputs:
+ *        none
+ */
+void add_to_ham_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
+  PetscInt    i;
+  operator    op;
+  va_list     ap;
+  _check_initialized_A();
+
+  /*
+   * Create the new PETSc matrix.
+   * These matrices are incredibly sparse (1 to 2 per row)
+   */
+
+  _time_dep_list[_num_time_dep].time_dep_func = time_dep_func;
+  _time_dep_list[_num_time_dep].num_ops       = num_ops;
+  _time_dep_list[_num_time_dep].ops = malloc(num_ops*sizeof(operator));
+
+  //Add the expanded op to the matrix
+  va_start(ap,num_ops);
+  for (i=0;i<num_ops;i++){
+    op = va_arg(ap,operator);
+    _time_dep_list[_num_time_dep].ops[i] = op;
+  }
+  _num_time_dep = _num_time_dep + 1;
+  return;
+}
+
 
 /*
  * add_to_ham_p adds a*op1*op2*...*opn to the hamiltonian
@@ -237,87 +271,14 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
  */
 void add_to_ham_p(PetscScalar a,PetscInt num_ops,...){
   va_list     ap;
-  PetscInt i,j,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend;
-  PetscScalar    val_ig,val_gi,tmp_val;
-  PetscScalar add_to_mat;
-  operator    this_op1,this_op2;
 
   PetscLogEventBegin(add_to_ham_event,0,0,0,0);
   _check_initialized_A();
 
-  MatGetOwnershipRange(full_A,&Istart,&Iend);
-
   if (PetscAbsComplex(a)!=0) { //Don't add zero numbers to the hamiltonian
-    for (i=Istart;i<Iend;i++){
-      this_j_ig = i;
-      this_j_gi = i;
-      val_ig = 1.0;
-      val_gi = 1.0;
-      //Loop through operators
-      va_start(ap,num_ops);
-      for (j=0;j<num_ops;j++){
-        this_op1 = va_arg(ap,operator);
-
-        if(this_op1->my_op_type==VEC){
-          /*
-           * Since this is a VEC operator, the next operator must also
-           * be a VEC operator; it is assumed they always come in pairs.
-           */
-          this_op2 = va_arg(ap,operator);
-          if (this_op2->my_op_type!=VEC){
-            if (nid==0){
-              printf("ERROR! VEC operators must come in pairs in add_to_ham_p\n");
-              exit(0);
-            }
-          }
-          //Increment j
-          j=j+1;
-
-          //-1 means that it was 0 on a past operator multiplication, so we skip it if it is -1
-          if (this_j_ig!=-1){
-            //Get i cross G
-            _get_val_j_from_global_i_vec_vec(this_j_ig,this_op1,this_op2,&j_ig,&tmp_val,-1);
-            this_j_ig = j_ig;
-            val_ig = tmp_val * val_ig;
-          }
-
-          if (this_j_gi!=-1){
-            //Get G* cross I
-            _get_val_j_from_global_i_vec_vec(this_j_gi,this_op1,this_op2,&j_gi,&tmp_val,1);
-            this_j_gi = j_gi;
-            val_gi = tmp_val * val_gi;
-          }
-
-        } else {
-          //Normal operator
-          if (this_j_ig!=-1){
-            //Get i cross G
-            _get_val_j_from_global_i(this_j_ig,this_op1,&j_ig,&tmp_val,-1);
-            this_j_ig = j_ig;
-            val_ig = tmp_val * val_ig;
-          }
-
-          if (this_j_gi!=-1){
-            //Get G* cross I
-            _get_val_j_from_global_i(this_j_gi,this_op1,&j_gi,&tmp_val,1);
-            this_j_gi = j_gi;
-            val_gi = tmp_val * val_gi;
-          }
-        }
-      }
-      va_end(ap);
-      //Add -i * I cross G_1 G_2 ... G_n
-
-      if (this_j_ig!=-1){
-        add_to_mat = -a*PETSC_i*val_ig;
-        MatSetValue(full_A,i,this_j_ig,add_to_mat,ADD_VALUES);
-      }
-      //Add i * G_1*T G_2*T ... G_n*T cross I
-      if (this_j_gi!=-1){
-        add_to_mat = a*PETSC_i*val_gi;
-        MatSetValue(full_A,this_j_gi,i,add_to_mat,ADD_VALUES);
-      }
-    }
+    va_start(ap,num_ops);
+    _add_ops_to_mat_ham(a,full_A,num_ops,ap);
+    va_end(ap);
   }
   PetscLogEventEnd(add_to_ham_event,0,0,0,0);
   return;
