@@ -251,7 +251,7 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   PetscLogStagePush(solve_stage);
   if (_lindblad_terms) {
     if (nid==0) {
-      //printf("Lindblad terms found, using Lindblad solver.\n");
+      printf("Lindblad terms found, using Lindblad solver.\n");
     }
     solve_A = full_A;
     if (_stiff_solver) {
@@ -363,15 +363,22 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
     if(nid==0) printf("Using stiff solver - TSROSW\n");
   }
 
-  if(_num_time_dep) {
+  if(_num_time_dep+_num_time_dep_lin) {
+
     for(i=0;i<_num_time_dep;i++){
       tmp_real = 0.0;
       _add_ops_to_mat_ham(tmp_real,solve_A,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
     }
+
+    for(i=0;i<_num_time_dep_lin;i++){
+      tmp_real = 0.0;
+      _add_ops_to_mat_lin(tmp_real,solve_A,_time_dep_list_lin[i].num_ops,_time_dep_list_lin[i].ops);
+    }
+
     /* Tell PETSc to assemble the matrix */
     MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
-    //    if (nid==0) printf("Matrix Assembled.\n");
+    if (nid==0) printf("Matrix Assembled.\n");
 
     MatDuplicate(solve_A,MAT_COPY_VALUES,&AA);
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
@@ -494,7 +501,7 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
 
   /* Free work space */
   TSDestroy(&ts);
-  if(_num_time_dep){
+  if(_num_time_dep+_num_time_dep_lin){
     MatDestroy(&AA);
   }
   free(populations);
@@ -530,9 +537,9 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
   int i,j;
   operator op;
 
-  MatZeroEntries(BB);
+  MatZeroEntries(AA);
 
-  MatCopy(full_A,BB,SAME_NONZERO_PATTERN);
+  MatCopy(full_A,AA,SAME_NONZERO_PATTERN);
 
   for (i=0;i<_num_time_dep;i++){
     time_dep_val = _time_dep_list[i].time_dep_func(t);
@@ -541,20 +548,20 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
 
       /* Add -i *(I cross H(t)) */
       time_dep_scalar = 0 - time_dep_val*PETSC_i;
-      _add_to_PETSc_kron(BB,time_dep_scalar,op->n_before,op->my_levels,
+      _add_to_PETSc_kron(AA,time_dep_scalar,op->n_before,op->my_levels,
                          op->my_op_type,op->position,total_levels,1,0);
 
       /* Add i *(H(t)^T cross I) */
       time_dep_scalar = 0 + time_dep_val*PETSC_i;
-      _add_to_PETSc_kron(BB,time_dep_scalar,op->n_before,op->my_levels,
+      _add_to_PETSc_kron(AA,time_dep_scalar,op->n_before,op->my_levels,
                          op->my_op_type,op->position,1,total_levels,1);
 
     }
     /* Consider putting _time_dep_func and _time_dep_mats in *ctx? */
   }
 
-  MatAssemblyBegin(BB,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(BB,MAT_FINAL_ASSEMBLY);
+  MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
   if(AA!=BB) {
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
@@ -575,17 +582,22 @@ PetscErrorCode _RHS_time_dep_ham_p(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *c
   int i,j;
   operator op;
 
-  MatZeroEntries(BB);
+  MatZeroEntries(AA);
 
-  MatCopy(full_A,BB,SAME_NONZERO_PATTERN);
+  MatCopy(full_A,AA,SAME_NONZERO_PATTERN);
 
   for (i=0;i<_num_time_dep;i++){
     time_dep_val = _time_dep_list[i].time_dep_func(t);
-    _add_ops_to_mat_ham(time_dep_val,BB,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
+    _add_ops_to_mat_ham(time_dep_val,AA,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
   }
 
-  MatAssemblyBegin(BB,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(BB,MAT_FINAL_ASSEMBLY);
+  for (i=0;i<_num_time_dep_lin;i++){
+    time_dep_val = _time_dep_list_lin[i].time_dep_func(t);
+    _add_ops_to_mat_lin(time_dep_val,AA,_time_dep_list_lin[i].num_ops,_time_dep_list_lin[i].ops);
+  }
+
+  MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
 
   if(AA!=BB) {
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);

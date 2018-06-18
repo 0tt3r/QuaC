@@ -39,7 +39,7 @@ void create_vec(int,vec_op*);
 void add_to_ham_p(PetscScalar,PetscInt,...);
 void add_lin_p(PetscScalar,PetscInt,...);
 void add_to_ham_time_dep_p(double (*)(double),int,...);
-
+void add_lin_time_dep_p(double (*)(double),int,...);
 
 
 void add_to_ham(PetscScalar,operator);
@@ -56,10 +56,13 @@ void add_lin_mult2(PetscScalar,operator,operator);
 void print_dense_ham();
 void set_initial_pop(operator,double);
 void combine_ops_to_mat(Mat*,int,...);
+
 extern int nid; /* a ranks id */
 extern int np; /* number of processors */
 #define MAX_SUB 100  //Consider making this not a define
 extern operator subsystem_list[MAX_SUB];
+
 extern time_dep_struct _time_dep_list[MAX_SUB];
+extern time_dep_struct _time_dep_list_lin[MAX_SUB];
 
 #endif

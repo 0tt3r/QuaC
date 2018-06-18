@@ -28,7 +28,9 @@ int num_subsystems;
 operator subsystem_list[MAX_SUB];
 int _print_dense_ham = 0;
 int _num_time_dep = 0;
+int _num_time_dep_lin = 0;
 time_dep_struct _time_dep_list[MAX_SUB];
+time_dep_struct _time_dep_list_lin[MAX_SUB];
 PetscScalar **_hamiltonian;
 
 /*
@@ -259,6 +261,30 @@ void add_to_ham_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
   return;
 }
 
+void add_lin_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
+  PetscInt    i;
+  operator    op;
+  va_list     ap;
+  _check_initialized_A();
+  _lindblad_terms = 1;
+  /*
+   * Create the new PETSc matrix.
+   * These matrices are incredibly sparse (1 to 2 per row)
+   */
+
+  _time_dep_list_lin[_num_time_dep_lin].time_dep_func = time_dep_func;
+  _time_dep_list_lin[_num_time_dep_lin].num_ops       = num_ops;
+  _time_dep_list_lin[_num_time_dep_lin].ops = malloc(num_ops*sizeof(operator));
+
+  //Add the expanded op to the matrix
+  va_start(ap,num_ops);
+  for (i=0;i<num_ops;i++){
+    op = va_arg(ap,operator);
+    _time_dep_list_lin[_num_time_dep_lin].ops[i] = op;
+  }
+  _num_time_dep_lin = _num_time_dep_lin + 1;
+  return;
+}
 
 /*
  * add_to_ham_p adds a*op1*op2*...*opn to the hamiltonian
@@ -707,11 +733,10 @@ void add_lin_p(PetscScalar a,PetscInt num_ops,...){
   PetscLogEventBegin(add_lin_event,0,0,0,0);
   _check_initialized_A();
   _lindblad_terms = 1;
-  /* MatGetOwnershipRange(full_A,&Istart,&Iend); */
-  if (PetscAbsComplex(a)!=0){
-    
-    ops = malloc(num_ops*sizeof(struct operator));
 
+  if (PetscAbsComplex(a)!=0){
+
+    ops = malloc(num_ops*sizeof(struct operator));
     va_start(ap,num_ops);
     //Loop through operators, store them
     for (i=0;i<num_ops;i++){

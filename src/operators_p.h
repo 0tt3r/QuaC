@@ -19,6 +19,7 @@ void _check_initialized_A();
 void _check_initialized_op();
 
 extern int  _num_time_dep;
+extern int  _num_time_dep_lin;
 extern Mat  full_A,full_stiff_A;
 extern Mat  ham_A,ham_stiff_A;
 extern int  op_finalized;
