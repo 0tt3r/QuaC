@@ -865,7 +865,7 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
      */
     if (this_j_ig!=-1){
       add_to_mat = -0.5*a*PetscConjComplex(val_ig)*val_ig;
-      MatSetValue(full_A,this_j_ig,this_j_ig,add_to_mat,ADD_VALUES);
+      MatSetValue(A,this_j_ig,this_j_ig,add_to_mat,ADD_VALUES);
     }
 
     /*
@@ -874,7 +874,7 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
     if (this_j_gi!=-1){
       //The second conjugate is redundant here?
       add_to_mat = -0.5*a*PetscConjComplex(val_gi)*val_gi;
-      MatSetValue(full_A,this_j_gi,this_j_gi,add_to_mat,ADD_VALUES);
+      MatSetValue(A,this_j_gi,this_j_gi,add_to_mat,ADD_VALUES);
     }
     /*
      * Add (G* cross G) to the superoperator matrix, A
@@ -882,7 +882,7 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
     if (this_j_gg!=-1){
       //The second conjugate is redundant here?
       add_to_mat = a*val_gg;
-      MatSetValue(full_A,i,this_j_gg,add_to_mat,ADD_VALUES);
+      MatSetValue(A,i,this_j_gg,add_to_mat,ADD_VALUES);
     }
   }
 
