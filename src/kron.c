@@ -1323,7 +1323,12 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
    * hilbert space (l1), giving n_between = n2/(n1*l1)
    *
    */
-  n_between = n_before2/(n_before1*levels1);
+
+  if (n_before2==n_before1){
+    n_between = 1;
+  } else {
+    n_between = n_before2/(n_before1*levels1);
+  }
 
   /*
    * n_before and n_after refer to before and after a cross I_c cross b
