@@ -380,7 +380,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
       *val = 0;
     } else {
       *j = total_levels * j_i1 + j_i2;
-      *val = val_i1*val_i2;
+      *val = PetscConjComplex(val_i1)*val_i2;
     }
 
   }
@@ -478,7 +478,7 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
       *val = 0;
     } else {
       *j = total_levels * j_i1 + j_i2;
-      *val = val_i1*val_i2;
+      *val = PetscConjComplex(val_i1)*val_i2;
     }
   }
   return;
@@ -747,6 +747,7 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
       }
     }
 
+
     //Add -i * I cross G_1 G_2 ... G_n
     if (this_j_ig!=-1){
       add_to_mat = -a*PETSC_i*val_ig;
@@ -755,7 +756,7 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
 
     //Add i * G_1*T G_2*T ... G_n*T cross I
     if (this_j_gi!=-1){
-      add_to_mat = a*PETSC_i*val_gi;
+      add_to_mat = a*PETSC_i*PetscConjComplex(val_gi);
       MatSetValue(A,this_j_gi,i,add_to_mat,ADD_VALUES);
     }
   }
@@ -812,7 +813,7 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
         }
 
         if (this_j_gg!=-1){
-          //Get G* cross I
+          //Get G* cross G
           _get_val_j_from_global_i_vec_vec(this_j_gg,this_op1,this_op2,&j_gg,&tmp_val,0);
           this_j_gg = j_gg;
           val_gg = tmp_val * val_gg;
@@ -835,7 +836,7 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
         }
 
         if (this_j_gg!=-1){
-          //Get G* cross I
+          //Get G* cross G
           _get_val_j_from_global_i(this_j_gg,this_op1,&j_gg,&tmp_val,0);
           this_j_gg = j_gg;
           val_gg = tmp_val * val_gg;
@@ -873,7 +874,7 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
      */
     if (this_j_gi!=-1){
       //The second conjugate is redundant here?
-      add_to_mat = -0.5*a*PetscConjComplex(val_gi)*val_gi;
+      add_to_mat = -0.5*a*PetscConjComplex(PetscConjComplex(val_gi)*val_gi);
       MatSetValue(A,this_j_gi,this_j_gi,add_to_mat,ADD_VALUES);
     }
     /*
@@ -949,6 +950,7 @@ void _add_to_PETSc_kron_ij(Mat matrix,PetscScalar add_to_mat,int i_op,int j_op,
        */
       i_ham = i_op*n_after+k1+k2*my_levels*n_after;
       j_ham = j_op*n_after+k1+k2*my_levels*n_after;
+
       if (i_ham>=Istart&&i_ham<Iend) MatSetValue(matrix,i_ham,j_ham,add_to_mat,ADD_VALUES);
     }
   }
@@ -1338,6 +1340,13 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
   my_levels  = levels1*levels2*n_between;
   n_after    = total_levels/(my_levels*n_before);
 
+  if (n_before2==n_before1){
+    n_after = 1;
+  } else {
+    n_after    = total_levels/(my_levels*n_before);
+  }
+
+
   for (i=0;i<levels1-loop_limit1;i++){
     /*
      * Since we store our operators as a type and number of levels
@@ -1380,6 +1389,7 @@ void _add_to_PETSc_kron_comb(Mat matrix,PetscScalar a,int n_before1,int levels1,
           j_comb = levels2*n_between*j1 + j2;
         }
         add_to_mat = a*val1*val2;
+
         _add_to_PETSc_kron_ij(matrix,add_to_mat,i_comb,j_comb,n_before*extra_before,
                                 n_after*extra_after,my_levels);
       }
