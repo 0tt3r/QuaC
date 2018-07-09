@@ -115,11 +115,12 @@ void _quil_add_gate(char *line,circuit *circ,PetscReal time){
   const char s[2] = " ";
   char angle_pi[32];
   int qubit1=-1,qubit2=-1;
+  size_t i,j;
   PetscReal angle;
   gate_type my_gate_type;
   // Split string on " " to separate the gate and the qubits
   while (token=strsep(&line," ")) {
-    for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+    for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
     //FIXME: Not exhaustive
     if (isdigit(token[0])){
       // check qubit numbers
@@ -259,10 +260,11 @@ void _projectq_qasm_add_gate(char *line,circuit *circ,PetscReal time){
   int qubit1,qubit2;
   PetscReal angle;
   gate_type my_gate_type;
+  size_t i,j;
   // Split string on | to separate gate type and qubits
   while (token=strsep(&line,"|")) {
     //Strip whitespace
-    for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+    for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
     //Do direct strcmp for some, strstr for others
     //FIXME: Not exhaustive
     if (strstr(token,"Qureg")){
@@ -311,7 +313,7 @@ void projectq_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val
   FILE *fp;
   char *token=NULL,*token2=NULL;
   char *line = NULL,gate_char;
-  size_t len = 0;
+  size_t len = 0,i,j;
   ssize_t read;
   int token_number,num_ops,qubit_number;
   operator ops[100];
@@ -330,7 +332,7 @@ void projectq_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val
     while (token=strsep(&line,"[")) {
       if(token_number==0){
         //Strip whitespace
-        for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+        for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
         scalar_multiply = atof(token);
         token_number = 1;
       } else {
@@ -376,7 +378,7 @@ void projectq_vqe_get_expectation_squared(char filename[],Vec rho,PetscScalar *t
   FILE *fp;
   char *token=NULL,*token2=NULL;
   char *line = NULL,gate_char;
-  size_t len = 0;
+  size_t len = 0,i,j;
   ssize_t read;
   int token_number,num_ops,qubit_number;
   operator ops[100];
@@ -395,7 +397,7 @@ void projectq_vqe_get_expectation_squared(char filename[],Vec rho,PetscScalar *t
     while (token=strsep(&line,"[")) {
       if(token_number==0){
         //Strip whitespace
-        for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+        for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
         scalar_multiply = atof(token);
         token_number = 1;
       } else {
@@ -442,7 +444,7 @@ void projectq_vqe_get_expectation_encoded(char filename[],Vec rho,PetscScalar *t
   FILE *fp;
   char *token=NULL,*token2=NULL;
   char *line = NULL,gate_char;
-  size_t len = 0;
+  size_t len = 0,i_s,j;
   ssize_t read;
   int token_number,num_ops,qubit_number;
   va_list ap;
@@ -470,7 +472,7 @@ void projectq_vqe_get_expectation_encoded(char filename[],Vec rho,PetscScalar *t
     while (token=strsep(&line,"[")) {
       if(token_number==0){
         //Strip whitespace
-        for (size_t i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+        for (i_s=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
         scalar_multiply = atof(token);
         token_number = 1;
       } else {
