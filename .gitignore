@@ -38,3 +38,7 @@
 
 # Debug files
 *.dSYM/
+
+out*
+*.info
+
