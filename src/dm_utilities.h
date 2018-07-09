@@ -31,4 +31,7 @@ void print_dm_sparse(Vec,int);
 void print_dm_sparse_to_file(Vec,int,char[]);
 void _get_expectation_value_psi(Vec,PetscScalar*,int,operator*);
 void measure_dm(Vec,operator);
+
+void print_mat_sparse_to_file(Mat,char[]);
+
 #endif

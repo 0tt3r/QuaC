@@ -62,6 +62,31 @@ void print_dm_sparse_to_file(Vec rho,int h_dim,char filename[]){
       }
     }
   }
+  fclose(fp);
+}
+
+/*
+ * Print matrix to file. Should only be called in serial
+ */
+void print_mat_sparse_to_file(Mat A,char filename[]){
+  int i,j;
+  FILE *fp;
+
+  PetscInt          ncols;
+  const PetscInt    *cols;
+  const PetscScalar *vals;
+
+  fp = fopen(filename,"w");
+  for(i=0;i<total_levels*total_levels;i++){
+    MatGetRow(A,i,&ncols,&cols,&vals);
+    for (j=0;j<ncols;j++){
+      if (PetscAbsComplex(vals[j])>1e-10){
+        PetscFPrintf(PETSC_COMM_WORLD,fp,"%d %d %e %e\n",i,cols[j],PetscRealPart(vals[j]),PetscImaginaryPart(vals[j]));
+      }
+    }
+    MatRestoreRow(A,i,&ncols,&cols,&vals);
+  }
+  fclose(fp);
 }
 
 /*
