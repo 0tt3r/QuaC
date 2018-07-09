@@ -1,4 +1,4 @@
-CFLAGS =
+CFLAGS = -Wuninitialized -g
 
 
 ODIR=obj
@@ -43,7 +43,7 @@ examples: clean_test $(EXAMPLES)
 
 $(TESTS) : CFLAGS += -DUNIT_TEST
 $(TESTS) : % : $(ODIR)/%.o $(OBJ) $(TEST_OBJ)
-	@${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
 	@echo 'running '$@
 	@-./$@ -ts_adapt_type none > tmp_test_results
 	-@grep FAIL tmp_test_results || true
