@@ -484,10 +484,6 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
   return;
 }
 
-
-
-
-
 void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,j,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend;
   PetscScalar    val_ig,val_gi,tmp_val;
@@ -536,7 +532,7 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
       } else {
         //Normal operator
         if (this_j_ig!=-1){
-          //Get i cross G
+          //Get I cross G
           _get_val_j_from_global_i(this_j_ig,this_op1,&j_ig,&tmp_val,-1);
           this_j_ig = j_ig;
           val_ig = tmp_val * val_ig;
