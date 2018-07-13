@@ -169,12 +169,81 @@ void test_bipartite_separable(void)
 }
 
 
+/*
+ * Test get_expectation_value
+ */
+void test_get_expectation_value(void)
+{
+  operator qd1,qd2;
+  PetscScalar ev1,ev2,ev3,ev4,val;
+  double concurrence;
+  Vec dm0;
+
+  create_op(2,&qd1);
+  create_op(2,&qd2);
+  val = 0;
+  add_lin_p(val,1,qd1->n); //Have to add_lin to trick QuaC into thinking we are done creating ops
+  create_full_dm(&dm0);
+  val = 0.5;
+  add_value_to_dm(dm0,0,0,val);
+  val = 0.5;
+  add_value_to_dm(dm0,3,3,val);
+
+  val = 0.5 + 0.5*PETSC_i;
+  add_value_to_dm(dm0,0,3,val);
+
+  val = 0.5 - 0.5*PETSC_i;
+  add_value_to_dm(dm0,3,0,val);
+
+  val = 0.5 + 0.5*PETSC_i;
+  add_value_to_dm(dm0,1,3,val);
+
+  val = 0.5 - 0.5*PETSC_i;
+  add_value_to_dm(dm0,3,1,val);
+
+  val = 0.5 + 0.5*PETSC_i;
+  add_value_to_dm(dm0,1,2,val);
+
+  val = 0.5 - 0.5*PETSC_i;
+  add_value_to_dm(dm0,2,1,val);
+
+  val = 0.5 + 0.5*PETSC_i;
+  add_value_to_dm(dm0,2,3,val);
+
+  val = 0.5 - 0.5*PETSC_i;
+  add_value_to_dm(dm0,3,2,val);
+
+  assemble_dm(dm0);
+
+
+  get_expectation_value(dm0,&ev1,1,qd1->n);
+  get_expectation_value(dm0,&ev2,1,qd2->n);
+  get_expectation_value(dm0,&ev3,2,qd1->dag,qd2);
+  get_expectation_value(dm0,&ev4,2,qd2->dag,qd1);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,PetscRealPart(ev1));
+  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(ev1));
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,PetscRealPart(ev2));
+  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(ev2));
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,PetscRealPart(ev3));
+  TEST_ASSERT_EQUAL_FLOAT(0.5,PetscImaginaryPart(ev3));
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,PetscRealPart(ev4));
+  TEST_ASSERT_EQUAL_FLOAT(-0.5,PetscImaginaryPart(ev4));
+
+  return;
+}
+
+
 int main(int argc, char** argv)
 {
   UNITY_BEGIN();
   QuaC_initialize(argc,argv);
   RUN_TEST(test_bipartite_bell);
   RUN_TEST(test_bipartite_separable);
+  RUN_TEST(test_get_expectation_value);
   QuaC_finalize();
   return UNITY_END();
 }

@@ -16,7 +16,7 @@ void print_dm(Vec rho,int h_dim){
   for (i=0;i<h_dim;i++){
     for (j=0;j<h_dim;j++){
       get_dm_element(rho,i,j,&val);
-      PetscPrintf(PETSC_COMM_WORLD,"%e + %ei ",PetscRealPart(val),
+      PetscPrintf(PETSC_COMM_WORLD,"%4.3e + %4.3ei ",PetscRealPart(val),
                   PetscImaginaryPart(val));
     }
     PetscPrintf(PETSC_COMM_WORLD,"\n");
@@ -87,6 +87,28 @@ void print_mat_sparse_to_file(Mat A,char filename[]){
     MatRestoreRow(A,i,&ncols,&cols,&vals);
   }
   fclose(fp);
+}
+
+
+/*
+ * Print matrix to file. Should only be called in serial
+ */
+void print_mat_sparse(Mat A){
+  int i,j;
+
+  PetscInt          ncols;
+  const PetscInt    *cols;
+  const PetscScalar *vals;
+
+  for(i=0;i<total_levels*total_levels;i++){
+    MatGetRow(A,i,&ncols,&cols,&vals);
+    for (j=0;j<ncols;j++){
+      if (PetscAbsComplex(vals[j])>1e-10){
+        PetscPrintf(PETSC_COMM_WORLD,"%d %d %e %e\n",i,cols[j],PetscRealPart(vals[j]),PetscImaginaryPart(vals[j]));
+      }
+    }
+    MatRestoreRow(A,i,&ncols,&cols,&vals);
+  }
 }
 
 /*
@@ -241,7 +263,7 @@ void partial_trace_over(Vec full_dm,Vec ptraced_dm,int number_of_ops,...){
 
 /*
  *Measure a dm by a given operator, forcing a change:
- *    dm -> U^\dag dm U
+ *    dm -> U dm U^\dag
  * or, in vectored notation
  *    dm -> (U* cross U) dm
  */
@@ -273,14 +295,81 @@ void measure_dm(Vec dm,operator op){
   //Get trace(tmp_dm)
   //FIXME: assumes op has identity; I think all do, but vec_ops might break here?
   get_expectation_value(tmp_dm,&val,1,subsystem_list[0]->eye);
-  //Divide all elements by trace val
-  VecScale(tmp_dm,1/val);
+  if (val!=0){
+    //Divide all elements by trace val
+    VecScale(tmp_dm,1/val);
 
-  VecCopy(tmp_dm,dm);
+    VecCopy(tmp_dm,dm);
+  }
+  //Cleanup tmp objects
+  MatDestroy(&tmp_op_mat);
+  VecDestroy(&tmp_dm);
+  return;
+}
+
+/*
+ * Forcing a change:
+ *    dm -> A dm B^\dag
+ * or, in vectored notation
+ *    dm -> (B* cross A) dm
+ */
+void mult_dm_left_right(Vec dm,operator op_A,operator op_B){
+  Mat tmp_op_mat;
+  PetscInt Istart,Iend,i,j,dim;
+  PetscScalar val;
+  Vec tmp_dm,tmp_dm2;
+  dim = total_levels*total_levels;
+  MatCreate(PETSC_COMM_WORLD,&tmp_op_mat);
+  MatSetType(tmp_op_mat,MATMPIAIJ);
+  MatSetSizes(tmp_op_mat,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+  MatSetFromOptions(tmp_op_mat);
+  MatMPIAIJSetPreallocation(tmp_op_mat,5,NULL,5,NULL);
+  MatGetOwnershipRange(tmp_op_mat,&Istart,&Iend);
+  VecDuplicate(dm,&tmp_dm);
+  VecDuplicate(dm,&tmp_dm2);
+  //Construct I cross A
+  for (i=Istart;i<Iend;i++){
+    _get_val_j_from_global_i(i,op_A,&j,&val,-1); // Get the corresponding j and val
+    MatSetValue(tmp_op_mat,i,j,val,INSERT_VALUES);
+  }
+  MatAssemblyBegin(tmp_op_mat,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(tmp_op_mat,MAT_FINAL_ASSEMBLY);
+
+  //Do (I cross A) * dm
+  MatMult(tmp_op_mat,dm,tmp_dm);
+
+  MatDestroy(&tmp_op_mat);
+  MatCreate(PETSC_COMM_WORLD,&tmp_op_mat);
+  MatSetType(tmp_op_mat,MATMPIAIJ);
+  MatSetSizes(tmp_op_mat,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+  MatSetFromOptions(tmp_op_mat);
+  MatMPIAIJSetPreallocation(tmp_op_mat,5,NULL,5,NULL);
+  MatGetOwnershipRange(tmp_op_mat,&Istart,&Iend);
+
+  //Construct B* cross I
+  for (i=Istart;i<Iend;i++){
+    _get_val_j_from_global_i(i,op_B,&j,&val,1); // Get the corresponding j and val
+    MatSetValue(tmp_op_mat,i,j,val,INSERT_VALUES);
+  }
+  MatAssemblyBegin(tmp_op_mat,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(tmp_op_mat,MAT_FINAL_ASSEMBLY);
+
+  //Do (B* cross I) * dm
+  MatMult(tmp_op_mat,tmp_dm,tmp_dm2);
+
+
+  //Normalize resulting density matrix
+  //Get trace(tmp_dm)
+  //FIXME: assumes op has identity; I think all do, but vec_ops might break here?
+  /* get_expectation_value(tmp_dm2,&val,1,subsystem_list[0]->eye); */
+
+  /* VecScale(tmp_dm2,1/val); */
+  VecCopy(tmp_dm2,dm);
 
   //Cleanup tmp objects
   MatDestroy(&tmp_op_mat);
   VecDestroy(&tmp_dm);
+  VecDestroy(&tmp_dm2);
   return;
 }
 
@@ -705,9 +794,7 @@ void set_initial_dm_2qds_first_plus_pop(Vec x,Vec rho_2qds){
   /* } */
 
 
-
-
-    /* Create temporary PETSc matrices */
+  /* Create temporary PETSc matrices */
   MatCreate(PETSC_COMM_SELF,&subspace_dm);
   MatSetType(subspace_dm,MATSEQDENSE);
   MatSetSizes(subspace_dm,total_levels,total_levels,total_levels,total_levels);
@@ -803,9 +890,9 @@ void set_initial_dm_2qds_first_plus_pop(Vec x,Vec rho_2qds){
 void get_dm_element(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
   PetscInt location[1],dm_size,my_start,my_end;
   PetscScalar val_array[1];
-  location[0] = row;
+
   VecGetSize(dm,&dm_size);
-  location[0] = sqrt(dm_size)*row + col;
+  location[0] = sqrt(dm_size)*col + row;
 
   VecGetOwnershipRange(dm,&my_start,&my_end);
   if (location[0]>=my_start&&location[0]<my_end) {
@@ -837,9 +924,9 @@ void get_dm_element(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
 void get_dm_element_local(Vec dm,PetscInt row,PetscInt col,PetscScalar *val){
   PetscInt location[1],dm_size,my_start,my_end;
   PetscScalar val_array[1];
-  location[0] = row;
+
   VecGetSize(dm,&dm_size);
-  location[0] = sqrt(dm_size)*row + col;
+  location[0] = sqrt(dm_size)*col + row;
   VecGetOwnershipRange(dm,&my_start,&my_end);
   if (location[0]>=my_start&&location[0]<my_end) {
     VecGetValues(dm,1,location,val_array);
@@ -890,7 +977,8 @@ void add_value_to_dm(Vec dm,PetscInt row,PetscInt col,PetscScalar val){
   /* Get information about the dm */
   VecGetSize(dm,&dm_size);
   VecGetOwnershipRange(dm,&low,&high);
-  location = sqrt(dm_size)*row + col;
+  location = sqrt(dm_size)*col + row;
+
   /* If I own it, set the value */
   if (location>=low&&location<high) {
     VecSetValue(dm,location,val,ADD_VALUES);
@@ -1235,9 +1323,6 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
    *          for one of the indices (i); if there is no matching j,
    *          the value is 0.
    *
-   * Since the matrix is stored in C format, we use the complex
-   * conjugate of Rho instead of rho directly, so that we can
-   * minimize communication
    */
   *trace_val = 0.0 + 0.0*PETSC_i;
   VecGetOwnershipRange(rho,&my_start,&my_end);
@@ -1290,17 +1375,15 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
      * Check that this i is on this core;
      * most of the time, it will be, but sometimes
      * columns are split up by core.
-     * NOTE the transpose here and in get_dm_element_local!
      */
     this_loc = total_levels*i + this_i;
     if (this_loc>=my_start&&this_loc<my_end) {
-      get_dm_element_local(rho,i,this_i,&dm_element);
-
+      get_dm_element_local(rho,this_i,i,&dm_element);
       /*
        * Take complex conjugate of dm_element (since we relied on the fact
        * that rho was hermitian to get better data locality)
        */
-      *trace_val = *trace_val + op_val*(PetscRealPart(dm_element) + PetscImaginaryPart(dm_element)*PETSC_i);
+      *trace_val = *trace_val + op_val*(dm_element);
     }
   }
 
