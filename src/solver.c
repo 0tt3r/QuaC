@@ -754,3 +754,91 @@ PetscErrorCode _g2_ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ct
 
   PetscFunctionReturn(0);
 }
+
+
+void diagonalize(PetscInt *num_evs,Vec **evecs,PetscScalar **evs){
+  EPS eps;
+  PetscInt its,nev,maxit,i,nconv;
+  PetscReal tol;
+  EPSType  type;
+  Mat solve_A;
+
+  //FIXME! Clean up evecs memory outside, I guess?
+  if (_lindblad_terms) {
+    if (nid==0) {
+      printf("Lindblad terms found, diagonalizing Lindblad matrix.\n");
+    }
+    solve_A = full_A;
+  } else {
+    if (nid==0) {
+      printf("No Lindblad terms found, diagonalizing Hamiltonian.\n");
+    }
+    solve_A = ham_A;
+  }
+
+  /* Tell PETSc to assemble the matrix */
+  MatAssemblyBegin(solve_A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(solve_A,MAT_FINAL_ASSEMBLY);
+  MatScale(solve_A,PETSC_i);
+
+   /*
+     Create eigensolver context
+   */
+  EPSCreate(PETSC_COMM_WORLD,&eps);
+
+  /*
+    Set operators. In this case, it is a standard eigenvalue problem
+  */
+  EPSSetOperators(eps,solve_A,NULL);
+  EPSSetProblemType(eps,EPS_HEP);
+  EPSSetDimensions(eps,*num_evs,PETSC_DEFAULT,PETSC_DEFAULT); //Set number of evs to get
+  EPSSetWhichEigenpairs(eps,EPS_SMALLEST_REAL);
+  /*
+    Set solver parameters at runtime
+  */
+  EPSSetFromOptions(eps);
+
+  /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+     Solve the eigensystem
+     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  EPSSolve(eps);
+  EPSGetIterationNumber(eps,&its);
+  PetscPrintf(PETSC_COMM_WORLD," Number of iterations of the method: %D\n",its);
+  EPSGetType(eps,&type);
+  PetscPrintf(PETSC_COMM_WORLD," Solution method: %s\n\n",type);
+  EPSGetDimensions(eps,&nev,NULL,NULL);
+  PetscPrintf(PETSC_COMM_WORLD," Number of requested eigenvalues: %D\n",nev);
+  EPSGetTolerances(eps,&tol,&maxit);
+  PetscPrintf(PETSC_COMM_WORLD," Stopping condition: tol=%.4g, maxit=%D\n",(double)tol,maxit);
+
+  /*
+    Get number of converged approximate eigenpairs
+  */
+  EPSGetConverged(eps,&nconv);
+  PetscPrintf(PETSC_COMM_WORLD," Number of converged eigenpairs: %D\n\n",nconv);
+  *num_evs = nconv;
+
+  if (nconv>0) {
+    *evecs = malloc(sizeof(Vec)*nconv);
+    *evs = malloc(sizeof(PetscScalar)*nconv);
+
+    for(i=0;i<nconv;i++){
+      MatCreateVecs(solve_A,NULL,&(*evecs)[i]);
+      EPSGetEigenpair(eps,i,&(*evs)[i],NULL,(*evecs)[i],NULL);
+    }
+  }
+  EPSDestroy(&eps);
+
+  return;
+}
+
+void destroy_diagonalize(PetscInt num_evs,Vec **evecs,PetscScalar **evs){
+  PetscInt i;
+  if (num_evs>0){
+    free(*evs);
+    for(i=0;i<num_evs;i++){
+      VecDestroy(&(*evecs)[i]);
+    }
+    free(*evecs);
+  }
+}

@@ -4,6 +4,7 @@
 #include "operators_p.h"
 #include "operators.h"
 #include <petsc.h>
+#include <slepc.h>
 
 int petsc_initialized = 0;
 int nid;
@@ -18,7 +19,10 @@ int np;
 void QuaC_initialize(int argc,char **args){
 
   /* Initialize Petsc */
-  PetscInitialize(&argc,&args,(char*)0,NULL);
+  //PetscInitialize(&argc,&args,(char*)0,NULL);
+  /* Initialize SLEPc */
+  SlepcInitialize(&argc,&args,(char*)0,NULL);
+
 #if !defined(PETSC_USE_COMPLEX)
   SETERRQ(PETSC_COMM_WORLD,1,"This example requires complex numbers");
 #endif
@@ -86,7 +90,7 @@ void QuaC_finalize(){
   }
   /* Finalize Petsc */
   PetscLogStagePop();
-  PetscFinalize();
+  SlepcFinalize();
   return;
 }
 
