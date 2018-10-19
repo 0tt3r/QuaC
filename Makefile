@@ -10,7 +10,8 @@ TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*.c)))
 MPI_TESTS=$(addprefix mpi_,$(TESTS))
 CFLAGS += -isystem $(SRCDIR)
 
-include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${SLEPC_DIR}/lib/slepc/conf/slepc_variables
+#include ${PETSC_DIR}/lib/petsc/conf/variables
 #include ${PETSC_DIR}/lib/petsc/conf/rules
 
 _DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h qasm_parser.h error_correction.h
@@ -27,15 +28,15 @@ TEST_DEPS  = $(patsubst %,$(TESTDIR)/%,$(_TEST_DEPS))
 
 $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 	@mkdir -p $(@D)
-	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES}
+	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
 
 $(ODIR)/%.o: $(EXAMPLESDIR)/%.c $(DEPS)
 	@mkdir -p $(@D)
-	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES}
+	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
 
 $(ODIR)/%.o: $(TESTDIR)/%.c $(DEPS) $(TEST_DEPS)
 	@mkdir -p $(@D)
-	@${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES}
+	@${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
 
 all: examples
 
@@ -74,7 +75,7 @@ test: clean_test $(TESTS) count_fails
 mpi_test: clean_test $(MPI_TESTS) count_fails
 
 $(EXAMPLES) : % : $(ODIR)/%.o $(OBJ)
-	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB} ${SLEPC_EPS_LIB}
 
 .PHONY: clean
 
