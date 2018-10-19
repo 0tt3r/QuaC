@@ -484,6 +484,64 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
   return;
 }
 
+
+void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
+  PetscInt i,j,j_ig,this_j_ig,Istart,Iend;
+  PetscScalar    val_ig,tmp_val;
+  PetscScalar add_to_mat;
+  operator    this_op1,this_op2;
+  MatGetOwnershipRange(A,&Istart,&Iend);
+
+  for (i=Istart;i<Iend;i++){
+    this_j_ig = i;
+    val_ig = 1.0;
+    for (j=0;j<num_ops;j++){
+      this_op1 = ops[j];
+      if(this_op1->my_op_type==VEC){
+        /*
+         * Since this is a VEC operator, the next operator must also
+         * be a VEC operator; it is assumed they always come in pairs.
+         */
+        this_op2 = ops[j+1];
+        if (this_op2->my_op_type!=VEC){
+          if (nid==0){
+            printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_ham\n");
+            exit(0);
+          }
+        }
+        //Increment j
+        j=j+1;
+
+        //-1 means that it was 0 on a past operator multiplication, so we skip it if it is -1
+        if (this_j_ig!=-1){
+          //Get G
+          _get_val_j_from_global_i_vec_vec(this_j_ig,this_op1,this_op2,&j_ig,&tmp_val,-1);
+          this_j_ig = j_ig;
+          val_ig = tmp_val * val_ig;
+        }
+
+      } else {
+        //Normal operator
+        if (this_j_ig!=-1){
+          //Get I cross G
+          _get_val_j_from_global_i(this_j_ig,this_op1,&j_ig,&tmp_val,-1);
+          this_j_ig = j_ig;
+          val_ig = tmp_val * val_ig;
+        }
+      }
+    }
+
+
+    //Add -i * G_1 G_2 ... G_n
+    if (this_j_ig!=-1){
+      add_to_mat = -a*PETSC_i*val_ig;
+      MatSetValue(A,i,this_j_ig,add_to_mat,ADD_VALUES);
+    }
+  }
+
+  return;
+}
+
 void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,j,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend;
   PetscScalar    val_ig,val_gi,tmp_val;
