@@ -95,12 +95,17 @@ void print_mat_sparse_to_file(Mat A,char filename[]){
  */
 void print_mat_sparse(Mat A){
   int i,j;
-
+  PetscInt dim;
   PetscInt          ncols;
   const PetscInt    *cols;
   const PetscScalar *vals;
 
-  for(i=0;i<total_levels*total_levels;i++){
+  if(_lindblad_terms){
+    dim = total_levels*total_levels;
+  } else{
+    dim = total_levels;
+  }
+  for(i=0;i<dim;i++){
     MatGetRow(A,i,&ncols,&cols,&vals);
     for (j=0;j<ncols;j++){
       if (PetscAbsComplex(vals[j])>1e-10){
