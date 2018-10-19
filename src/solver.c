@@ -20,7 +20,7 @@ PetscErrorCode _RHS_time_dep_ham(TS,PetscReal,Vec,Mat,Mat,void*); // Move to hea
 PetscErrorCode _RHS_time_dep_ham_p(TS,PetscReal,Vec,Mat,Mat,void*); // Move to header?
 
 PetscErrorCode (*_ts_monitor)(TS,PetscInt,PetscReal,Vec,void*) = NULL;
-
+void          *_tsctx;
 PetscErrorCode _Normalize_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
 PetscErrorCode _Normalize_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,void*);
 /*
@@ -346,7 +346,7 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
    * Set function to get information at every timestep
    */
   if (_ts_monitor!=NULL){
-    TSMonitorSet(ts,_ts_monitor,NULL,NULL);
+    TSMonitorSet(ts,_ts_monitor,_tsctx,NULL);
   }
   /*
    * Set up ODE system
@@ -415,13 +415,14 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
   /* for(i=0;i<total_levels*total_levels;i++){ */
   /*   MatGetRow(solve_A,i,&ncols,&cols,&vals); */
   /*   for (j=0;j<ncols;j++){ */
+
   /*     if(PetscAbsComplex(vals[j])>1e-5){ */
   /*       printf("%d %d %lf %lf\n",i,cols[j],vals[j]); */
   /*     } */
   /*   } */
   /*   MatRestoreRow(solve_A,i,&ncols,&cols,&vals); */
   /* } */
-  /* exit(0); */
+
   if(_stiff_solver){
     MatView(solve_stiff_A,mat_view);
   }
@@ -523,6 +524,21 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
  */
 void set_ts_monitor(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*)){
   _ts_monitor = (*monitor);
+  _tsctx      = NULL;
+}
+
+/*
+ *
+ * set_ts_monitor accepts a user function which can calculate observables, print output, etc
+ * at each time step.
+ *
+ * Inputs:
+ *      PetscErrorCode *monitor - function pointer for user ts_monitor function
+ *
+ */
+void set_ts_monitor_ctx(PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*),void *tsctx){
+  _ts_monitor = (*monitor);
+  _tsctx = tsctx;
 }
 
 /*
@@ -626,4 +642,115 @@ PetscErrorCode _Normalize_PostEventFunction(TS ts,PetscInt nevents,PetscInt even
   ierr = VecNormalize(U,NULL);CHKERRQ(ierr);
   TSSetSolution(ts,U);
   return(0);
+}
+
+
+
+void g2_correlation(PetscScalar ***g2_values,Vec dm0,PetscInt n_tau,PetscReal tau_max,PetscInt n_st,PetscReal st_max,PetscInt number_of_ops,...){
+  TSCtx tsctx;
+  PetscReal st_dt,previous_start_time,this_start_time,dt;
+  PetscReal tau_t_max,dt_tau;
+  PetscInt i,j,dim,steps_max;
+  Mat A_star_A,tmp_mat;
+  Vec init_dm;
+  va_list ap;
+  /*Explicitly construct our jump matrix by adding up all of the operators
+   * \rho = A \rho A^\dag
+   * Vectorized:
+   * \rho = (A* \cross A) \rho
+   */
+  dim = total_levels*total_levels; //Assumes Lindblad
+
+  MatCreate(PETSC_COMM_WORLD,&tmp_mat);
+  MatSetType(tmp_mat,MATMPIAIJ);
+  MatSetSizes(tmp_mat,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+  MatSetFromOptions(tmp_mat);
+  MatMPIAIJSetPreallocation(tmp_mat,4,NULL,4,NULL);
+
+  va_start(ap,number_of_ops);
+  //Get A* \cross I
+  vadd_ops_to_mat(tmp_mat,1,number_of_ops,ap);
+  va_end(ap);
+
+
+  MatCreate(PETSC_COMM_WORLD,&tsctx.I_cross_A);
+  MatSetType(tsctx.I_cross_A,MATMPIAIJ);
+  MatSetSizes(tsctx.I_cross_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+  MatSetFromOptions(tsctx.I_cross_A);
+  MatMPIAIJSetPreallocation(tsctx.I_cross_A,4,NULL,4,NULL);
+  va_start(ap,number_of_ops);
+  //Get I_cross_A
+  vadd_ops_to_mat(tsctx.I_cross_A,-1,number_of_ops,ap);
+  va_end(ap);
+
+
+  //Get (A* \cross I) (I \cross A)
+  MatMatMult(tmp_mat,tsctx.I_cross_A,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&A_star_A);
+  MatDestroy(&tmp_mat);
+  VecDuplicate(dm0,&(tsctx.tmp_dm));
+  VecDuplicate(dm0,&(tsctx.tmp_dm2));
+  VecDuplicate(dm0,&init_dm);
+
+  //Arbitrary, set this better
+  steps_max = 51000;
+  dt        = 0.025;
+
+  //Allocate memory for g2
+  (*g2_values) = (PetscScalar **)malloc((n_st+1)*sizeof(PetscScalar *));
+  for (i=0;i<n_st+1;i++){
+    (*g2_values)[i] = (PetscScalar *)malloc((n_tau+1)*sizeof(PetscScalar));
+    for (j=0;j<n_tau+1;j++){
+      (*g2_values)[i][j] = 0.0;
+    }
+  }
+  tsctx.g2_values = (*g2_values);
+
+  set_ts_monitor_ctx(_g2_ts_monitor,&tsctx);
+  st_dt = st_max/n_st;
+  previous_start_time = 0;
+  tsctx.i_st = 0;
+  tsctx.i_st = tsctx.i_st + 1; //Why?
+
+  for (this_start_time=st_dt;this_start_time<=st_max;this_start_time+=st_dt){
+    //Go from previous start time to this_start_time
+    tsctx.tau_evolve = 0;
+    dt = (this_start_time - previous_start_time)/500; //500 is arbitrary, should be picked better
+    time_step(dm0,previous_start_time,this_start_time,dt,steps_max);
+
+    //Timestep through taus
+    tau_t_max = this_start_time + tau_max;
+    dt_tau = (tau_t_max - this_start_time)/n_tau;
+
+    /*
+     * Force an 'emission' to get A \rho A^\dag terms
+     * We already have A* \cross A - we just do the multiplication
+     */
+    tsctx.tau_evolve = 1;
+    //Copy the timestepped dm into our init_dm for tau sweep
+    VecCopy(dm0,init_dm);
+    MatMult(A_star_A,dm0,init_dm); //init_dm = A * dm0
+    tsctx.i_tau = 0;
+    time_step(init_dm,this_start_time,tau_t_max,dt_tau,steps_max);
+
+    previous_start_time = this_start_time;
+    tsctx.i_st = tsctx.i_st + 1;
+  }
+
+  return;
+}
+
+PetscErrorCode _g2_ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
+  TSCtx         *tsctx = (TSCtx*) ctx;   /* user-defined application context */
+  PetscScalar ev;
+
+  if (tsctx->tau_evolve==1){
+    MatMult(tsctx->I_cross_A,dm,tsctx->tmp_dm); // tmp = I \cross A \rho
+    MatMultHermitianTranspose(tsctx->I_cross_A,tsctx->tmp_dm,tsctx->tmp_dm2); // tmp2 = I \cross A^\dag tmp
+    trace_dm(&ev,tsctx->tmp_dm2);
+    tsctx->g2_values[tsctx->i_st][tsctx->i_tau] += ev;
+    tsctx->i_tau = tsctx->i_tau + 1;
+  }
+
+
+  PetscFunctionReturn(0);
 }
