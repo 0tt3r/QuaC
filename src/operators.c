@@ -20,7 +20,7 @@ int              op_initialized = 0;
 /* Declare private, library variables. Externed in operators_p.h */
 int op_finalized;
 int _stiff_solver;
-int _lindblad_terms;
+int _lindblad_terms,_no_lindblad = 0;
 Mat full_A,full_stiff_A;
 Mat ham_A,ham_stiff_A;
 PetscInt total_levels;
@@ -286,6 +286,9 @@ void add_lin_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
   return;
 }
 
+void no_lindblad_terms(){
+  _no_lindblad = 1;
+}
 /*
  * add_to_ham_p adds a*op1*op2*...*opn to the hamiltonian
  * Inputs:
@@ -311,8 +314,10 @@ void add_to_ham_p(PetscScalar a,PetscInt num_ops,...){
       ops[i] = va_arg(ap,operator);
     }
     va_end(ap);
-
-    _add_ops_to_mat_ham(a,full_A,num_ops,ops);
+    _add_ops_to_mat_ham_only(a,ham_A,num_ops,ops);
+    /* if(_no_lindblad){ */
+    /*   _add_ops_to_mat_ham(a,full_A,num_ops,ops); */
+    /* } */
     free(ops);
   }
   PetscLogEventEnd(add_to_ham_event,0,0,0,0);
@@ -1296,76 +1301,77 @@ void _check_initialized_A(){
       }
     }
 
-    dim = total_levels*total_levels;
-    /* Setup petsc matrix */
+    if (_no_lindblad==0){
+      dim = total_levels*total_levels;
+      /* Setup petsc matrix */
 
-    MatCreate(PETSC_COMM_WORLD,&full_A);
-    MatSetType(full_A,MATMPIAIJ);
-    MatSetSizes(full_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
-    MatSetFromOptions(full_A);
+      MatCreate(PETSC_COMM_WORLD,&full_A);
+      MatSetType(full_A,MATMPIAIJ);
+      MatSetSizes(full_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);
+      MatSetFromOptions(full_A);
 
 
-    if (nid==0){
-      /*
-       * Only the first row has extra nonzeros, from the stabilization.
-       * We want to allocate extra memory for that row, but not for any others.
-       * Since we put total_levels extra elements (spread evenly), we
-       * add a fraction to the diagonal part and the remaining to the
-       * off diagonal part. We assume that core 0 owns roughly dim/np
-       * rows.
-       */
+      if (nid==0){
+        /*
+         * Only the first row has extra nonzeros, from the stabilization.
+         * We want to allocate extra memory for that row, but not for any others.
+         * Since we put total_levels extra elements (spread evenly), we
+         * add a fraction to the diagonal part and the remaining to the
+         * off diagonal part. We assume that core 0 owns roughly dim/np
+         * rows.
+         */
 
-      PetscMalloc1((dim/np)*5,&d_nz); /* malloc array of nnz diagonal elements*/
-      PetscMalloc1((dim/np)*5,&o_nz); /* malloc array of nnz off diagonal elements*/
+        PetscMalloc1((dim/np)*5,&d_nz); /* malloc array of nnz diagonal elements*/
+        PetscMalloc1((dim/np)*5,&o_nz); /* malloc array of nnz off diagonal elements*/
 
-      /*
-       * If the system is small enough, we can just allocate a lot of
-       * memory for it. Fixes a bug from PETSc when you try to preallocate bigger
-       * the row size
-       */
-      if (total_levels<MAX_NNZ_PER_ROW) {
-        d_nz[0] = total_levels*total_levels/np;
-        o_nz[0] = total_levels*total_levels/np;
-        for (i=1;i<(dim/np)*5;i++){
-          d_nz[i] = total_levels*total_levels/np;
-          o_nz[i] = total_levels*total_levels/np;
+        /*
+         * If the system is small enough, we can just allocate a lot of
+         * memory for it. Fixes a bug from PETSc when you try to preallocate bigger
+         * the row size
+         */
+        if (total_levels<MAX_NNZ_PER_ROW) {
+          d_nz[0] = total_levels*total_levels/np;
+          o_nz[0] = total_levels*total_levels/np;
+          for (i=1;i<(dim/np)*5;i++){
+            d_nz[i] = total_levels*total_levels/np;
+            o_nz[i] = total_levels*total_levels/np;
+          }
+        } else {
+          d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
+          o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
+          for (i=1;i<(dim/np)*5;i++){
+            d_nz[i] = MAX_NNZ_PER_ROW;
+            o_nz[i] = MAX_NNZ_PER_ROW;
+          }
+
         }
-      } else {
-        d_nz[0] = MAX_NNZ_PER_ROW + ceil(ceil(dim/np)/total_levels)+5;
-        o_nz[0] = MAX_NNZ_PER_ROW + (total_levels - floor(ceil(dim/np)/total_levels))+5;
-        for (i=1;i<(dim/np)*5;i++){
-          d_nz[i] = MAX_NNZ_PER_ROW;
-          o_nz[i] = MAX_NNZ_PER_ROW;
-        }
 
-      }
-
-      /* MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz); */
-      /* MatSeqAIJSetPreallocation(full_A,0,d_nz); */
-      local = 100;//*MAX_NNZ_PER_ROW/np;
-
-      MatMPIAIJSetPreallocation(full_A,local,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL);
-    } else {
+        /* MatMPIAIJSetPreallocation(full_A,0,d_nz,0,o_nz); */
+        /* MatSeqAIJSetPreallocation(full_A,0,d_nz); */
         local = 100;//*MAX_NNZ_PER_ROW/np;
 
-      if (MAX_NNZ_PER_ROW>total_levels*total_levels) {
-        MatMPIAIJSetPreallocation(full_A,total_levels,NULL,total_levels,NULL);
-      } else {
-        //MatMPIAIJSetPreallocation(full_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
         MatMPIAIJSetPreallocation(full_A,local,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL);
+      } else {
+        local = 100;//*MAX_NNZ_PER_ROW/np;
+
+        if (MAX_NNZ_PER_ROW>total_levels*total_levels) {
+          MatMPIAIJSetPreallocation(full_A,total_levels,NULL,total_levels,NULL);
+        } else {
+          //MatMPIAIJSetPreallocation(full_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
+          MatMPIAIJSetPreallocation(full_A,local,NULL,(np-1)*MAX_NNZ_PER_ROW/np,NULL);
+        }
       }
+
+      /* if (nid==0){ */
+      /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
+      /*                       ,NULL,,NULL,&full_A);CHKERRQ(ierr); */
+      /* } else { */
+      /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
+      /*                       10,NULL,10,NULL,&full_A);CHKERRQ(ierr); */
+      /* } */
+
+      MatSetUp(full_A); // This might not be necessary?
     }
-
-    /* if (nid==0){ */
-    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
-    /*                       ,NULL,,NULL,&full_A);CHKERRQ(ierr); */
-    /* } else { */
-    /*   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
-    /*                       10,NULL,10,NULL,&full_A);CHKERRQ(ierr); */
-    /* } */
-
-    MatSetUp(full_A); // This might not be necessary?
-
     /* MatCreate(PETSC_COMM_WORLD,&full_stiff_A); */
     /* MatSetType(full_stiff_A,MATMPIAIJ); */
     /* MatSetSizes(full_stiff_A,PETSC_DECIDE,PETSC_DECIDE,dim,dim); */
@@ -1435,9 +1441,9 @@ void _check_initialized_A(){
     MatSetFromOptions(ham_A);
     if (MAX_NNZ_PER_ROW>total_levels/2) {
       if (np==1){
-        MatMPIAIJSetPreallocation(ham_A,total_levels,NULL,0,NULL);
+        MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,0,NULL);
       } else {
-        MatMPIAIJSetPreallocation(ham_A,total_levels/2,NULL,total_levels/2,NULL);
+        MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
       }
     } else {
       MatMPIAIJSetPreallocation(ham_A,MAX_NNZ_PER_ROW,NULL,MAX_NNZ_PER_ROW,NULL);
