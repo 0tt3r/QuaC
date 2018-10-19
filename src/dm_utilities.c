@@ -308,6 +308,81 @@ void measure_dm(Vec dm,operator op){
 }
 
 /*
+ *
+ * Inputs:
+ *      Mat A          - Matrix to add to
+ *      tensor_control - switch on which superoperator to compute
+ *                          -1: I cross G or just G (the difference is controlled by the passed in i's, but
+ *                                           the internal logic is exactly the same)
+ *                           0: G* cross G
+ *                           1: G* cross I
+ *      number_of_ops  - number of operators
+ *      ...            - list of operators to add
+ */
+
+void add_ops_to_mat(Mat A,PetscInt tensor_control,PetscInt number_of_ops,...){
+  va_list ap;
+
+  va_start(ap,number_of_ops);
+  vadd_ops_to_mat(A,tensor_control,number_of_ops,ap);
+  va_end(ap);
+
+  return;
+}
+
+/*
+ *
+ * Inputs:
+ *      Mat A          - Matrix to add to
+ *      tensor_control - switch on which superoperator to compute
+ *                          -1: I cross G or just G (the difference is controlled by the passed in i's, but
+ *                                           the internal logic is exactly the same)
+ *                           0: G* cross G
+ *                           1: G* cross I
+ *      number_of_ops  - number of operators
+ *      ap             - list of operators to add
+ */
+void vadd_ops_to_mat(Mat A,PetscInt tensor_control,PetscInt number_of_ops,va_list ap){
+  operator op,op2;
+  PetscInt iop,i,j,Istart,Iend;
+  PetscScalar val;
+
+  MatGetOwnershipRange(A,&Istart,&Iend);
+  for(iop=0;iop<number_of_ops;iop++){
+    op = va_arg(ap,operator);
+
+    if(op->my_op_type==VEC){
+      //Next one must be a vec as well
+      op2 = va_arg(ap,operator);
+      iop = iop + 1;
+      if (op2->my_op_type!=VEC){
+        if (nid==0){
+          printf("ERROR! a VEC operator must be followed by another VEC operator in add_ops_to_mat\n");
+          exit(0);
+        }
+      }
+
+      //Now we have our two vec operators, get the matrix values
+      for (i=Istart;i<Iend;i++){
+        _get_val_j_from_global_i_vec_vec(i,op,op2,&j,&val,tensor_control);
+        MatSetValue(A,i,j,val,ADD_VALUES);
+      }
+    } else {
+      //Regular operator
+      for (i=Istart;i<Iend;i++){
+        _get_val_j_from_global_i(i,op,&j,&val,tensor_control); // Get the corresponding j and val
+        MatSetValue(A,i,j,val,ADD_VALUES);
+      }
+    }
+  }
+
+  MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);
+
+  return;
+}
+
+/*
  * Forcing a change:
  *    dm -> A dm B^\dag
  * or, in vectored notation
@@ -1760,4 +1835,26 @@ void _get_expectation_value_psi(Vec psi,PetscScalar *trace_val,int number_of_ops
   VecAssemblyEnd(op_psi);
   VecDot(op_psi,psi,trace_val);
   VecDestroy(&op_psi);
+}
+
+void trace_dm(PetscScalar *trace_val,Vec dm){
+  PetscInt my_start,my_end,i,this_loc;
+  PetscScalar dm_element;
+  *trace_val = 0.0 + 0.0*PETSC_i;
+  VecGetOwnershipRange(dm,&my_start,&my_end);
+
+  for (i=0;i<total_levels;i++){
+    this_loc = total_levels*i + i; //Diagonal component in vectorized form
+    if (this_loc>=my_start&&this_loc<my_end) {
+      get_dm_element_local(dm,i,i,&dm_element);
+        /*
+         * Take complex conjugate of dm_element (since we relied on the fact
+         * that rho was hermitian to get better data locality)
+         */
+        *trace_val = *trace_val + dm_element;
+    }
+  }
+  MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
+
+  return;
 }
