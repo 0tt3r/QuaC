@@ -4,12 +4,20 @@
 #include "operators_p.h"
 #include "operators.h"
 
+typedef enum {
+              TENSOR_IG=-1,
+              TENSOR_GG=0,
+              TENSOR_GI=1
+} tensor_control_enum;
+
 long   _get_loop_limit(op_type,int);
 PetscScalar _get_val_in_subspace(long,op_type,int,long*,long*);
 
+void _get_val_j_ops(PetscScalar*,PetscInt*,PetscInt,operator*,tensor_control_enum);
 
-void _get_val_j_from_global_i(PetscInt,operator,PetscInt*,PetscScalar*,PetscInt);
-void _get_val_j_from_global_i_vec_vec(PetscInt,operator,operator,PetscInt*,PetscScalar*,PetscInt);
+void _get_val_j_from_global_i(PetscInt,operator,PetscInt*,PetscScalar*,tensor_control_enum);
+void _get_val_j_from_global_i_vec_vec(PetscInt,operator,operator,PetscInt*,
+                                      PetscScalar*,tensor_control_enum);
 
 void _add_ops_to_mat_ham_only(PetscScalar,Mat,PetscInt,operator*);
 void _add_ops_to_mat_ham(PetscScalar,Mat,PetscInt,operator*);

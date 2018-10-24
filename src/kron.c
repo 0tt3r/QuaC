@@ -154,6 +154,55 @@ PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_
   return val;
 }
 
+void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt num_ops,
+                    operator *ops,tensor_control_enum tensor_control){
+  PetscInt this_j,j,j2;
+  PetscScalar val,tmp_val;
+  operator this_op1,this_op2;
+  this_j = *j_out;
+  val = 1.0;
+
+  for (j=0;j<num_ops;j++){
+    this_op1 = ops[j];
+    if(this_op1->my_op_type==VEC){
+      /*
+       * Since this is a VEC operator, the next operator must also
+       * be a VEC operator; it is assumed they always come in pairs.
+       */
+      this_op2 = ops[j+1];
+      if (this_op2->my_op_type!=VEC){
+        if (nid==0){
+          printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_ham\n");
+          exit(0);
+        }
+      }
+      //Increment j
+      j=j+1;
+
+      //-1 means that it was 0 on a past operator multiplication, so we skip it if it is -1
+      if (this_j!=-1){
+        //Get val
+        _get_val_j_from_global_i_vec_vec(this_j,this_op1,this_op2,&j2,&tmp_val,tensor_control);
+        this_j = j2;
+        val = tmp_val * val;
+      }
+    } else {
+      //Normal operator
+      if (this_j!=-1){
+        //Get I cross G
+        _get_val_j_from_global_i(this_j,this_op1,&j2,&tmp_val,tensor_control);
+        this_j = j2;
+        val = tmp_val * val;
+      }
+
+    }
+  }
+
+  *val_out = val;
+  *j_out   = this_j;
+  return;
+}
+
 /*
  * _get_val_j_from_global_i returns the val and global j for a given global i.
  * If there is no nonzero value for a given i, it returns a negative j
@@ -170,7 +219,7 @@ PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_
  *      double *val:        value of op for global i,j
   */
 
-void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScalar *val,PetscInt tensor_control){
+void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScalar *val,tensor_control_enum tensor_control){
   PetscInt i_sub,n_after,tmp_int,k1,k2,extra_after,j_i1,j_i2,i1,i2;
   PetscScalar val_i1,val_i2;
 
@@ -184,8 +233,8 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
    * If it is a raising operator, it is sub diagonal.
    */
 
-  if (tensor_control!=0) {
-    if (tensor_control==1) {
+  if (tensor_control!=TENSOR_GG) {
+    if (tensor_control==TENSOR_GI) {
       extra_after = total_levels;
     } else {
       extra_after = 1;
@@ -345,7 +394,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
       /* *val   = 1.0; */
     }
 
-    if (tensor_control==1){
+    if (tensor_control==TENSOR_GI){
       //Take complex conjugate of answer
       *val = PetscConjComplex(*val);
     }
@@ -366,10 +415,10 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
     i2 = i%total_levels;
 
     /* Now, get js for U* (i1) by calling this function */
-    _get_val_j_from_global_i(i1,this_op,&j_i1,&val_i1,-1);
+    _get_val_j_from_global_i(i1,this_op,&j_i1,&val_i1,TENSOR_IG);
 
     /* Now, get js for U (i2) by calling this function */
-    _get_val_j_from_global_i(i2,this_op,&j_i2,&val_i2,-1);
+    _get_val_j_from_global_i(i2,this_op,&j_i2,&val_i2,TENSOR_IG);
 
     /*
      * Combine j's to get U* cross U
@@ -387,7 +436,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
   return;
 }
 
-void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this_op2,PetscInt *j,PetscScalar *val,PetscInt tensor_control){
+void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this_op2,PetscInt *j,PetscScalar *val,tensor_control_enum tensor_control){
   PetscInt i_sub,n_after,tmp_int,k1,k2,extra_after,j_i1,j_i2,i1,i2;
   PetscScalar val_i1,val_i2;
 
@@ -414,8 +463,8 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
   }
 
 
-  if (tensor_control!= 0) {
-    if (tensor_control==1) {
+  if (tensor_control!=TENSOR_GG) {
+    if (tensor_control==TENSOR_GI) {
       extra_after = total_levels;
     } else {
       extra_after = 1;
@@ -443,7 +492,7 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
       *j = -1;
       *val = 0.0;
     }
-    if (tensor_control==1){
+    if (tensor_control==TENSOR_GI){
       //Take complex conjugate of answer
       *val = PetscConjComplex(*val);
     }
@@ -464,10 +513,10 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
     i2 = i%total_levels;
 
     /* Now, get js for U* (i1) by calling this function */
-    _get_val_j_from_global_i_vec_vec(i1,this_op1,this_op2,&j_i1,&val_i1,-1);
+    _get_val_j_from_global_i_vec_vec(i1,this_op1,this_op2,&j_i1,&val_i1,TENSOR_IG);
 
     /* Now, get js for U (i2) by calling this function */
-    _get_val_j_from_global_i_vec_vec(i2,this_op1,this_op2,&j_i2,&val_i2,-1);
+    _get_val_j_from_global_i_vec_vec(i2,this_op1,this_op2,&j_i2,&val_i2,TENSOR_IG);
 
     /*
      * Combine j's to get U* cross U
@@ -494,43 +543,7 @@ void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops
 
   for (i=Istart;i<Iend;i++){
     this_j_ig = i;
-    val_ig = 1.0;
-    for (j=0;j<num_ops;j++){
-      this_op1 = ops[j];
-      if(this_op1->my_op_type==VEC){
-        /*
-         * Since this is a VEC operator, the next operator must also
-         * be a VEC operator; it is assumed they always come in pairs.
-         */
-        this_op2 = ops[j+1];
-        if (this_op2->my_op_type!=VEC){
-          if (nid==0){
-            printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_ham\n");
-            exit(0);
-          }
-        }
-        //Increment j
-        j=j+1;
-
-        //-1 means that it was 0 on a past operator multiplication, so we skip it if it is -1
-        if (this_j_ig!=-1){
-          //Get G
-          _get_val_j_from_global_i_vec_vec(this_j_ig,this_op1,this_op2,&j_ig,&tmp_val,-1);
-          this_j_ig = j_ig;
-          val_ig = tmp_val * val_ig;
-        }
-
-      } else {
-        //Normal operator
-        if (this_j_ig!=-1){
-          //Get I cross G
-          _get_val_j_from_global_i(this_j_ig,this_op1,&j_ig,&tmp_val,-1);
-          this_j_ig = j_ig;
-          val_ig = tmp_val * val_ig;
-        }
-      }
-    }
-
+    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
 
     //Add -i * G_1 G_2 ... G_n
     if (this_j_ig!=-1){
@@ -553,58 +566,9 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   for (i=Istart;i<Iend;i++){
     this_j_ig = i;
     this_j_gi = i;
-    val_ig = 1.0;
-    val_gi = 1.0;
-    for (j=0;j<num_ops;j++){
-      this_op1 = ops[j];
-      if(this_op1->my_op_type==VEC){
-        /*
-         * Since this is a VEC operator, the next operator must also
-         * be a VEC operator; it is assumed they always come in pairs.
-         */
-        this_op2 = ops[j+1];
-        if (this_op2->my_op_type!=VEC){
-          if (nid==0){
-            printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_ham\n");
-            exit(0);
-          }
-        }
-        //Increment j
-        j=j+1;
 
-        //-1 means that it was 0 on a past operator multiplication, so we skip it if it is -1
-        if (this_j_ig!=-1){
-          //Get i cross G
-          _get_val_j_from_global_i_vec_vec(this_j_ig,this_op1,this_op2,&j_ig,&tmp_val,-1);
-          this_j_ig = j_ig;
-          val_ig = tmp_val * val_ig;
-        }
-
-        if (this_j_gi!=-1){
-          //Get G* cross I
-          _get_val_j_from_global_i_vec_vec(this_j_gi,this_op1,this_op2,&j_gi,&tmp_val,1);
-          this_j_gi = j_gi;
-          val_gi = tmp_val * val_gi;
-        }
-
-      } else {
-        //Normal operator
-        if (this_j_ig!=-1){
-          //Get I cross G
-          _get_val_j_from_global_i(this_j_ig,this_op1,&j_ig,&tmp_val,-1);
-          this_j_ig = j_ig;
-          val_ig = tmp_val * val_ig;
-        }
-
-        if (this_j_gi!=-1){
-          //Get G* cross I
-          _get_val_j_from_global_i(this_j_gi,this_op1,&j_gi,&tmp_val,1);
-          this_j_gi = j_gi;
-          val_gi = tmp_val * val_gi;
-        }
-      }
-    }
-
+    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
 
     //Add -i * I cross G_1 G_2 ... G_n
     if (this_j_ig!=-1){
@@ -622,6 +586,47 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   return;
 }
 
+/* void _count_ops_in_mat_ham(A,PetscInt num_ops,operator *ops){ */
+/*   PetscInt i,j,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend; */
+/*   PetscScalar    val_ig,val_gi,tmp_val; */
+/*   PetscScalar add_to_mat,val_ig,val_gi; */
+/*   operator    this_op1,this_op2; */
+
+/*   MatGetOwnershipRange(A,&Istart,&Iend); */
+
+/*   for (i=Istart;i<Iend;i++){ */
+/*     this_j_ig = i; */
+/*     this_j_gi = i; */
+
+/*     _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG); */
+/*     _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI); */
+
+/*     //Add -i * I cross G_1 G_2 ... G_n */
+/*     if (this_j_ig!=-1){ */
+/*       if(this_j_ig>iStart && this_j_ig < iEnd){ */
+/*         //Diagonal block */
+/*         d_nnz[i - iStart] += 1; */
+/*       } else { */
+/*         //Offdiagonal block */
+/*         o_nnz[i - iStart] += 1; */
+/*       } */
+/*     } */
+
+/*     //Add i * G_1*T G_2*T ... G_n*T cross I */
+/*     if (this_j_gi!=-1){ */
+/*       if(this_j_gi>iStart && this_j_gi < iEnd){ */
+/*         //Diagonal block */
+/*         d_nnz[i - iStart] += 1; */
+/*       } else { */
+/*         //Offdiagonal block */
+/*         o_nnz[i - iStart] += 1; */
+/*       } */
+/*     } */
+/*   } */
+
+/*   return; */
+/* } */
+
 void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,j,j_ig,j_gi,j_gg,this_j_ig,this_j_gi,Istart,Iend,this_j_gg;
   PetscScalar    val_ig,val_gi,val_gg,tmp_val;
@@ -633,75 +638,10 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
     this_j_ig = i;
     this_j_gi = i;
     this_j_gg = i;
-    val_ig = 1.0;
-    val_gi = 1.0;
-    val_gg = 1.0;
-    //Loop through operators
-    for (j=0;j<num_ops;j++){
-      this_op1 = ops[j];
 
-      if(this_op1->my_op_type==VEC){
-        /*
-         * Since this is a VEC operator, the next operator must also
-         * be a VEC operator; it is assumed they always come in pairs.
-         */
-        this_op2 = ops[j+1];
-        if (this_op2->my_op_type!=VEC){
-          if (nid==0){
-            printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_lin\n");
-            exit(0);
-          }
-        }
-        //Increment j
-        j=j+1;
-
-        //-1 for this_j* means that it was 0 on a past operator multiplication, so we skip it if it is -1
-        if (this_j_ig!=-1){
-          //Get I cross G
-          _get_val_j_from_global_i_vec_vec(this_j_ig,this_op1,this_op2,&j_ig,&tmp_val,-1);
-          this_j_ig = j_ig;
-          val_ig = tmp_val * val_ig;
-        }
-
-        if (this_j_gi!=-1){
-          //Get G* cross I
-          _get_val_j_from_global_i_vec_vec(this_j_gi,this_op1,this_op2,&j_gi,&tmp_val,1);
-          this_j_gi = j_gi;
-          val_gi = tmp_val * val_gi;
-        }
-
-        if (this_j_gg!=-1){
-          //Get G* cross G
-          _get_val_j_from_global_i_vec_vec(this_j_gg,this_op1,this_op2,&j_gg,&tmp_val,0);
-          this_j_gg = j_gg;
-          val_gg = tmp_val * val_gg;
-        }
-
-      } else {
-        //Normal operator
-        if (this_j_ig!=-1){
-          //Get I cross G
-          _get_val_j_from_global_i(this_j_ig,this_op1,&j_ig,&tmp_val,-1);
-          this_j_ig = j_ig;
-          val_ig = tmp_val * val_ig;
-        }
-
-        if (this_j_gi!=-1){
-          //Get G* cross I
-          _get_val_j_from_global_i(this_j_gi,this_op1,&j_gi,&tmp_val,1);
-          this_j_gi = j_gi;
-          val_gi = tmp_val * val_gi;
-        }
-
-        if (this_j_gg!=-1){
-          //Get G* cross G
-          _get_val_j_from_global_i(this_j_gg,this_op1,&j_gg,&tmp_val,0);
-          this_j_gg = j_gg;
-          val_gg = tmp_val * val_gg;
-        }
-
-      }
-    }
+    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
+    _get_val_j_ops(&val_gg,&this_j_gg,num_ops,ops,TENSOR_GG);
     /*
      * From above, we only have I cross G = I cross G1 G2 ... Gn
      * But, we really need is
