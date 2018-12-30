@@ -1,0 +1,3 @@
+import quac
+quac.initialize()
+
