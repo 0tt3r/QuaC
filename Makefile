@@ -37,9 +37,14 @@ $(ODIR)/%.o: $(TESTDIR)/%.c $(DEPS) $(TEST_DEPS)
 	@mkdir -p $(@D)
 	@${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES}
 
-all: examples
+all: examples lib
 
 examples: clean_test $(EXAMPLES)
+
+lib: libquac.a
+
+libquac.a: $(OBJ)
+	ar rc libquac.a $(OBJ)
 
 $(TESTS) : CFLAGS += -DUNIT_TEST
 $(TESTS) : % : $(ODIR)/%.o $(OBJ) $(TEST_OBJ)
