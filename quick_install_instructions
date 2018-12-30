@@ -15,4 +15,4 @@ export PETSC_ARCH=linux-gnu-c-complex
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} test
 
-#Note, you should set PETSC_DIR=<dir/soft/petsc> and PETSC_ARCH=linux-gnu-c-soft in your bashrc
+#Note, you should set PETSC_DIR=<dir/soft/petsc> and PETSC_ARCH=linux-gnu-c-complex in your bashrc
