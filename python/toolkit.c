@@ -47,6 +47,12 @@ quac_finalize(PyObject *self, PyObject *args) {
   Py_RETURN_NONE;
 }
 
+static PyObject *
+quac_clear(PyObject *self, PyObject *args) {
+  QuaC_clear();
+  Py_RETURN_NONE;
+}
+
 static PetscErrorCode ts_monitor(TS, PetscInt, PetscReal, Vec, void*);
 
 typedef struct {
@@ -160,6 +166,8 @@ static PyMethodDef QuaCMethods[] = {
    "Initialize QuaC."},
   {"finalize",  quac_finalize, METH_VARARGS,
    "Finalize QuaC."},
+  {"clear",  quac_clear, METH_VARARGS,
+   "Clear QuaC's internal state."},
   {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
