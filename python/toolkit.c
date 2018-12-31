@@ -119,8 +119,7 @@ QuaCInstance_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 }
 
 static int
-QuaCInstance_init(QuaCInstance *self, PyObject *args, PyObject *kwds)
-{
+QuaCInstance_init(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   static char *kwlist[] = {"num_qubits", "ts_monitor", NULL};
   PyObject *tsm = NULL, *tmp;
 
@@ -156,7 +155,35 @@ QuaCInstance_repr(QuaCInstance * self) {
                               self->num_qubits, self->nid, self->np);
 }
 
+static int
+QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int levels = 2;
+
+  // TODO: Can we support different numbers of levels for different qudits?
+
+  static char *kwlist[] = {"num_levels", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i", kwlist,
+                                   &levels))
+    return NULL;
+
+  if (self->qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qbits for this QuaC instance have already been created!");
+    return NULL;
+  } else if (self->num_qubits) {
+    self->qubits = (operator *) malloc(sizeof(operator)*self->num_qubits);
+    for (int i = 0; i < self->num_qubits; ++i)
+      create_op(levels, &self->qubits[i]);
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef QuaCInstance_methods[] = {
+    {"create_qubits",
+     (PyCFunction) QuaCInstance_create_qubits, METH_VARARGS | METH_KEYWORDS,
+     "Create the qubits."
+    },
     {NULL}  /* Sentinel */
 };
 
