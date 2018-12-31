@@ -28,5 +28,9 @@ for i in range(0, 2):
     if i != j:
       q.add_lindblad_cross_coupling(i, j, 1e-6)
 
-quac.finalize()
+q.create_density_matrix()
+
+# Don't call this for now; otherwise getting the error upon exit:
+#  Attempting to use an MPI routine after finalizing MPICH
+# quac.finalize()
 
