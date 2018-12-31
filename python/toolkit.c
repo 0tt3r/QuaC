@@ -15,7 +15,7 @@
 
 static PyObject *
 quac_initialize(PyObject *self, PyObject *args) {
-  int i, argc;
+  int argc;
   char **argv;
   PyObject* argl;
 
@@ -26,7 +26,7 @@ quac_initialize(PyObject *self, PyObject *args) {
 
   argv = (char **) malloc(sizeof(char *)*argc);
   argv[0] = (char *) "quac";
-  for (i = 0; i < argc; ++i)
+  for (int i = 0; i < argc; ++i)
     argv[i] =
 #if PY_MAJOR_VERSION < 3
       PyString_AS_STRING(PyList_GET_ITEM(argl, i));

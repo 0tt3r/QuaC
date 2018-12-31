@@ -8,7 +8,8 @@ module1 = Extension('quac',
                     library_dirs = [ os.environ['PETSC_DIR'] + '/' + os.environ['PETSC_ARCH'] + '/lib',
                                      os.getcwd() + '/..' ],
                     libraries = [ 'quac', 'petsc' ],
-                    sources = ['toolkit.c'])
+                    sources = ['toolkit.c'],
+                    extra_compile_args=['-std=gnu99'])
 
 setup (name = 'QuaC',
        version = '1.0',
