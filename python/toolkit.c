@@ -239,7 +239,33 @@ QuaCCircuit_repr(QuaCCircuit * self) {
   return r;
 }
 
+static PyObject *
+QuaCCircuit_read_qasm(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
+  char *filename, *format;
+  PetscInt num_qubits;
+
+  static char *kwlist[] = {"format", "filename", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "ss", kwlist,
+                                   &format, &filename))
+    return NULL;
+
+  if (!strcmp(format, "quil")) {
+    quil_read(filename, &num_qubits, &self->c);
+  } else if (!strcmp(format, "projectq")) {
+    projectq_qasm_read(filename, &num_qubits, &self->c);
+  } else {
+    PyErr_SetString(PyExc_RuntimeError, "Unknown qasm format!");
+    return NULL;
+  }
+
+  return PyLong_FromLong(num_qubits);
+}
+
 static PyMethodDef QuaCCircuit_methods[] = {
+    {"read_qasm", (PyCFunction) QuaCCircuit_read_qasm, METH_VARARGS,
+     "Read QASM from the specified file using the specified format."
+    },
     {NULL}  /* Sentinel */
 };
 
