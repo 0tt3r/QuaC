@@ -277,22 +277,84 @@ QuaCCircuit_init2(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
   Py_RETURN_NONE;
 }
 
+static PyObject *
+QuaCCircuit_add_gate(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
+  int qubit1 = -1, qubit2 = -1;
+  PetscReal angle = 0, time = 0;
+  gate_type gate;
+  char *gate_name;
+
+  static char *kwlist[] = {"gate", "qubit1", "qubit2", "angle", "time", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "si|idd", kwlist,
+                                   &gate_name, &qubit1, &qubit2, &angle, &time))
+    return NULL;
+
+  if (!strcasecmp(gate_name, "CZX")) {
+    gate = CZX;
+  } else if (!strcasecmp(gate_name, "CmZ")) {
+    gate = CmZ;
+  } else if (!strcasecmp(gate_name, "CZ")) {
+    gate = CZ;
+  } else if (!strcasecmp(gate_name, "CXZ")) {
+    gate = CXZ;
+  } else if (!strcasecmp(gate_name, "CNOT")) {
+    gate = CNOT;
+  } else if (!strcasecmp(gate_name, "H")) {
+    gate = HADAMARD;
+  } else if (!strcasecmp(gate_name, "X")) {
+    gate = SIGMAX;
+  } else if (!strcasecmp(gate_name, "Y")) {
+    gate = SIGMAY;
+  } else if (!strcasecmp(gate_name, "Z")) {
+    gate = SIGMAZ;
+  } else if (!strcasecmp(gate_name, "I")) {
+    gate = EYE;
+  } else if (!strcasecmp(gate_name, "RX")) {
+    gate = RX;
+  } else if (!strcasecmp(gate_name, "RY")) {
+    gate = RY;
+  } else if (!strcasecmp(gate_name, "RZ")) {
+    gate = RZ;
+  } else {
+    PyErr_SetString(PyExc_RuntimeError, "Unknown gate type!");
+    return NULL;
+  }
+
+  if (((int) gate) < 0) {
+    if (qubit2 < 0) {
+      PyErr_SetString(PyExc_RuntimeError, "qubit2 must be specified for a two-qubit gate!");
+      return NULL;
+    }
+
+    add_gate_to_circuit(&self->c, time, gate, qubit1, qubit2);
+  } else {
+    add_gate_to_circuit(&self->c, time, gate, qubit1, angle);
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef QuaCCircuit_methods[] = {
     {"initialize_and_read_qasm",
-     (PyCFunction) QuaCCircuit_read_qasm, METH_VARARGS,
+     (PyCFunction) QuaCCircuit_read_qasm, METH_VARARGS | METH_KEYWORDS,
      "Initialize and read QASM from the specified file using the specified format."
     },
     {"initialize",
-     (PyCFunction) QuaCCircuit_init2, METH_VARARGS,
+     (PyCFunction) QuaCCircuit_init2, METH_VARARGS | METH_KEYWORDS,
      "Initialize the circuit object."
+    },
+    {"add_gate",
+     (PyCFunction) QuaCCircuit_add_gate, METH_VARARGS | METH_KEYWORDS,
+     "Add a gate to the circuit object."
     },
     {NULL}  /* Sentinel */
 };
 
 static PyTypeObject QuaCCircuitType = {
   PyVarObject_HEAD_INIT(NULL, 0)
-  .tp_name = "quac.Instance",
-  .tp_doc = "QuaC Instance",
+  .tp_name = "quac.Circuit",
+  .tp_doc = "QuaC Circuit",
   .tp_basicsize = sizeof(QuaCCircuit),
   .tp_itemsize = 0,
   .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
