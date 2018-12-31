@@ -16,5 +16,9 @@ c.add_gate(gate="y", qubit1=1, time=2.5)
 c.add_gate(gate="cnot", qubit1=0, qubit2=1, time=3)
 print(c)
 
+q.num_qubits = 2
+q.create_qubits()
+print(q)
+
 quac.finalize()
 
