@@ -71,6 +71,11 @@ typedef struct {
   PyObject *ts_monitor_callback;
 } QuaCInstance;
 
+typedef struct {
+  PyObject_HEAD
+  circuit c;
+} QuaCCircuit;
+
 static void
 QuaCInstance_dealloc(QuaCInstance *self) {
   if (self->qubits) {
@@ -188,6 +193,72 @@ PetscErrorCode ts_monitor(TS ts, PetscInt step, PetscReal time, Vec rho, void *c
   PetscFunctionReturn(0);
 }
 
+static void
+QuaCCircuit_dealloc(QuaCCircuit *self) {
+  Py_TYPE(self)->tp_free((PyObject *) self);
+}
+
+static PyObject *
+QuaCCircuit_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+  QuaCCircuit *self;
+  self = (QuaCCircuit *) type->tp_alloc(type, 0);
+  if (self == NULL)
+    return (PyObject *) self;
+
+  memset(&self->c, 0, sizeof(circuit));
+
+  return (PyObject *) self;
+}
+
+static int
+QuaCCircuit_init(QuaCCircuit *self, PyObject *args, PyObject *kwds)
+{
+  static char *kwlist[] = {"start_time", NULL};
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|d", kwlist,
+                                   &self->c.start_time))
+    return -1;
+
+  return 0;
+}
+
+static PyMemberDef QuaCCircuit_members[] = {
+    {"num_gates", T_LONG, offsetof(QuaCCircuit, c.num_gates), READONLY,
+     "number of gates"},
+    {"start_time", T_DOUBLE, offsetof(QuaCCircuit, c.start_time), 0,
+     "start time"},
+    {NULL}  /* Sentinel */
+};
+
+static PyObject *
+QuaCCircuit_repr(QuaCCircuit * self) {
+  PyObject *r;
+  char *st = PyOS_double_to_string(self->c.start_time, 'g', 0, 0, NULL);
+  r = PyUnicode_FromFormat("<QuaC Curcuit{%ld gates starting at t=%s}>",
+                           self->c.num_gates, st);
+  PyMem_Free(st);
+  return r;
+}
+
+static PyMethodDef QuaCCircuit_methods[] = {
+    {NULL}  /* Sentinel */
+};
+
+static PyTypeObject QuaCCircuitType = {
+  PyVarObject_HEAD_INIT(NULL, 0)
+  .tp_name = "quac.Instance",
+  .tp_doc = "QuaC Instance",
+  .tp_basicsize = sizeof(QuaCCircuit),
+  .tp_itemsize = 0,
+  .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+  .tp_new = QuaCCircuit_new,
+  .tp_init = (initproc) QuaCCircuit_init,
+  .tp_dealloc = (destructor) QuaCCircuit_dealloc,
+  .tp_members = QuaCCircuit_members,
+  .tp_methods = QuaCCircuit_methods,
+  .tp_repr = QuaCCircuit_repr,
+  .tp_str = QuaCCircuit_repr,
+};
+
 static PyMethodDef QuaCMethods[] = {
   {"initialize",  quac_initialize, METH_VARARGS,
    "Initialize QuaC."},
@@ -214,12 +285,19 @@ PyInit_quac(void) {
   if (PyType_Ready(&QuaCInstanceType) < 0)
     return NULL;
 
+  if (PyType_Ready(&QuaCCircuitType) < 0)
+    return NULL;
+
   m = PyModule_Create(&quacmodule);
   if (m == NULL)
     return NULL;
 
   Py_INCREF(&QuaCInstanceType);
   PyModule_AddObject(m, "Instance", (PyObject *) &QuaCInstanceType);
+
+  Py_INCREF(&QuaCCircuitType);
+  PyModule_AddObject(m, "Circuit", (PyObject *) &QuaCCircuitType);
+
   return m;
 }
 
