@@ -263,7 +263,8 @@ QuaCCircuit_read_qasm(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
 }
 
 static PyMethodDef QuaCCircuit_methods[] = {
-    {"read_qasm", (PyCFunction) QuaCCircuit_read_qasm, METH_VARARGS,
+    {"initialize_and_read_qasm",
+     (PyCFunction) QuaCCircuit_read_qasm, METH_VARARGS,
      "Read QASM from the specified file using the specified format."
     },
     {NULL}  /* Sentinel */
