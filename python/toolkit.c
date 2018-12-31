@@ -245,6 +245,20 @@ QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyO
   Py_RETURN_NONE;
 }
 
+static int
+QuaCInstance_create_dm(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  if (self->rho) {
+    PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has already been created!");
+    return NULL;
+  }
+
+  create_full_dm(&self->rho);
+  add_value_to_dm(self->rho, 0, 0, 1.0);
+  assemble_dm(self->rho);
+
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef QuaCInstance_methods[] = {
     {"create_qubits",
      (PyCFunction) QuaCInstance_create_qubits, METH_VARARGS | METH_KEYWORDS,
@@ -265,6 +279,10 @@ static PyMethodDef QuaCInstance_methods[] = {
     {"add_lindblad_cross_coupling",
      (PyCFunction) QuaCInstance_add_lindblad_cross_coupling, METH_VARARGS | METH_KEYWORDS,
      "Add Lindblad cross_coupling terms."
+    },
+    {"create_density_matrix",
+     (PyCFunction) QuaCInstance_create_dm, METH_NOARGS,
+     "Create the density matrix."
     },
     {NULL}  /* Sentinel */
 };
