@@ -179,10 +179,92 @@ QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   Py_RETURN_NONE;
 }
 
+static int
+QuaCInstance_add_lindblad_emission(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit;
+  double gamma_1;
+
+  static char *kwlist[] = {"qubit", "gamma_1", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "id", kwlist,
+                                   &qubit, &gamma_1))
+    return NULL;
+
+  add_lin(gamma_1, self->qubits[qubit]);
+
+  Py_RETURN_NONE;
+}
+
+static int
+QuaCInstance_add_lindblad_dephasing(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit;
+  double gamma_2;
+
+  static char *kwlist[] = {"qubit", "gamma_2", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "id", kwlist,
+                                   &qubit, &gamma_2))
+    return NULL;
+
+  add_lin(gamma_2, self->qubits[qubit]->n);
+
+  Py_RETURN_NONE;
+}
+
+static int
+QuaCInstance_add_lindblad_thermal_coupling(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit;
+  double therm_1, n_therm = 0.5;
+
+  static char *kwlist[] = {"qubit", "therm_1", "n_therm", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "id|d", kwlist,
+                                   &qubit, &therm_1, &n_therm))
+    return NULL;
+
+  add_lin(therm_1*(n_therm + 1), self->qubits[qubit]);
+  add_lin(therm_1*(n_therm), self->qubits[qubit]->dag);
+
+  Py_RETURN_NONE;
+}
+
+static int
+QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit1, qubit2;
+  double coup_1;
+
+  static char *kwlist[] = {"qubit1", "qubit2", "coup_1", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "iid", kwlist,
+                                   &qubit1, &qubit2, &coup_1))
+    return NULL;
+
+  add_lin_mult2(coup_1, self->qubits[qubit1]->dag, self->qubits[qubit2]);
+  add_lin_mult2(coup_1, self->qubits[qubit1], self->qubits[qubit2]->dag);
+
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef QuaCInstance_methods[] = {
     {"create_qubits",
      (PyCFunction) QuaCInstance_create_qubits, METH_VARARGS | METH_KEYWORDS,
      "Create the qubits."
+    },
+    {"add_lindblad_emission",
+     (PyCFunction) QuaCInstance_add_lindblad_emission, METH_VARARGS | METH_KEYWORDS,
+     "Add Lindblad spontaneous-emission term(s)."
+    },
+    {"add_lindblad_dephasing",
+     (PyCFunction) QuaCInstance_add_lindblad_dephasing, METH_VARARGS | METH_KEYWORDS,
+     "Add Lindblad dephasing term(s)."
+    },
+    {"add_lindblad_thermal_coupling",
+     (PyCFunction) QuaCInstance_add_lindblad_thermal_coupling, METH_VARARGS | METH_KEYWORDS,
+     "Add Lindblad thermal-coupling terms."
+    },
+    {"add_lindblad_cross_coupling",
+     (PyCFunction) QuaCInstance_add_lindblad_cross_coupling, METH_VARARGS | METH_KEYWORDS,
+     "Add Lindblad cross_coupling terms."
     },
     {NULL}  /* Sentinel */
 };
