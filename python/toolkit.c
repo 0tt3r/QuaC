@@ -286,11 +286,11 @@ static PyTypeObject QuaCCircuitType = {
 };
 
 static PyMethodDef QuaCMethods[] = {
-  {"initialize",  quac_initialize, METH_VARARGS,
+  {"initialize",  quac_initialize, METH_NOARGS,
    "Initialize QuaC."},
-  {"finalize",  quac_finalize, METH_VARARGS,
+  {"finalize",  quac_finalize, METH_NOARGS,
    "Finalize QuaC."},
-  {"clear",  quac_clear, METH_VARARGS,
+  {"clear",  quac_clear, METH_NOARGS,
    "Clear QuaC's internal state."},
   {NULL, NULL, 0, NULL}        /* Sentinel */
 };
