@@ -145,6 +145,12 @@ static PyMemberDef QuaCInstance_members[] = {
     {NULL}  /* Sentinel */
 };
 
+static PyObject *
+QuaCInstance_repr(QuaCInstance * self) {
+  return PyUnicode_FromFormat("<QuaC Instance{%d qubits; node %d of %d}>",
+                              self->num_qubits, self->nid, self->np);
+}
+
 static PyMethodDef QuaCInstance_methods[] = {
     {NULL}  /* Sentinel */
 };
@@ -161,6 +167,8 @@ static PyTypeObject QuaCInstanceType = {
   .tp_dealloc = (destructor) QuaCInstance_dealloc,
   .tp_members = QuaCInstance_members,
   .tp_methods = QuaCInstance_methods,
+  .tp_repr = QuaCInstance_repr,
+  .tp_str = QuaCInstance_repr,
 };
 
 PetscErrorCode ts_monitor(TS ts, PetscInt step, PetscReal time, Vec rho, void *ctx) {
