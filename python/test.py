@@ -20,5 +20,13 @@ q.num_qubits = 2
 q.create_qubits()
 print(q)
 
+for i in range(0, 2):
+  q.add_lindblad_emission(i, 1e-4)
+  q.add_lindblad_dephasing(i, gamma_2=1e-5)
+  q.add_lindblad_thermal_coupling(i, 1e-5)
+  for j in range(0, 2):
+    if i != j:
+      q.add_lindblad_cross_coupling(i, j, 1e-6)
+
 quac.finalize()
 
