@@ -14,6 +14,8 @@
 #include <quantum_gates.h>
 #include <qasm_parser.h>
 
+static int quac_initialized = 0;
+
 static PyObject *
 quac_initialize(PyObject *self, PyObject *args) {
   int argc;
@@ -36,6 +38,7 @@ quac_initialize(PyObject *self, PyObject *args) {
 #endif
 
   QuaC_initialize(argc, argv);
+  quac_initialized = 1;
 
   free(argv);
   Py_RETURN_NONE;
@@ -44,6 +47,7 @@ quac_initialize(PyObject *self, PyObject *args) {
 static PyObject *
 quac_finalize(PyObject *self, PyObject *args) {
   QuaC_finalize();
+  quac_initialized = 0;
   Py_RETURN_NONE;
 }
 
@@ -57,6 +61,8 @@ static PetscErrorCode ts_monitor(TS, PetscInt, PetscReal, Vec, void*);
 
 typedef struct {
   PyObject_HEAD
+
+  int nid, np;
 
   PetscInt num_qubits;
   operator *qubits;
@@ -83,10 +89,19 @@ QuaCInstance_dealloc(QuaCInstance *self) {
 
 static PyObject *
 QuaCInstance_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
-  QuaCInstance *self;
+  QuaCInstance *self = NULL;
+
+  if (!quac_initialized) {
+    PyErr_SetString(PyExc_RuntimeError, "QuaC must be initialized first!");
+    return (PyObject *) self;
+  }
+
   self = (QuaCInstance *) type->tp_alloc(type, 0);
   if (self == NULL)
     return (PyObject *) self;
+
+  self->nid = nid;
+  self->np = np;
 
   self->num_qubits = 0;
   self->qubits = NULL;
@@ -121,8 +136,12 @@ QuaCInstance_init(QuaCInstance *self, PyObject *args, PyObject *kwds)
 static PyMemberDef QuaCInstance_members[] = {
     {"ts_monitor", T_OBJECT_EX, offsetof(QuaCInstance, ts_monitor_callback), 0,
      "time-step-monitor callback"},
-    {"num_qubits", T_INT, offsetof(QuaCInstance, num_qubits), 0,
+    {"num_qubits", T_LONG, offsetof(QuaCInstance, num_qubits), 0,
      "number of qubits"},
+    {"node_id", T_INT, offsetof(QuaCInstance, nid), READONLY,
+     "node (rank) identifier"},
+    {"num_nodes", T_INT, offsetof(QuaCInstance, np), READONLY,
+     "number of nodes"},
     {NULL}  /* Sentinel */
 };
 
