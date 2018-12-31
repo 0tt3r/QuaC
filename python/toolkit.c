@@ -262,10 +262,29 @@ QuaCCircuit_read_qasm(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
   return PyLong_FromLong(num_qubits);
 }
 
+static PyObject *
+QuaCCircuit_init2(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
+  PetscInt num_gates = 0;
+
+  static char *kwlist[] = {"num_gates", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|l", kwlist,
+                                   &num_gates))
+    return NULL;
+
+  create_circuit(&self->c, num_gates);
+
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef QuaCCircuit_methods[] = {
     {"initialize_and_read_qasm",
      (PyCFunction) QuaCCircuit_read_qasm, METH_VARARGS,
-     "Read QASM from the specified file using the specified format."
+     "Initialize and read QASM from the specified file using the specified format."
+    },
+    {"initialize",
+     (PyCFunction) QuaCCircuit_init2, METH_VARARGS,
+     "Initialize the circuit object."
     },
     {NULL}  /* Sentinel */
 };

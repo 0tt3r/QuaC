@@ -8,6 +8,8 @@ print("num_nodes: {0:d}".format(q.num_nodes))
 
 c = quac.Circuit()
 print(c)
+c.initialize(25);
+print(c)
 
 quac.finalize()
 
