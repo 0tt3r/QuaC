@@ -37,6 +37,7 @@ def mon(c1, s, t):
 q.ts_monitor = mon
 
 q.run(4, dt=0.1)
+q.print_density_matrix()
 
 # Don't call this for now; otherwise getting the error upon exit:
 #  Attempting to use an MPI routine after finalizing MPICH

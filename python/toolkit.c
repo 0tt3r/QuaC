@@ -65,6 +65,7 @@ typedef struct {
   int nid, np;
 
   PetscInt num_qubits;
+  int num_levels;
   operator *qubits;
   Vec rho;
 
@@ -284,6 +285,7 @@ QuaCInstance_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
   self->np = np;
 
   self->num_qubits = 0;
+  self->num_levels = 0;
   self->qubits = NULL;
   self->rho = NULL;
 
@@ -326,20 +328,20 @@ static PyMemberDef QuaCInstance_members[] = {
 
 static PyObject *
 QuaCInstance_repr(QuaCInstance * self) {
-  return PyUnicode_FromFormat("<QuaC Instance{%d qubits; node %d of %d}>",
-                              self->num_qubits, self->nid, self->np);
+  return PyUnicode_FromFormat("<QuaC Instance{%d qubits; %d levels; node %d of %d}>",
+                              self->num_qubits, self->num_levels, self->nid, self->np);
 }
 
 static int
 QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
-  int levels = 2;
+  self->num_levels = 2;
 
   // TODO: Can we support different numbers of levels for different qudits?
 
   static char *kwlist[] = {"num_levels", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i", kwlist,
-                                   &levels))
+                                   &self->num_levels))
     return NULL;
 
   if (self->qubits) {
@@ -348,7 +350,7 @@ QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   } else if (self->num_qubits) {
     self->qubits = (operator *) malloc(sizeof(operator)*self->num_qubits);
     for (int i = 0; i < self->num_qubits; ++i)
-      create_op(levels, &self->qubits[i]);
+      create_op(self->num_levels, &self->qubits[i]);
   }
 
   Py_RETURN_NONE;
@@ -456,6 +458,26 @@ QuaCInstance_start_circuit_at(QuaCInstance *self, PyObject *args, PyObject *kwds
 }
 
 static int
+QuaCInstance_print_density_matrix(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  char *filename = NULL;
+  int num_print_qubits = self->num_qubits;
+
+  static char *kwlist[] = {"filename", "num_qubits", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|sd", kwlist,
+                                   &filename, &num_print_qubits))
+    return NULL;
+
+  if (filename) {
+    print_dm_sparse_to_file(self->rho, pow(self->num_levels, num_print_qubits), filename);
+  } else {
+    print_dm_sparse(self->rho, pow(self->num_levels, num_print_qubits));
+  }
+
+  Py_RETURN_NONE;
+}
+
+static int
 QuaCInstance_run(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   PetscReal dt = 1.0, start_time = 0.0, end_time;
   PetscInt max_steps = INT_MAX-1;
@@ -505,6 +527,10 @@ static PyMethodDef QuaCInstance_methods[] = {
     {"run",
      (PyCFunction) QuaCInstance_run, METH_VARARGS | METH_KEYWORDS,
      "Simulate the registered circuits."
+    },
+    {"print_density_matrix",
+     (PyCFunction) QuaCInstance_print_density_matrix, METH_VARARGS | METH_KEYWORDS,
+     "Print the density matrix."
     },
     {NULL}  /* Sentinel */
 };
