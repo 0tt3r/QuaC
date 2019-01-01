@@ -603,6 +603,7 @@ PyMODINIT_FUNC
 PyInit_quac(void)
 #else
 #define INITERROR return
+void
 initquac(void)
 #endif
 {
