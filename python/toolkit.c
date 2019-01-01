@@ -1,5 +1,6 @@
 #include <Python.h>
 #include <structmember.h>
+#include <bytesobject.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -578,6 +579,7 @@ static PyMethodDef QuaCMethods[] = {
   {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
+#if PY_MAJOR_VERSION >= 3
 static struct PyModuleDef quacmodule = {
   PyModuleDef_HEAD_INIT,
   "quac",   /* name of module */
@@ -586,20 +588,32 @@ static struct PyModuleDef quacmodule = {
                or -1 if the module keeps state in global variables. */
   QuaCMethods
 };
+#endif // PY_MAJOR_VERSION >= 3
 
+#if PY_MAJOR_VERSION >= 3
+#define INITERROR return NULL
 PyMODINIT_FUNC
-PyInit_quac(void) {
+PyInit_quac(void)
+#else
+#define INITERROR return
+initquac(void)
+#endif
+{
   PyObject *m;
 
   if (PyType_Ready(&QuaCInstanceType) < 0)
-    return NULL;
+    INITERROR;
 
   if (PyType_Ready(&QuaCCircuitType) < 0)
-    return NULL;
+    INITERROR;
 
+#if PY_MAJOR_VERSION >= 3
   m = PyModule_Create(&quacmodule);
+#else
+  m = Py_InitModule("quac", QuaCMethods);
+#endif
   if (m == NULL)
-    return NULL;
+    INITERROR;
 
   Py_INCREF(&QuaCInstanceType);
   PyModule_AddObject(m, "Instance", (PyObject *) &QuaCInstanceType);
@@ -607,6 +621,10 @@ PyInit_quac(void) {
   Py_INCREF(&QuaCCircuitType);
   PyModule_AddObject(m, "Circuit", (PyObject *) &QuaCCircuitType);
 
+#if PY_MAJOR_VERSION >= 3
   return m;
+#endif
 }
+
+#undef INITERROR
 
