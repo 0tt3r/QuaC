@@ -29,6 +29,7 @@ for i in range(0, 2):
       q.add_lindblad_cross_coupling(i, j, 1e-6)
 
 q.create_density_matrix()
+q.start_circuit_at(c)
 
 # Don't call this for now; otherwise getting the error upon exit:
 #  Attempting to use an MPI routine after finalizing MPICH
