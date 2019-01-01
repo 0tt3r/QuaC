@@ -455,6 +455,24 @@ QuaCInstance_start_circuit_at(QuaCInstance *self, PyObject *args, PyObject *kwds
   Py_RETURN_NONE;
 }
 
+static int
+QuaCInstance_run(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  PetscReal dt = 1.0, start_time = 0.0, end_time;
+  PetscInt max_steps = INT_MAX-1;
+
+  static char *kwlist[] = {"end_time", "dt", "start_time", "max_steps", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "d|ddl", kwlist,
+                                   &end_time, &dt, &start_time, &max_steps))
+    return NULL;
+
+  set_ts_monitor_ctx(ts_monitor, (void *) self);
+
+  time_step(self->rho, start_time, end_time, dt, max_steps);
+
+  Py_RETURN_NONE;
+}
+
 static PyMethodDef QuaCInstance_methods[] = {
     {"create_qubits",
      (PyCFunction) QuaCInstance_create_qubits, METH_VARARGS | METH_KEYWORDS,
@@ -483,6 +501,10 @@ static PyMethodDef QuaCInstance_methods[] = {
     {"start_circuit_at",
      (PyCFunction) QuaCInstance_start_circuit_at, METH_VARARGS | METH_KEYWORDS,
      "Registers a circuit to start at the specified time."
+    },
+    {"run",
+     (PyCFunction) QuaCInstance_run, METH_VARARGS | METH_KEYWORDS,
+     "Simulate the registered circuits."
     },
     {NULL}  /* Sentinel */
 };
