@@ -17,6 +17,18 @@
 
 static int quac_initialized = 0;
 
+static void finalize_atexit(void) {
+  if (quac_initialized)
+    QuaC_finalize();
+}
+
+static PyObject *
+quac_finalize(PyObject *self, PyObject *args) {
+  QuaC_finalize();
+  quac_initialized = 0;
+  Py_RETURN_NONE;
+}
+
 static PyObject *
 quac_initialize(PyObject *self, PyObject *args) {
   int argc;
@@ -41,14 +53,9 @@ quac_initialize(PyObject *self, PyObject *args) {
   QuaC_initialize(argc, argv);
   quac_initialized = 1;
 
-  free(argv);
-  Py_RETURN_NONE;
-}
+  (void) Py_AtExit(finalize_atexit);
 
-static PyObject *
-quac_finalize(PyObject *self, PyObject *args) {
-  QuaC_finalize();
-  quac_initialized = 0;
+  free(argv);
   Py_RETURN_NONE;
 }
 
