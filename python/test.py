@@ -31,6 +31,13 @@ for i in range(0, 2):
 q.create_density_matrix()
 q.start_circuit_at(c)
 
+def mon(c1, s, t):
+  print("monitor: {0}: step {1:d}, time {2:f}".format(c1, s, t))
+
+q.ts_monitor = mon
+
+q.run(4, dt=0.1)
+
 # Don't call this for now; otherwise getting the error upon exit:
 #  Attempting to use an MPI routine after finalizing MPICH
 # quac.finalize()
