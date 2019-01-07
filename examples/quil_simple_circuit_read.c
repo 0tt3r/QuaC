@@ -58,7 +58,7 @@ int main(int argc,char **args){
 
   //Add errors to lindblad term
   for (i=0;i<num_qubits;i++){
-    add_lin(gamma_1[i]/2,qubits[i]);
+    add_lin(gamma_1[i],qubits[i]);
     add_lin(gamma_2[i]*2,qubits[i]->n);
   }
 
@@ -77,10 +77,10 @@ int main(int argc,char **args){
   /* Set the ts_monitor to print results at each time step, if desired */
   set_ts_monitor(ts_monitor);
   /* Open file that we will print to in ts_monitor */
-  if (nid==0){
-    f_pop = fopen("pop","w");
-    fprintf(f_pop,"#Time Populations\n");
-  }
+  /* if (nid==0){ */
+  /*   f_pop = fopen("pop","w"); */
+  /*   fprintf(f_pop,"#Time Populations\n"); */
+  /* } */
 
   create_full_dm(&rho); //Allocate and set our initial density matrix
   mat_val = 1.0;
@@ -95,9 +95,15 @@ int main(int argc,char **args){
   start_circuit_at_time(&projectq_read,0.0);
   //Run the evolution, with error and with the circuit
   time_step(rho,0.0,time_max,dt,steps_max);
+
   print_dm_sparse_to_file(rho,pow(2,num_qubits),file_dm);
+
+
   //Clean up memory
+  PetscScalar pop;
   for (i=0;i<num_qubits;i++){
+    get_expectation_value(rho,&pop,1,qubits[i]->n);
+    printf("pop: %d %f\n",i,PetscRealPart(pop));
     destroy_op(&qubits[i]);
   }
   destroy_dm(rho);
