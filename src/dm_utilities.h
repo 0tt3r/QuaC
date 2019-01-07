@@ -33,6 +33,7 @@ void _get_expectation_value_psi(Vec,PetscScalar*,int,operator*);
 void measure_dm(Vec,operator);
 void add_ops_to_mat(Mat,PetscInt,PetscInt,...);
 void print_mat_sparse_to_file(Mat,char[]);
+void print_mat_sparse(Mat);
 void vadd_ops_to_mat(Mat,PetscInt,PetscInt,va_list);
 void trace_dm(PetscScalar*,Vec);
 #endif

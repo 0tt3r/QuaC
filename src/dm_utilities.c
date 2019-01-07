@@ -100,17 +100,11 @@ void print_mat_sparse(Mat A){
   const PetscInt    *cols;
   const PetscScalar *vals;
 
-  if(_lindblad_terms){
-    dim = total_levels*total_levels;
-  } else{
-    dim = total_levels;
-  }
+  MatGetSize(A,&dim,NULL);
   for(i=0;i<dim;i++){
     MatGetRow(A,i,&ncols,&cols,&vals);
     for (j=0;j<ncols;j++){
-      if (PetscAbsComplex(vals[j])>1e-10){
         PetscPrintf(PETSC_COMM_WORLD,"%d %d %e %e\n",i,cols[j],PetscRealPart(vals[j]),PetscImaginaryPart(vals[j]));
-      }
     }
     MatRestoreRow(A,i,&ncols,&cols,&vals);
   }
@@ -1172,13 +1166,13 @@ void get_populations(Vec x,double **populations) {
   }
   VecGetSize(x,&dm_size);
 
-  if (dm_size!=dim){
-    if (nid==0){
-      printf("ERROR! The input density matrix does not seem to be the full one!\n");
-      printf("       Populations cannot be calculated.\n");
-      exit(0);
-    }
-  }
+  /* if (dm_size!=dim){ */
+  /*   if (nid==0){ */
+  /*     printf("ERROR! The input density matrix does not seem to be the full one!\n"); */
+  /*     printf("       Populations cannot be calculated.\n"); */
+  /*     exit(0); */
+  /*   } */
+  /* } */
 
   VecGetOwnershipRange(x,&x_low,&x_high);
   VecGetArrayRead(x,&xa);
