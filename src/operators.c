@@ -302,7 +302,8 @@ void add_to_ham_p(PetscScalar a,PetscInt num_ops,...){
   va_list  ap;
   operator *ops;
   int      i;
-  PetscLogEventBegin(add_to_ham_event,0,0,0,0);
+  //FIXME This gives a segfault for some reason?
+  /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
   _check_initialized_A();
 
   if (PetscAbsComplex(a)!=0) { //Don't add zero numbers to the hamiltonian
@@ -315,12 +316,12 @@ void add_to_ham_p(PetscScalar a,PetscInt num_ops,...){
     }
     va_end(ap);
     _add_ops_to_mat_ham_only(a,ham_A,num_ops,ops);
-    /* if(_no_lindblad){ */
-    /*   _add_ops_to_mat_ham(a,full_A,num_ops,ops); */
-    /* } */
+    if(_no_lindblad==0){
+      _add_ops_to_mat_ham(a,full_A,num_ops,ops);
+    }
     free(ops);
   }
-  PetscLogEventEnd(add_to_ham_event,0,0,0,0);
+  /* PetscLogEventEnd(add_to_ham_event,0,0,0,0); */
   return;
 }
 
@@ -551,7 +552,6 @@ void add_to_ham_stiff_mult2(PetscScalar a,operator op1,operator op2){
 
   multiply_vec = _check_op_type2(op1,op2);
 
-
   if (nid==0&&_print_dense_ham){
     /* Add the terms to the dense Hamiltonian */
     if (multiply_vec){
@@ -734,7 +734,6 @@ void add_lin_p(PetscScalar a,PetscInt num_ops,...){
   /* PetscScalar    val_ig,val_gi,val_gg,tmp_val; */
   /* PetscScalar add_to_mat; */
   /* operator    this_op1,this_op2; */
-
   PetscLogEventBegin(add_lin_event,0,0,0,0);
   _check_initialized_A();
   _lindblad_terms = 1;
