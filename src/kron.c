@@ -189,7 +189,6 @@ void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt num_ops,
     } else {
       //Normal operator
       if (this_j!=-1){
-        //Get I cross G
         _get_val_j_from_global_i(this_j,this_op1,&j2,&tmp_val,tensor_control);
         this_j = j2;
         val = tmp_val * val;
@@ -239,6 +238,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
     } else {
       extra_after = 1;
     }
+
     n_after = total_levels/(this_op->my_levels*this_op->n_before)*extra_after;
     i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
 
@@ -535,10 +535,9 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
 
 
 void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
-  PetscInt i,j,j_ig,this_j_ig,Istart,Iend;
-  PetscScalar    val_ig,tmp_val;
+  PetscInt i,j_ig,this_j_ig,Istart,Iend;
+  PetscScalar    val_ig;
   PetscScalar add_to_mat;
-  operator    this_op1,this_op2;
   MatGetOwnershipRange(A,&Istart,&Iend);
 
   for (i=Istart;i<Iend;i++){
@@ -548,6 +547,7 @@ void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops
     //Add -i * G_1 G_2 ... G_n
     if (this_j_ig!=-1){
       add_to_mat = -a*PETSC_i*val_ig;
+      //MatSetValues(A,1,&i,1,&this_j_ig,&add_to_mat,ADD_VALUES);
       MatSetValue(A,i,this_j_ig,add_to_mat,ADD_VALUES);
     }
   }
@@ -556,10 +556,9 @@ void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops
 }
 
 void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
-  PetscInt i,j,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend;
-  PetscScalar    val_ig,val_gi,tmp_val;
+  PetscInt i,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend;
+  PetscScalar    val_ig,val_gi;
   PetscScalar add_to_mat;
-  operator    this_op1,this_op2;
 
   MatGetOwnershipRange(A,&Istart,&Iend);
 
@@ -569,7 +568,6 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
 
     _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
     _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
-
     //Add -i * I cross G_1 G_2 ... G_n
     if (this_j_ig!=-1){
       add_to_mat = -a*PETSC_i*val_ig;
@@ -586,52 +584,198 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   return;
 }
 
-/* void _count_ops_in_mat_ham(A,PetscInt num_ops,operator *ops){ */
-/*   PetscInt i,j,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend; */
-/*   PetscScalar    val_ig,val_gi,tmp_val; */
-/*   PetscScalar add_to_mat,val_ig,val_gi; */
-/*   operator    this_op1,this_op2; */
+void _count_ops_in_mat(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
+                       Mat A,mat_term_type my_term_type,
+                       PetscInt dm_equations, PetscInt num_ops,operator *ops){
+  if (dm_equations){
+    //Use lindblad terms
+    if (my_term_type==LINDBLAD){
+      _count_ops_in_mat_lin(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
+    } else if (my_term_type==HAM){
+      _count_ops_in_mat_ham(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
+    } else {
+      if (nid==0){
+        printf("ERROR! Wrong mat_term_type in _count_ops_in_mat - dm!\n");
+        exit(0);
+      }
+    }
+  } else {
+    if (my_term_type==HAM){
+      _count_ops_in_mat_ham_only(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
+    } else {
+      if (nid==0){
+        printf("ERROR! Wrong mat_term_type in _count_ops_in_mat - ham!\n");
+        exit(0);
+      }
+    }
+  }
+  return;
+}
 
-/*   MatGetOwnershipRange(A,&Istart,&Iend); */
+void _count_ops_in_mat_ham(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
+                           Mat A,PetscInt num_ops,operator *ops){
+  PetscInt i,this_j_ig,this_j_gi,n;
+  PetscScalar    val_ig,val_gi;
 
-/*   for (i=Istart;i<Iend;i++){ */
-/*     this_j_ig = i; */
-/*     this_j_gi = i; */
+  MatGetSize(A,&n,NULL);
 
-/*     _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG); */
-/*     _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI); */
+  for (i=Istart;i<Iend;i++){
+    this_j_ig = i;
+    this_j_gi = i;
 
-/*     //Add -i * I cross G_1 G_2 ... G_n */
-/*     if (this_j_ig!=-1){ */
-/*       if(this_j_ig>iStart && this_j_ig < iEnd){ */
-/*         //Diagonal block */
-/*         d_nnz[i - iStart] += 1; */
-/*       } else { */
-/*         //Offdiagonal block */
-/*         o_nnz[i - iStart] += 1; */
-/*       } */
-/*     } */
+    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
 
-/*     //Add i * G_1*T G_2*T ... G_n*T cross I */
-/*     if (this_j_gi!=-1){ */
-/*       if(this_j_gi>iStart && this_j_gi < iEnd){ */
-/*         //Diagonal block */
-/*         d_nnz[i - iStart] += 1; */
-/*       } else { */
-/*         //Offdiagonal block */
-/*         o_nnz[i - iStart] += 1; */
-/*       } */
-/*     } */
-/*   } */
+    //Count -i * I cross G_1 G_2 ... G_n
+    if (this_j_ig!=-1){
+      if(this_j_ig==i){
+        //Diagonal element, already accounted for
+      } else if(this_j_ig>=Istart && this_j_ig < Iend){
+        //Diagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (d_nnz[i - Istart] < Iend-Istart){
+          d_nnz[i - Istart] += 1;
+        }
+      } else {
+        //Offdiagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (o_nnz[i - Istart] < n - (Iend-Istart)){
+          o_nnz[i - Istart] += 1;
+        }
+      }
+    }
 
-/*   return; */
-/* } */
+    //Count i * G_1*T G_2*T ... G_n*T cross I
+    if (this_j_gi!=-1){
+      if(this_j_gi==i){
+        //Diagonal element, already accounted for
+      } else if(this_j_gi>=Istart && this_j_gi < Iend){
+        //Diagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (d_nnz[this_j_gi - Istart] < Iend-Istart){
+          d_nnz[this_j_gi - Istart] += 1;
+        }
+      } else {
+        //Offdiagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (o_nnz[this_j_gi - Istart] < n - (Iend-Istart)){
+          o_nnz[this_j_gi - Istart] += 1;
+        }
+      }
+    }
+  }
+
+  return;
+}
+
+void _count_ops_in_mat_ham_only(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
+                                Mat A,PetscInt num_ops,operator *ops){
+  PetscInt i,this_j_ig,n;
+  PetscScalar    val_ig;
+
+  MatGetSize(A,&n,NULL);
+  for (i=Istart;i<Iend;i++){
+    this_j_ig = i;
+
+    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
+
+    //Count -i * G_1 G_2 ... G_n
+    if (this_j_ig!=-1){
+      if(this_j_ig==i){
+        //Diagonal element, already accounted for
+      } else if(this_j_ig>=Istart && this_j_ig < Iend){
+        //Diagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (d_nnz[i - Istart] < Iend-Istart){
+          d_nnz[i - Istart] += 1;
+        }
+      } else {
+        //Offdiagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (o_nnz[i - Istart] < n - (Iend-Istart)){
+          o_nnz[i - Istart] += 1;
+        }
+      }
+    }
+
+  }
+
+  return;
+}
+
+void _count_ops_in_mat_lin(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
+                           Mat A,PetscInt num_ops,operator *ops){
+  PetscInt i,this_j_ig,this_j_gi,this_j_gg,n;
+  PetscScalar    val_ig,val_gi,val_gg;
+
+  MatGetSize(A,&n,NULL);
+  for (i=Istart;i<Iend;i++){
+
+    /*
+     * I cross G^t G and G^t G cross I are diagonal terms.
+     * We already count the diagonal, we need not add it here
+     */
+
+    this_j_gg = i;
+
+    _get_val_j_ops(&val_gg,&this_j_gg,num_ops,ops,TENSOR_GG);
+
+    /*
+     * Count (G* cross G)
+     */
+    if (this_j_gg!=-1){
+      if(this_j_gg==i){
+        //Diagonal element, already accounted for
+      } else if(this_j_gg>=Istart && this_j_gg < Iend){
+        //Diagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (d_nnz[i - Istart] < Iend-Istart){
+          d_nnz[i - Istart] += 1;
+        }
+      } else {
+        //Offdiagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (o_nnz[i - Istart] < n - (Iend-Istart)){
+          o_nnz[i - Istart] += 1;
+        }
+      }
+    }
+  }
+
+  return;
+}
+
+void _add_ops_to_mat(PetscScalar a,Mat A,mat_term_type my_term_type,PetscInt dm_equations,
+                     PetscInt num_ops,operator *ops){
+  if (dm_equations){
+    //Use lindblad terms
+    if (my_term_type==LINDBLAD){
+      _add_ops_to_mat_lin(a,A,num_ops,ops);
+    } else if (my_term_type==HAM){
+      _add_ops_to_mat_ham(a,A,num_ops,ops);
+    } else {
+      if (nid==0){
+        printf("ERROR! Wrong mat_term_type in construct_matrix - dm!\n");
+        exit(0);
+      }
+    }
+  } else {
+    if (my_term_type==HAM){
+      _add_ops_to_mat_ham_only(a,A,num_ops,ops);
+    } else {
+      if (nid==0){
+        printf("ERROR! Wrong mat_term_type in construct_matrix - ham!\n");
+        exit(0);
+      }
+    }
+  }
+  return;
+}
 
 void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,j,j_ig,j_gi,j_gg,this_j_ig,this_j_gi,Istart,Iend,this_j_gg;
   PetscScalar    val_ig,val_gi,val_gg,tmp_val;
   PetscScalar add_to_mat;
-  operator    this_op1,this_op2;
 
   MatGetOwnershipRange(A,&Istart,&Iend);
   for (i=Istart;i<Iend;i++){
@@ -642,23 +786,6 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
     _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
     _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
     _get_val_j_ops(&val_gg,&this_j_gg,num_ops,ops,TENSOR_GG);
-    /*
-     * From above, we only have I cross G = I cross G1 G2 ... Gn
-     * But, we really need is
-     * I cross (G1 G2 ... Gn)^t G1 G2 ... Gn
-     *
-     * First, get I cross G^t G by taking:
-     * (G^t G)_{ij} = sum_k G_^t_{ik}G_{kj}
-     * but, only one value per row:
-     *              = G^t_{ik} G_{kj}
-     *              = G_ki* G_kj
-     * but, again, only one value per row, so i=j
-     *              = G_ki* G_ki
-     * Generally, have G_ik; that is fine, we just
-     * end up calculating G_kk instead of G_ii - so,
-     * maybe we don't own it, but PETSc will figure it out
-     */
-
     /*
      * Add (I cross G^t G)
      */

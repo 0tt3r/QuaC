@@ -3,6 +3,7 @@
 
 #include "operators_p.h"
 #include "operators.h"
+#include "qsystem.h"
 
 typedef enum {
               TENSOR_IG=-1,
@@ -19,9 +20,19 @@ void _get_val_j_from_global_i(PetscInt,operator,PetscInt*,PetscScalar*,tensor_co
 void _get_val_j_from_global_i_vec_vec(PetscInt,operator,operator,PetscInt*,
                                       PetscScalar*,tensor_control_enum);
 
+void _add_ops_to_mat(PetscScalar,Mat,mat_term_type,PetscInt,PetscInt,operator*);
 void _add_ops_to_mat_ham_only(PetscScalar,Mat,PetscInt,operator*);
 void _add_ops_to_mat_ham(PetscScalar,Mat,PetscInt,operator*);
 void _add_ops_to_mat_lin(PetscScalar,Mat,PetscInt,operator*);
+
+void _count_ops_in_mat(PetscInt*,PetscInt*,PetscInt,PetscInt,Mat,
+                       mat_term_type,PetscInt,PetscInt,operator*);
+void _count_ops_in_mat_ham_only(PetscInt*,PetscInt*,PetscInt,PetscInt,
+                                Mat,PetscInt,operator*);
+void _count_ops_in_mat_ham(PetscInt*,PetscInt*,PetscInt,PetscInt,
+                           Mat,PetscInt,operator*);
+void _count_ops_in_mat_lin(PetscInt*,PetscInt*,PetscInt,PetscInt,
+                           Mat,PetscInt,operator*);
 
 void   _add_to_PETSc_kron(Mat,PetscScalar,int,int,op_type,int,int,int,int);
 void   _add_to_PETSc_kron_comb(Mat,PetscScalar,int,int,op_type,int,int,int,
