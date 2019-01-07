@@ -1,6 +1,7 @@
 
 #include "operators_p.h"
 #include "operators.h"
+#include "qsystem.h"
 #include "solver.h"
 #include "kron_p.h"
 #include "quac_p.h"
