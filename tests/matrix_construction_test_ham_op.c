@@ -7,10 +7,32 @@
 #include "dm_utilities.h"
 #include "quantum_gates.h"
 #include "petsc.h"
+#include "qsystem.h"
 
-operator op2,op3,op4;
-Mat mat_pristine;
+void _get_mat_and_diff_norm(char*,Mat,PetscReal*);
 
+void _get_mat_and_diff_norm(char* mat_string,Mat mat_A,PetscReal *norm){
+  Mat mat_pristine2;
+  PetscViewer ham;
+
+#ifdef SAVE_MATS
+  //Save the matrix
+  printf("Saving matrix...\n");
+  PetscViewerBinaryOpen(PETSC_COMM_WORLD,mat_string,FILE_MODE_WRITE,&ham);
+  MatView(mat_A,ham);
+  PetscViewerDestroy(&ham);
+#endif
+  PetscViewerBinaryOpen(PETSC_COMM_WORLD,mat_string,FILE_MODE_READ,&ham);
+  MatDuplicate(mat_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine2);
+  MatLoad(mat_pristine2,ham);
+  PetscViewerDestroy(&ham);
+
+  MatAXPY(mat_pristine2,-1,mat_A,DIFFERENT_NONZERO_PATTERN);
+  MatNorm(mat_pristine2,NORM_1,norm);
+
+  MatDestroy(&mat_pristine2);
+  return;
+}
 
 /*---------------------------------------------
  * 1OP
@@ -18,157 +40,144 @@ Mat mat_pristine;
 
 void test_add_to_ham_1op_basic_real(void)
 {
-  PetscViewer ham;
   PetscScalar omega2,omega3,omega4;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2,op3,op4;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,3,&op3);
+  create_op_sys(qsys,4,&op4);
+
   omega2 = 2.0;
   omega3 = 1.0;
   omega4 = 0.5;
 
-  add_to_ham_p(omega2,1,op2);
-  add_to_ham_p(omega2,1,op2->dag);
-  add_to_ham_p(omega2,1,op2->n);
+  add_ham_term(qsys,omega2,1,op2);
+  add_ham_term(qsys,omega2,1,op2->dag);
+  add_ham_term(qsys,omega2,1,op2->n);
 
-  add_to_ham_p(omega3,1,op3);
-  add_to_ham_p(omega3,1,op3->dag);
-  add_to_ham_p(omega3,1,op3->n);
+  add_ham_term(qsys,omega3,1,op3);
+  add_ham_term(qsys,omega3,1,op3->dag);
+  add_ham_term(qsys,omega3,1,op3->n);
 
-  add_to_ham_p(omega4,1,op4);
-  add_to_ham_p(omega4,1,op4->dag);
-  add_to_ham_p(omega4,1,op4->n);
+  add_ham_term(qsys,omega4,1,op4);
+  add_ham_term(qsys,omega4,1,op4->dag);
+  add_ham_term(qsys,omega4,1,op4->n);
+  add_lin_term(qsys,0.0,1,op4->n);
+  construct_matrix(qsys);
 
+  strcpy(fname,"tests/ham_1op_br");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_br",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_br",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
 }
 
 void test_add_to_ham_1op_pauli_real(void)
 {
-  PetscViewer ham;
   PetscScalar omega2;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2,op3,op4;
 
-  PetscBool equal;
+  initialize_system(&qsys);
+
+  create_op_sys(qsys,2,&op2);
+
   omega2 = 2.0;
+  add_ham_term(qsys,omega2,1,op2->sig_x);
+  add_ham_term(qsys,omega2,1,op2->sig_y);
+  add_ham_term(qsys,omega2,1,op2->sig_z);
+  add_ham_term(qsys,omega2,1,op2->eye);
+  add_lin_term(qsys,0.0,1,op2->n);
 
-  add_to_ham_p(omega2,1,op2->sig_x);
-  add_to_ham_p(omega2,1,op2->sig_y);
-  add_to_ham_p(omega2,1,op2->sig_z);
-  add_to_ham_p(omega2,1,op2->eye);
+  construct_matrix(qsys);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  strcpy(fname,"tests/ham_1op_pr");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_pr",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_pr",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
 void test_add_to_ham_1op_basic_complex(void)
 {
-  PetscViewer ham;
   PetscScalar omega2,omega3,omega4;
-  PetscBool equal;
+  qsystem qsys;
+  char fname[255];
+  PetscReal norm;
+  operator op2,op3,op4;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,3,&op3);
+  create_op_sys(qsys,4,&op4);
 
   omega2 = 2.0*PETSC_i;
   omega3 = 1.0*PETSC_i;
   omega4 = 0.5*PETSC_i;
 
-  add_to_ham_p(omega2,1,op2);
-  add_to_ham_p(omega2,1,op2->dag);
-  add_to_ham_p(omega2,1,op2->n);
+  add_ham_term(qsys,omega2,1,op2);
+  add_ham_term(qsys,omega2,1,op2->dag);
+  add_ham_term(qsys,omega2,1,op2->n);
 
-  add_to_ham_p(omega3,1,op3);
-  add_to_ham_p(omega3,1,op3->dag);
-  add_to_ham_p(omega3,1,op3->n);
+  add_ham_term(qsys,omega3,1,op3);
+  add_ham_term(qsys,omega3,1,op3->dag);
+  add_ham_term(qsys,omega3,1,op3->n);
 
-  add_to_ham_p(omega4,1,op4);
-  add_to_ham_p(omega4,1,op4->dag);
-  add_to_ham_p(omega4,1,op4->n);
+  add_ham_term(qsys,omega4,1,op4);
+  add_ham_term(qsys,omega4,1,op4->dag);
+  add_ham_term(qsys,omega4,1,op4->n);
+  add_lin_term(qsys,0.0,1,op4->n);
+  construct_matrix(qsys);
 
+  strcpy(fname,"tests/ham_1op_bc");
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_bc",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_bc",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
-
 
 
 void test_add_to_ham_1op_pauli_complex(void)
 {
-  PetscViewer ham;
   PetscScalar omega2;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2;
+
+  initialize_system(&qsys);
+
+  create_op_sys(qsys,2,&op2);
+
   omega2 = 2.0*PETSC_i;
+  add_ham_term(qsys,omega2,1,op2->sig_x);
+  add_ham_term(qsys,omega2,1,op2->sig_y);
+  add_ham_term(qsys,omega2,1,op2->sig_z);
+  add_ham_term(qsys,omega2,1,op2->eye);
+  add_lin_term(qsys,0.0,1,op2->n);
 
-  add_to_ham_p(omega2,1,op2->sig_x);
-  add_to_ham_p(omega2,1,op2->sig_y);
-  add_to_ham_p(omega2,1,op2->sig_z);
-  add_to_ham_p(omega2,1,op2->eye);
+  construct_matrix(qsys);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  strcpy(fname,"tests/ham_1op_pc");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_pc",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_1op_pc",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
@@ -178,163 +187,156 @@ void test_add_to_ham_1op_pauli_complex(void)
 
 void test_add_to_ham_2op_basic_real(void)
 {
-  PetscViewer ham;
   PetscScalar omega2,omega3,omega4,omega5;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2,op3,op4;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,3,&op3);
+  create_op_sys(qsys,4,&op4);
 
   omega2 = 2.0;
   omega3 = 1.0;
   omega4 = 0.5;
   omega5 = 0.25;
 
-  add_to_ham_p(omega2,2,op2,op2->dag);
-  add_to_ham_p(omega2,2,op2->dag,op2);
-  add_to_ham_p(omega2,2,op2->n,op2->dag);
+  add_ham_term(qsys,omega2,2,op2,op2->dag);
+  add_ham_term(qsys,omega2,2,op2->dag,op2);
+  add_ham_term(qsys,omega2,2,op2->n,op2->dag);
 
-  add_to_ham_p(omega3,2,op3,op3);
-  add_to_ham_p(omega3,2,op3->dag,op3->dag);
-  add_to_ham_p(omega3,2,op3->n,op3);
 
-  add_to_ham_p(omega4,2,op4,op4->n);
-  add_to_ham_p(omega4,2,op4->dag,op4->n);
-  add_to_ham_p(omega4,2,op4->n,op4->n);
+  add_ham_term(qsys,omega3,2,op3,op3);
+  add_ham_term(qsys,omega3,2,op3->dag,op3->dag);
+  add_ham_term(qsys,omega3,2,op3->n,op3);
 
-  add_to_ham_p(omega5,2,op4,op3->n);
-  add_to_ham_p(omega5,2,op3->dag,op2->n);
-  add_to_ham_p(omega5,2,op2->n,op4->n);
+  add_ham_term(qsys,omega4,2,op4,op4->n);
+  add_ham_term(qsys,omega4,2,op4->dag,op4->n);
+  add_ham_term(qsys,omega4,2,op4->n,op4->n);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  add_ham_term(qsys,omega5,2,op4,op3->n);
+  add_ham_term(qsys,omega5,2,op3->dag,op2->n);
+  add_ham_term(qsys,omega5,2,op2->n,op4->n);
+  add_lin_term(qsys,0.0,1,op3->n);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_br",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_br",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
 
-  TEST_ASSERT(equal==PETSC_TRUE);
+  construct_matrix(qsys);
+  strcpy(fname,"tests/ham_2op_br");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 void test_add_to_ham_2op_pauli_real(void)
 {
-  PetscViewer ham;
   PetscScalar omega2;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2;
+
+  initialize_system(&qsys);
+
+  create_op_sys(qsys,2,&op2);
+
   omega2 = 2.0;
 
-  add_to_ham_p(omega2,2,op2->sig_x,op2->sig_y);
-  add_to_ham_p(omega2,2,op2->sig_y,op2->sig_z);
-  add_to_ham_p(omega2,2,op2->sig_z,op2->sig_x);
-  add_to_ham_p(omega2,2,op2->eye,op2->eye);
+  add_ham_term(qsys,omega2,2,op2->sig_x,op2->sig_y);
+  add_ham_term(qsys,omega2,2,op2->sig_y,op2->sig_z);
+  add_ham_term(qsys,omega2,2,op2->sig_z,op2->sig_x);
+  add_ham_term(qsys,omega2,2,op2->eye,op2->eye);
+  add_lin_term(qsys,0.0,1,op2->n);
+  construct_matrix(qsys);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  strcpy(fname,"tests/ham_2op_pr");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_pr",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_pr",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
 void test_add_to_ham_2op_basic_complex(void)
 {
-  PetscViewer ham;
   PetscScalar omega2,omega3,omega4,omega5;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2,op3,op4;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,3,&op3);
+  create_op_sys(qsys,4,&op4);
+
   omega2 = 2.0*PETSC_i;
   omega3 = 1.0*PETSC_i;
   omega4 = 0.5*PETSC_i;
   omega5 = 0.25*PETSC_i;
 
-  add_to_ham_p(omega2,2,op2,op2->dag);
-  add_to_ham_p(omega2,2,op2->dag,op2);
-  add_to_ham_p(omega2,2,op2->n,op2->dag);
-
-  add_to_ham_p(omega3,2,op3,op3);
-  add_to_ham_p(omega3,2,op3->dag,op3->dag);
-  add_to_ham_p(omega3,2,op3->n,op3);
-
-  add_to_ham_p(omega4,2,op4,op4->n);
-  add_to_ham_p(omega4,2,op4->dag,op4->n);
-  add_to_ham_p(omega4,2,op4->n,op4->n);
-
-  add_to_ham_p(omega5,2,op4,op3->n);
-  add_to_ham_p(omega5,2,op3->dag,op2->n);
-  add_to_ham_p(omega5,2,op2->n,op4->n);
-
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  add_ham_term(qsys,omega2,2,op2,op2->dag);
+  add_ham_term(qsys,omega2,2,op2->dag,op2);
+  add_ham_term(qsys,omega2,2,op2->n,op2->dag);
 
 
+  add_ham_term(qsys,omega3,2,op3,op3);
+  add_ham_term(qsys,omega3,2,op3->dag,op3->dag);
+  add_ham_term(qsys,omega3,2,op3->n,op3);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_bc",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_bc",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
+  add_ham_term(qsys,omega4,2,op4,op4->n);
+  add_ham_term(qsys,omega4,2,op4->dag,op4->n);
+  add_ham_term(qsys,omega4,2,op4->n,op4->n);
 
-  TEST_ASSERT(equal==PETSC_TRUE);
+  add_ham_term(qsys,omega5,2,op4,op3->n);
+  add_ham_term(qsys,omega5,2,op3->dag,op2->n);
+  add_ham_term(qsys,omega5,2,op2->n,op4->n);
+  add_lin_term(qsys,0.0,1,op3->n);
+
+
+  construct_matrix(qsys);
+  strcpy(fname,"tests/ham_2op_bc");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
 void test_add_to_ham_2op_pauli_complex(void)
 {
-  PetscViewer ham;
   PetscScalar omega2;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2;
+
+  initialize_system(&qsys);
+
+  create_op_sys(qsys,2,&op2);
+
   omega2 = 2.0*PETSC_i;
 
-  add_to_ham_p(omega2,2,op2->sig_x,op2->sig_y);
-  add_to_ham_p(omega2,2,op2->sig_y,op2->sig_z);
-  add_to_ham_p(omega2,2,op2->sig_z,op2->sig_x);
-  add_to_ham_p(omega2,2,op2->eye,op2->eye);
+  add_ham_term(qsys,omega2,2,op2->sig_x,op2->sig_y);
+  add_ham_term(qsys,omega2,2,op2->sig_y,op2->sig_z);
+  add_ham_term(qsys,omega2,2,op2->sig_z,op2->sig_x);
+  add_ham_term(qsys,omega2,2,op2->eye,op2->eye);
+  add_lin_term(qsys,0.0,1,op2->n);
+  construct_matrix(qsys);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  strcpy(fname,"tests/ham_2op_pc");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_pc",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_2op_pc",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
@@ -345,165 +347,156 @@ void test_add_to_ham_2op_pauli_complex(void)
 
 void test_add_to_ham_3op_basic_real(void)
 {
-  PetscViewer ham;
   PetscScalar omega2,omega3,omega4,omega5;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2,op3,op4;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,3,&op3);
+  create_op_sys(qsys,4,&op4);
+
   omega2 = 2.0;
   omega3 = 1.0;
   omega4 = 0.5;
   omega5 = 0.25;
 
-  add_to_ham_p(omega2,3,op2,op2->dag,op2->n);
-  add_to_ham_p(omega2,3,op2->dag,op2,op2->n);
-  add_to_ham_p(omega2,3,op2->n,op2->dag,op2);
+  add_ham_term(qsys,omega2,3,op2,op2->dag,op2->n);
+  add_ham_term(qsys,omega2,3,op2->dag,op2,op2->n);
+  add_ham_term(qsys,omega2,3,op2->n,op2->dag,op2);
 
-  add_to_ham_p(omega3,3,op3,op3,op3);
-  add_to_ham_p(omega3,3,op3->dag,op3->dag,op3->dag);
-  add_to_ham_p(omega3,3,op3->n,op3,op3->n);
+  add_ham_term(qsys,omega3,3,op3,op3,op3);
+  add_ham_term(qsys,omega3,3,op3->dag,op3->dag,op3->dag);
+  add_ham_term(qsys,omega3,3,op3->n,op3,op3->n);
 
-  add_to_ham_p(omega4,3,op4,op4->n,op4->dag);
-  add_to_ham_p(omega4,3,op4->dag,op4->n,op4);
-  add_to_ham_p(omega4,3,op4->n,op4->n,op4->n);
+  add_ham_term(qsys,omega4,3,op4,op4->n,op4->dag);
+  add_ham_term(qsys,omega4,3,op4->dag,op4->n,op4);
+  add_ham_term(qsys,omega4,3,op4->n,op4->n,op4->n);
 
-  add_to_ham_p(omega5,3,op4,op3->n,op2->dag);
-  add_to_ham_p(omega5,3,op3->dag,op2->n,op4);
-  add_to_ham_p(omega5,3,op2->n,op4->n,op3->n);
+  add_ham_term(qsys,omega5,3,op4,op3->n,op2->dag);
+  add_ham_term(qsys,omega5,3,op3->dag,op2->n,op4);
+  add_ham_term(qsys,omega5,3,op2->n,op4->n,op3->n);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  add_lin_term(qsys,0.0,1,op3->n);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_br",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_br",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
 
-  TEST_ASSERT(equal==PETSC_TRUE);
+  construct_matrix(qsys);
+  strcpy(fname,"tests/ham_3op_br");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 void test_add_to_ham_3op_pauli_real(void)
 {
-  PetscViewer ham;
   PetscScalar omega2;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2;
 
-  PetscBool equal;
+  initialize_system(&qsys);
+
+  create_op_sys(qsys,2,&op2);
+
   omega2 = 2.0;
 
-  add_to_ham_p(omega2,3,op2->sig_x,op2->sig_x,op2->sig_z);
-  add_to_ham_p(omega2,3,op2->sig_y,op2->sig_y,op2->sig_x);
-  add_to_ham_p(omega2,3,op2->sig_z,op2->sig_z,op2->sig_y);
-  add_to_ham_p(omega2,3,op2->eye,op2->eye,op2->eye);
+  add_ham_term(qsys,omega2,3,op2->sig_x,op2->sig_x,op2->sig_z);
+  add_ham_term(qsys,omega2,3,op2->sig_y,op2->sig_y,op2->sig_x);
+  add_ham_term(qsys,omega2,3,op2->sig_z,op2->sig_z,op2->sig_y);
+  add_ham_term(qsys,omega2,3,op2->eye,op2->eye,op2->eye);
+  add_lin_term(qsys,0.0,1,op2->n);
+  construct_matrix(qsys);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  strcpy(fname,"tests/ham_3op_pr");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_pr",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_pr",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
 void test_add_to_ham_3op_basic_complex(void)
 {
-  PetscViewer ham;
   PetscScalar omega2,omega3,omega4,omega5;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2,op3,op4;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,3,&op3);
+  create_op_sys(qsys,4,&op4);
+
   omega2 = 2.0*PETSC_i;
   omega3 = 1.0*PETSC_i;
   omega4 = 0.5*PETSC_i;
   omega5 = 0.25*PETSC_i;
 
-  add_to_ham_p(omega2,3,op2,op2->dag,op2->n);
-  add_to_ham_p(omega2,3,op2->dag,op2,op2->n);
-  add_to_ham_p(omega2,3,op2->n,op2->dag,op2);
+  add_ham_term(qsys,omega2,3,op2,op2->dag,op2->n);
+  add_ham_term(qsys,omega2,3,op2->dag,op2,op2->n);
+  add_ham_term(qsys,omega2,3,op2->n,op2->dag,op2);
 
-  add_to_ham_p(omega3,3,op3,op3,op3);
-  add_to_ham_p(omega3,3,op3->dag,op3->dag,op3->dag);
-  add_to_ham_p(omega3,3,op3->n,op3,op3->n);
+  add_ham_term(qsys,omega3,3,op3,op3,op3);
+  add_ham_term(qsys,omega3,3,op3->dag,op3->dag,op3->dag);
+  add_ham_term(qsys,omega3,3,op3->n,op3,op3->n);
 
-  add_to_ham_p(omega4,3,op4,op4->n,op4->dag);
-  add_to_ham_p(omega4,3,op4->dag,op4->n,op4);
-  add_to_ham_p(omega4,3,op4->n,op4->n,op4->n);
+  add_ham_term(qsys,omega4,3,op4,op4->n,op4->dag);
+  add_ham_term(qsys,omega4,3,op4->dag,op4->n,op4);
+  add_ham_term(qsys,omega4,3,op4->n,op4->n,op4->n);
 
-  add_to_ham_p(omega5,3,op4,op3->n,op2->dag);
-  add_to_ham_p(omega5,3,op3->dag,op2->n,op4);
-  add_to_ham_p(omega5,3,op2->n,op4->n,op3->n);
+  add_ham_term(qsys,omega5,3,op4,op3->n,op2->dag);
+  add_ham_term(qsys,omega5,3,op3->dag,op2->n,op4);
+  add_ham_term(qsys,omega5,3,op2->n,op4->n,op3->n);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  add_lin_term(qsys,0.0,1,op3->n);
 
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_bc",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
+  construct_matrix(qsys);
+  strcpy(fname,"tests/ham_3op_bc");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_bc",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
 void test_add_to_ham_3op_pauli_complex(void)
 {
-  PetscViewer ham;
   PetscScalar omega2;
-  PetscBool equal;
+  qsystem qsys;
+  PetscReal norm;
+  char fname[255];
+  operator op2;
+
+  initialize_system(&qsys);
+
+  create_op_sys(qsys,2,&op2);
+
   omega2 = 2.0*PETSC_i;
 
-  add_to_ham_p(omega2,3,op2->sig_x,op2->sig_x,op2->sig_z);
-  add_to_ham_p(omega2,3,op2->sig_y,op2->sig_y,op2->sig_x);
-  add_to_ham_p(omega2,3,op2->sig_z,op2->sig_z,op2->sig_y);
-  add_to_ham_p(omega2,3,op2->eye,op2->eye,op2->eye);
+  add_ham_term(qsys,omega2,3,op2->sig_x,op2->sig_x,op2->sig_z);
+  add_ham_term(qsys,omega2,3,op2->sig_y,op2->sig_y,op2->sig_x);
+  add_ham_term(qsys,omega2,3,op2->sig_z,op2->sig_z,op2->sig_y);
+  add_ham_term(qsys,omega2,3,op2->eye,op2->eye,op2->eye);
+  add_lin_term(qsys,0.0,1,op2->n);
+  construct_matrix(qsys);
 
-  MatAssemblyBegin(full_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(full_A,MAT_FINAL_ASSEMBLY);
+  strcpy(fname,"tests/ham_3op_pc");
+  _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_pc",FILE_MODE_WRITE,&ham);
-  MatView(full_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,"tests/ham_3op_pc",FILE_MODE_READ,&ham);
-  MatDuplicate(full_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine);
-  MatLoad(mat_pristine,ham);
-  PetscViewerDestroy(&ham);
-  MatEqual(mat_pristine,full_A,&equal);
-  MatDestroy(&mat_pristine);
-
-  TEST_ASSERT(equal==PETSC_TRUE);
+  destroy_system(&qsys);
+  TEST_ASSERT_EQUAL(0,norm);
+  return;
 }
 
 
@@ -512,89 +505,18 @@ int main(int argc, char** argv)
   UNITY_BEGIN();
   QuaC_initialize(argc,argv);
 
-  //Create some operators
-  create_op(2,&op2);
-
-  RUN_TEST(test_add_to_ham_1op_pauli_real);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-
-  RUN_TEST(test_add_to_ham_1op_pauli_complex);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-
-  RUN_TEST(test_add_to_ham_2op_pauli_real);
-
-  QuaC_clear();
-  //create some operators
-  create_op(2,&op2);
-
-  RUN_TEST(test_add_to_ham_2op_pauli_complex);
-
-  QuaC_clear();
-  // Create some operators
-  create_op(2,&op2);
-
-  RUN_TEST(test_add_to_ham_3op_pauli_real);
-
-  QuaC_clear();
-  //create some operators
-  create_op(2,&op2);
-
-  RUN_TEST(test_add_to_ham_3op_pauli_complex);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-  create_op(3,&op3);
-  create_op(4,&op4);
-
   RUN_TEST(test_add_to_ham_1op_basic_real);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-  create_op(3,&op3);
-  create_op(4,&op4);
-
   RUN_TEST(test_add_to_ham_1op_basic_complex);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-  create_op(3,&op3);
-  create_op(4,&op4);
-
+  RUN_TEST(test_add_to_ham_1op_pauli_real);
+  RUN_TEST(test_add_to_ham_1op_pauli_complex);
+  RUN_TEST(test_add_to_ham_2op_pauli_real);
+  RUN_TEST(test_add_to_ham_2op_pauli_complex);
   RUN_TEST(test_add_to_ham_2op_basic_real);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-  create_op(3,&op3);
-  create_op(4,&op4);
-
   RUN_TEST(test_add_to_ham_2op_basic_complex);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-  create_op(3,&op3);
-  create_op(4,&op4);
-
   RUN_TEST(test_add_to_ham_3op_basic_real);
-
-  QuaC_clear();
-  //Create some operators
-  create_op(2,&op2);
-  create_op(3,&op3);
-  create_op(4,&op4);
-
   RUN_TEST(test_add_to_ham_3op_basic_complex);
-
+  RUN_TEST(test_add_to_ham_3op_pauli_real);
+  RUN_TEST(test_add_to_ham_3op_pauli_complex);
 
   QuaC_finalize();
   return UNITY_END();
