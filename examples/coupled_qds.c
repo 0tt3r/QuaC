@@ -22,7 +22,7 @@ int main(int argc,char **args){
   PetscScalar val;
   PetscInt  steps_max;
   PetscInt num_qd=2,i;
-
+  qsystem coupled_qds;
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
