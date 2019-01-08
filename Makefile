@@ -14,16 +14,16 @@ include ${SLEPC_DIR}/lib/slepc/conf/slepc_variables
 #include ${PETSC_DIR}/lib/petsc/conf/variables
 #include ${PETSC_DIR}/lib/petsc/conf/rules
 
-_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h qasm_parser.h error_correction.h
+_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h qasm_parser.h error_correction.h qsystem.h
 DEPS  = $(patsubst %,$(SRCDIR)/%,$(_DEPS))
 
-_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o error_correction.o qasm_parser.o
-OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
+_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o error_correction.o qasm_parser.o qsystem.o
+ OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
-_TEST_OBJ  = unity.o timedep_test.o imag_ham.o
+_TEST_OBJ  = unity.o t_helpers.o
 TEST_OBJ = $(patsubst %,$(ODIR)/%,$(_TEST_OBJ))
 
-_TEST_DEPS = tests.h
+_TEST_DEPS = t_helpers.h
 TEST_DEPS  = $(patsubst %,$(TESTDIR)/%,$(_TEST_DEPS))
 
 $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
@@ -41,12 +41,11 @@ $(ODIR)/%.o: $(TESTDIR)/%.c $(DEPS) $(TEST_DEPS)
 all: examples
 
 examples: clean_test $(EXAMPLES)
-
+#@-./$@ -ts_adapt_type none > tmp_test_results
 $(TESTS) : CFLAGS += -DUNIT_TEST
 $(TESTS) : % : $(ODIR)/%.o $(OBJ) $(TEST_OBJ)
-	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB}
+	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB} ${SLEPC_EPS_LIB}
 	@echo 'running '$@
-	@-./$@ -ts_adapt_type none > tmp_test_results
 	-@grep FAIL tmp_test_results || true
 	@cat tmp_test_results >> test_results
 	@rm tmp_test_results

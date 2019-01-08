@@ -7,33 +7,7 @@
 #include "dm_utilities.h"
 #include "quantum_gates.h"
 #include "petsc.h"
-
-void _get_mat_and_diff_norm(char*,Mat,PetscReal*);
-
-void _get_mat_and_diff_norm(char* mat_string,Mat mat_A,PetscReal *norm){
-  Mat mat_pristine2;
-  PetscViewer ham;
-
-#ifdef SAVE_MATS
-  //Save the matrix
-  printf("Saving matrix...\n");
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,mat_string,FILE_MODE_WRITE,&ham);
-  MatView(mat_A,ham);
-  PetscViewerDestroy(&ham);
-#endif
-  PetscViewerBinaryOpen(PETSC_COMM_WORLD,mat_string,FILE_MODE_READ,&ham);
-  MatDuplicate(mat_A,MAT_DO_NOT_COPY_VALUES,&mat_pristine2);
-  MatLoad(mat_pristine2,ham);
-  PetscViewerDestroy(&ham);
-
-  MatAXPY(mat_pristine2,-1,mat_A,DIFFERENT_NONZERO_PATTERN);
-  MatNorm(mat_pristine2,NORM_1,norm);
-
-  MatDestroy(&mat_pristine2);
-  return;
-}
-
-
+#include "t_helpers.h"
 /*---------------------------------------------
  * 1OP
  *---------------------------------------------*/
@@ -74,7 +48,7 @@ void test_add_lin_1op_basic_real(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 }
 
@@ -103,7 +77,7 @@ void test_add_lin_1op_pauli_real(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -145,7 +119,7 @@ void test_add_lin_1op_basic_complex(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -175,7 +149,7 @@ void test_add_lin_1op_pauli_complex(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -226,7 +200,7 @@ void test_add_lin_2op_basic_real(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -254,7 +228,7 @@ void test_add_lin_2op_pauli_real(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -301,7 +275,7 @@ void test_add_lin_2op_basic_complex(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -330,7 +304,7 @@ void test_add_lin_2op_pauli_complex(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 }
 
@@ -381,7 +355,7 @@ void test_add_lin_3op_basic_real(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -409,7 +383,7 @@ void test_add_lin_3op_pauli_real(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -456,7 +430,7 @@ void test_add_lin_3op_basic_complex(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
@@ -485,7 +459,7 @@ void test_add_lin_3op_pauli_complex(void)
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
   destroy_system(&qsys);
-  TEST_ASSERT_EQUAL(0,norm);
+  TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
 
 }
