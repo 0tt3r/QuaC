@@ -160,6 +160,20 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
   return;
 }
 
+
+void destroy_op_sys(operator *op){
+
+  free((*op)->dag);
+  free((*op)->n);
+  free((*op)->eye);
+  free((*op)->sig_x);
+  free((*op)->sig_z);
+  free((*op)->sig_y);
+  free(*op);
+
+  return;
+}
+
 void add_ham_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   va_list  ap;
   operator *ops;
