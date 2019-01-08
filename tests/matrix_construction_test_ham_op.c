@@ -49,6 +49,10 @@ void test_add_to_ham_1op_basic_real(void)
   strcpy(fname,"tests/pristine_matrices/ham_1op_br");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
+  destroy_op_sys(&op2);
+  destroy_op_sys(&op3);
+  destroy_op_sys(&op4);
+
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
@@ -79,6 +83,8 @@ void test_add_to_ham_1op_pauli_real(void)
 
   strcpy(fname,"tests/pristine_matrices/ham_1op_pr");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_op_sys(&op2);
 
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
@@ -122,6 +128,10 @@ void test_add_to_ham_1op_basic_complex(void)
 
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
+  destroy_op_sys(&op2);
+  destroy_op_sys(&op3);
+  destroy_op_sys(&op4);
+
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
@@ -151,6 +161,8 @@ void test_add_to_ham_1op_pauli_complex(void)
 
   strcpy(fname,"tests/pristine_matrices/ham_1op_pc");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_op_sys(&op2);
 
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
@@ -204,6 +216,10 @@ void test_add_to_ham_2op_basic_real(void)
   strcpy(fname,"tests/pristine_matrices/ham_2op_br");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
+  destroy_op_sys(&op2);
+  destroy_op_sys(&op3);
+  destroy_op_sys(&op4);
+
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
@@ -232,6 +248,8 @@ void test_add_to_ham_2op_pauli_real(void)
 
   strcpy(fname,"tests/pristine_matrices/ham_2op_pr");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_op_sys(&op2);
 
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
@@ -281,6 +299,10 @@ void test_add_to_ham_2op_basic_complex(void)
   strcpy(fname,"tests/pristine_matrices/ham_2op_bc");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
+  destroy_op_sys(&op2);
+  destroy_op_sys(&op3);
+  destroy_op_sys(&op4);
+
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
@@ -310,6 +332,8 @@ void test_add_to_ham_2op_pauli_complex(void)
 
   strcpy(fname,"tests/pristine_matrices/ham_2op_pc");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_op_sys(&op2);
 
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
@@ -364,6 +388,10 @@ void test_add_to_ham_3op_basic_real(void)
   strcpy(fname,"tests/pristine_matrices/ham_3op_br");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
+  destroy_op_sys(&op2);
+  destroy_op_sys(&op3);
+  destroy_op_sys(&op4);
+
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
@@ -392,6 +420,8 @@ void test_add_to_ham_3op_pauli_real(void)
 
   strcpy(fname,"tests/pristine_matrices/ham_3op_pr");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_op_sys(&op2);
 
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
@@ -441,6 +471,10 @@ void test_add_to_ham_3op_basic_complex(void)
   strcpy(fname,"tests/pristine_matrices/ham_3op_bc");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
 
+  destroy_op_sys(&op2);
+  destroy_op_sys(&op3);
+  destroy_op_sys(&op4);
+
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
   return;
@@ -470,6 +504,8 @@ void test_add_to_ham_3op_pauli_complex(void)
 
   strcpy(fname,"tests/pristine_matrices/ham_3op_pc");
   _get_mat_and_diff_norm(fname,qsys->mat_A,&norm);
+
+  destroy_op_sys(&op2);
 
   destroy_system(&qsys);
   TEST_ASSERT_FLOAT_WITHIN(DELTA,0,norm);
