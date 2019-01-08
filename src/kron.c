@@ -544,9 +544,9 @@ void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops
     this_j_ig = i;
     _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
 
-    //Add -i * G_1 G_2 ... G_n
+    //Add G_1 G_2 ... G_n
     if (this_j_ig!=-1){
-      add_to_mat = -a*PETSC_i*val_ig;
+      add_to_mat = a*val_ig;
       //MatSetValues(A,1,&i,1,&this_j_ig,&add_to_mat,ADD_VALUES);
       MatSetValue(A,i,this_j_ig,add_to_mat,ADD_VALUES);
     }
