@@ -273,74 +273,6 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   return;
 }
 
-void create_vector_sys(qsystem sys,Vec *dm){
-  //Automatically decide whether to make a DM or WF
-
-  if (sys->dm_equations){
-    create_dm_sys(sys,dm);
-  } else {
-    create_wf_sys(sys,dm);
-  }
-
-  return;
-}
-
-void create_dm_sys(qsystem sys,Vec *dm){
-  /* Check to make sure some operators were created */
-  if (sys->num_subsystems==0){
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to create operators before you construct\n");
-    PetscPrintf(PETSC_COMM_WORLD,"       a density matrix!\n");
-    exit(0);
-  }
-
-
-  //Even if we had no lindblad terms, maybe we start in a density matrix
-  sys->dm_equations = 1;
-  sys->dim = sys->total_levels*sys->total_levels;
-  _setup_distribution(sys);
-  sys->hspace_frozen = 1;
-
-  PetscPrintf(PETSC_COMM_WORLD,"Creating density matrix vector for Liouvillian solver.\n");
-  _create_vec(dm,sys->dim,sys->my_num);
-  return;
-}
-
-void create_wf_sys(qsystem sys,Vec *dm){
-  /* Check to make sure some operators were created */
-  if (sys->num_subsystems==0){
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to create operators before you construct\n");
-    PetscPrintf(PETSC_COMM_WORLD,"       a wavefunction!\n");
-    exit(0);
-  }
-
-
-  if (sys->dm_equations==1){
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR!\n");
-    PetscPrintf(PETSC_COMM_WORLD,"Must use density matrices if Lindblad terms are used.\n");
-    exit(0);
-  }
-
-  PetscPrintf(PETSC_COMM_WORLD,"Creating wavefunction vector for Schrodinger solver.\n");
-  sys->dim = sys->total_levels;
-  _setup_distribution(sys);
-  sys->hspace_frozen = 1;
-  _create_vec(dm,sys->dim,sys->my_num);
-
-  return;
-}
-
-void _create_vec(Vec *dm,PetscInt dim,PetscInt local_size){
-
-  /* Create the dm, partition with PETSc */
-  VecCreate(PETSC_COMM_WORLD,dm);
-  VecSetType(*dm,VECMPI);
-  VecSetSizes(*dm,local_size,dim);
-  /* Set all elements to 0 */
-  VecSet(*dm,0.0);
-  return;
-}
-
-
 void construct_matrix(qsystem sys){
   PetscInt    i;
   PetscScalar tmp_a;
@@ -498,7 +430,7 @@ void set_ts_monitor_sys(qsystem sys,PetscErrorCode (*monitor)(TS,PetscInt,PetscR
  *       double time_max: the maximum time to integrate to
  *       int steps_max:   max number of steps to take
  */
-void time_step_sys(qsystem sys,Vec x, PetscReal init_time, PetscReal time_max,
+void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
                PetscReal dt,PetscInt steps_max){
   PetscViewer    mat_view;
   TS             ts; /* timestepping context */
@@ -563,7 +495,7 @@ void time_step_sys(qsystem sys,Vec x, PetscReal init_time, PetscReal time_max,
   TSRKSetType(ts,TSRK3BS);
 
   TSSetFromOptions(ts);
-  TSSolve(ts,x);
+  TSSolve(ts,x->data);
   TSGetStepNumber(ts,&steps);
 
   /* Free work space */
@@ -609,4 +541,38 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
   }
 
   PetscFunctionReturn(0);
+}
+
+
+
+/*
+ * void get_expectation_value calculates the expectation value of the multiplication
+ * of a list of operators.
+ * The expectation value is defined as:
+ *              <ABC...> = Tr(ABC...*rho)
+ * where A,B,C,... are operators and rho is the density matrix.
+ * This function only accepts operators to be multiplied. To find the
+ * expectation value of a sum, call this function once for each
+ * element of the sum. i.e.
+ *              <A+B+C> = Tr((A+B+C)*rho)
+ *                      = Tr(A*rho) + Tr(B*rho) * Tr(C*rho)
+ *                      = <A> + <B> + <C>
+ *
+ * Inputs:
+ *         Vec dm            - full Hilbert space density matrix
+ *         int number_of_ops - number of operators in the list
+ *          ...              - list of operators
+ * Outputs:
+ *         PetscScalar *trace_val - the expectation value of the multiplied operators
+ *
+ * An example calling this function:
+ *      get_expectation_value(dm,&expect,4,ph[0]->dag,ph[1]->dag,ph[0],ph[1]);
+ *
+ */
+void get_expectation_value_sys(Vec rho,PetscScalar *trace_val,int number_of_ops,...){
+
+
+
+
+
 }

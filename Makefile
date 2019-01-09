@@ -14,10 +14,10 @@ include ${SLEPC_DIR}/lib/slepc/conf/slepc_variables
 #include ${PETSC_DIR}/lib/petsc/conf/variables
 #include ${PETSC_DIR}/lib/petsc/conf/rules
 
-_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h qasm_parser.h error_correction.h qsystem.h
+_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h qasm_parser.h error_correction.h qsystem.h qvec_utilities.h
 DEPS  = $(patsubst %,$(SRCDIR)/%,$(_DEPS))
 
-_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o error_correction.o qasm_parser.o qsystem.o
+_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o error_correction.o qasm_parser.o qsystem.o qvec_utilities.o
  OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 _TEST_OBJ  = unity.o t_helpers.o
