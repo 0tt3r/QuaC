@@ -654,7 +654,7 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
   (*circ).gate_list[(*circ).num_gates]._get_val_j_from_global_i = _get_val_j_functions_gates[my_gate_type+_min_gate_enum];
 
   if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
-    va_start(ap,num_qubits+1);
+    va_start(ap,num_qubits+1); //FIXME This +1 is probably useless?
   } else {
     va_start(ap,num_qubits);
   }

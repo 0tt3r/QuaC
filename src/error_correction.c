@@ -864,7 +864,7 @@ void add_encoded_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_
   PetscMalloc1(num_qubits,&encoders);
 
   if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
-    va_start(ap,num_qubits+1);
+    va_start(ap,num_qubits+1); //FIXME This +1 is probably useless?
   } else {
     va_start(ap,num_qubits);
   }
