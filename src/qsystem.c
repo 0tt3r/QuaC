@@ -544,35 +544,3 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
 }
 
 
-
-/*
- * void get_expectation_value calculates the expectation value of the multiplication
- * of a list of operators.
- * The expectation value is defined as:
- *              <ABC...> = Tr(ABC...*rho)
- * where A,B,C,... are operators and rho is the density matrix.
- * This function only accepts operators to be multiplied. To find the
- * expectation value of a sum, call this function once for each
- * element of the sum. i.e.
- *              <A+B+C> = Tr((A+B+C)*rho)
- *                      = Tr(A*rho) + Tr(B*rho) * Tr(C*rho)
- *                      = <A> + <B> + <C>
- *
- * Inputs:
- *         Vec dm            - full Hilbert space density matrix
- *         int number_of_ops - number of operators in the list
- *          ...              - list of operators
- * Outputs:
- *         PetscScalar *trace_val - the expectation value of the multiplied operators
- *
- * An example calling this function:
- *      get_expectation_value(dm,&expect,4,ph[0]->dag,ph[1]->dag,ph[0],ph[1]);
- *
- */
-void get_expectation_value_sys(Vec rho,PetscScalar *trace_val,int number_of_ops,...){
-
-
-
-
-
-}
