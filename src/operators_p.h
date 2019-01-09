@@ -12,7 +12,7 @@ typedef enum {
     SIGMA_Y = 4,
     SIGMA_Z = 5,
     IDENTITY = 6
-  } op_type;
+} op_type;
 
 
 void _check_initialized_A();
