@@ -1,6 +1,7 @@
 #include "qvec_utilities.h"
 #include "operators_p.h"
 #include "operators.h"
+#include "kron_p.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <petscblaslapack.h>
@@ -27,13 +28,14 @@ void print_qvec(qvec state){
 
 }
 
-void print_dm_qvec(qvec state){
+void print_dm_qvec(qvec dm){
   PetscScalar val;
   PetscInt i,j,h_dim;
-  h_dim = sqrt(state->n);
+
+  h_dim = sqrt(dm->n);
   for (i=0;i<h_dim;i++){
     for (j=0;j<h_dim;j++){
-      //get_dm_element(rho,i,j,&val); FIXME Write this
+      get_dm_element_qvec(dm,i,j,&val);
       PetscPrintf(PETSC_COMM_WORLD,"%4.3e + %4.3ei ",PetscRealPart(val),
                   PetscImaginaryPart(val));
     }
@@ -43,6 +45,71 @@ void print_dm_qvec(qvec state){
   return;
 }
 
+/*
+ * void get_dm_element_qvec gets a specific i,j element from the
+ * input density matrix - global version; will grab from other
+ * cores.
+ * NOTE: This should be called by all processors, or the code will hang!
+ *
+ * Inputs:
+ *        qvec dm   - density matrix from which to get element
+ *        PetscInt row - i location of requested element
+ *        PetscInt col - j location of requested element
+ * Outpus:
+ *        PetscScalar val - requested density matrix element
+ *
+ */
+void get_dm_element_qvec(qvec dm,PetscInt row,PetscInt col,PetscScalar *val){
+  PetscInt location[1];
+  PetscScalar val_array[1];
+
+  location[0] = sqrt(dm->n)*col + row;
+
+  if (location[0]>=dm->Istart&&location[0]<dm->Iend) {
+    VecGetValues(dm->data,1,location,val_array);
+  } else{
+    val_array[0] = 0.0 + 0.0*PETSC_i;
+  }
+  MPI_Allreduce(MPI_IN_PLACE,val_array,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
+
+  *val = val_array[0];
+  return;
+}
+
+/*
+ * void get_dm_element_qvec_local gets a specific i,j element from the
+ * input density matrix - local version; will only grab from self
+ *
+ * Inputs:
+ *        qvec dm   - density matrix from which to get element
+ *        PetscInt row - i location of requested element
+ *        PetscInt col - j location of requested element
+ * Outpus:
+ *        PetscScalar val - requested density matrix element
+ *
+ */
+void get_dm_element_qvec_local(qvec dm,PetscInt row,PetscInt col,PetscScalar *val){
+  PetscInt location[1],dm_size,my_start,my_end;
+  PetscScalar val_array[1];
+
+  location[0] = sqrt(dm->n)*col + row;
+
+  if (location[0]>=dm->Istart&&location[0]<dm->Iend) {
+    VecGetValues(dm->data,1,location,val_array);
+  } else{
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Can only get elements local to a core in !\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       get_dm_element_qvec_local.\n");
+    exit(0);
+  }
+
+  *val = val_array[0];
+  return;
+}
+
+
+/*
+ * Print the dense wf
+ */
 void print_wf_qvec(qvec state){
   PetscScalar val;
   PetscInt i;
@@ -291,7 +358,7 @@ void get_qvec_loc_fock_op_list(qvec state,PetscInt *loc,PetscInt num_ops,operato
 
   if (state->my_type==DENSITY_MATRIX){
     //Density matrix; we take it as the diagonal
-    *loc = *loc * state->n + *loc;
+    *loc = *loc * sqrt(state->n) + *loc;
   } else if (state->my_type==WAVEFUNCTION){
     //WF, just take the direct state
     *loc = *loc;
@@ -417,20 +484,114 @@ void get_expectation_value_qvec(qvec state,PetscScalar *trace_val,PetscInt num_o
 void get_expectation_value_qvec_list(qvec state,PetscScalar *trace_val,PetscInt num_ops,operator *ops){
 
   if(state->my_type==WAVEFUNCTION){
-    _get_expectation_value_wf(state->data,trace_val,num_ops,ops);
+    _get_expectation_value_wf(state,trace_val,num_ops,ops);
+  } else if(state->my_type==DENSITY_MATRIX){
+    _get_expectation_value_dm(state,trace_val,num_ops,ops);
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvec type not understood.");
+    exit(0);
   }
 
   return;
 }
 
+void _get_expectation_value_dm(qvec rho,PetscScalar *trace_val,PetscInt num_ops,operator *ops){
+  PetscInt i,j,this_i,this_j,my_j_start,my_j_end,my_start,my_end,dim,dm_size,j_op_tmp;
+  PetscInt this_loc;
+  PetscScalar dm_element,val,op_val;
 
-void _get_expectation_value_wf(Vec psi,PetscScalar *trace_val,PetscInt num_ops,operator *ops){
+  /*
+   * Calculate Tr(ABC...*rho) using the following observations:
+   *     Tr(A*rho) = sum_i (A*rho)_ii = sum_i sum_k A_ik rho_ki
+   *          i.e., we do not need a j loop.
+   *     Each operator (ABCD...) is very sparse - having less than
+   *          1 value per row on average. This allows us to efficiently do the
+   *          multiplication of ABCD... by just calculating the value
+   *          for one of the indices (i); if there is no matching j,
+   *          the value is 0.
+   *
+   */
+  *trace_val = 0.0 + 0.0*PETSC_i;
+  my_start = rho->Istart;
+  my_end = rho->Iend;
+
+  /*
+   * Find the range of j values stored on a core.
+   * Some columns will be shared by more than 1 core;
+   * In that case the core who has the first element
+   * of the row calculates that value, potentially
+   * communicating to get values it does not have
+   */
+  my_j_start = my_start/total_levels; // Rely on integer division to get 'floor'
+  my_j_end  = my_end/total_levels;
+
+  for (i=my_j_start;i<my_j_end;i++){
+    this_i = i; // The leading index which we check
+    op_val = 1.0;
+    for (j=0;j<num_ops;j++){
+      if(ops[j]->my_op_type==VEC){
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators not yet supported!\n");
+        exit(0);
+        /*
+         * Since this is a VEC operator, the next operator must also
+         * be a VEC operator; it is assumed they always come in pairs.
+         */
+        if (ops[j+1]->my_op_type!=VEC){
+          PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators must come in pairs in get_expectation_value\n");
+        }
+        _get_val_j_from_global_i_vec_vec(this_i,ops[j],ops[j+1],&this_j,&val,-1);
+        //Increment j
+        j=j+1;
+      } else {
+        //Standard operator
+        _get_val_j_from_global_i(this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+      }
+      if (this_j<0) {
+        /*
+         * Negative j says there is no nonzero value for a given this_i
+         * As such, we can immediately break the loop for i
+         */
+        op_val = 0.0;
+        break;
+      } else {
+        this_i = this_j;
+        op_val = op_val*val;
+      }
+    }
+    /*
+     * Check that this i is on this core;
+     * most of the time, it will be, but sometimes
+     * columns are split up by core.
+     */
+    this_loc = total_levels*i + this_i;
+    if (this_loc>=my_start&&this_loc<my_end) {
+      get_dm_element_qvec_local(rho,this_i,i,&dm_element);
+      /*
+       * Take complex conjugate of dm_element (since we relied on the fact
+       * that rho was hermitian to get better data locality)
+       */
+      *trace_val = *trace_val + op_val*(dm_element);
+    }
+  }
+
+  MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
+
+  return;
+}
+
+void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,operator *ops){
   PetscInt Istart,Iend,location[1],i,j,this_j,this_i;
   PetscScalar val_array[1],val,op_val;
   Vec op_psi;
+
+  /*
+   * FIXME: Check for consistency in operator sizes and wf size
+   */
+
+
   *trace_val = 0.0;
-  VecGetOwnershipRange(psi,&Istart,&Iend);
-  VecDuplicate(psi,&op_psi);
+  VecGetOwnershipRange(psi->data,&Istart,&Iend);
+  VecDuplicate(psi->data,&op_psi);
   //Calculate A * B * Psi
   for (i=0;i<total_levels;i++){
     this_i = i; // The leading index which we check
@@ -453,7 +614,7 @@ void _get_expectation_value_wf(Vec psi,PetscScalar *trace_val,PetscInt num_ops,o
     if (this_i>=Istart&&this_i<Iend&&op_val!=0.0){
       //this val belongs to me, do the (local) multiplication
       location[0] = this_i;
-      VecGetValues(psi,1,location,val_array);
+      VecGetValues(psi->data,1,location,val_array);
       op_val = op_val * val_array[0];
       //Add the value to the op_psi
       VecSetValue(op_psi,i,op_val,ADD_VALUES);
@@ -462,6 +623,8 @@ void _get_expectation_value_wf(Vec psi,PetscScalar *trace_val,PetscInt num_ops,o
   // Now, calculate the inner product between psi^H * OP_psi
   VecAssemblyBegin(op_psi);
   VecAssemblyEnd(op_psi);
-  VecDot(op_psi,psi,trace_val);
+  VecDot(op_psi,psi->data,trace_val);
   VecDestroy(&op_psi);
+
+  return;
 }

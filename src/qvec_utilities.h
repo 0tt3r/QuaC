@@ -25,11 +25,14 @@ void get_qvec_loc_fock_op_list(qvec,PetscInt*,PetscInt,operator[],PetscInt[]);
 
 void get_expectation_value_qvec(qvec,PetscScalar*,PetscInt,...);
 void get_expectation_value_qvec_list(qvec,PetscScalar*,PetscInt,operator*);
-void _get_expectation_value_wf(Vec,PetscScalar*,PetscInt,operator*);
+void _get_expectation_value_wf(qvec,PetscScalar*,PetscInt,operator*);
+void _get_expectation_value_dm(qvec,PetscScalar*,PetscInt,operator*);
 
 void print_qvec(qvec);
 void print_dm_qvec(qvec);
 void print_wf_qvec(qvec);
 void get_wf_element_qvec(qvec,PetscInt,PetscScalar*);
+void get_dm_element_qvec(qvec,PetscInt,PetscInt,PetscScalar*);
+void get_dm_element_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
 
 #endif
