@@ -26,6 +26,8 @@ typedef struct qsystem{
   mat_term *time_indep,*time_dep;
   PetscInt hspace_frozen;
   PetscBool dm_equations;
+
+  PetscInt mat_allocated;
   Mat mat_A;
 
   PetscInt *o_nnz,*d_nnz;

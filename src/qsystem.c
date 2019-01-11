@@ -73,7 +73,7 @@ void destroy_system(qsystem *qsys){
   free((*qsys)->time_indep);
   free((*qsys)->o_nnz);
   free((*qsys)->d_nnz);
-  MatDestroy(&((*qsys)->mat_A));
+  if ((*qsys)->mat_allocated) MatDestroy(&((*qsys)->mat_A));
   free((*qsys));
 }
 
@@ -301,7 +301,7 @@ void construct_matrix(qsystem sys){
   }
 
   _preallocate_matrix(sys);
-
+  sys->mat_allocated = 1;
   //Loop over time independent terms
   for(i=0;i<sys->num_time_indep;i++){
     _add_ops_to_mat(sys->time_indep[i].a,sys->mat_A,sys->time_indep[i].my_term_type,
