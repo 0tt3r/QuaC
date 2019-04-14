@@ -10,6 +10,7 @@
 #include "quantum_gates.h"
 #include "petsc.h"
 #include "qasm_parser.h"
+#include "qsystem.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
