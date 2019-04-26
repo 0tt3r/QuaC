@@ -629,7 +629,7 @@ void create_circuit(circuit *circ,PetscInt num_gates_est){
  *        ...:   list of qubit gate will act on, other (U for controlled_U?)
  */
 void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...){
-  PetscReal theta;
+  PetscReal theta,phi,lambda;
   int num_qubits=0,qubit,i;
   va_list ap;
 
@@ -655,6 +655,8 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
 
   if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
     va_start(ap,num_qubits+1);
+  } else if (my_gate_type==U3){
+    va_start(ap,num_qubits+3);
   } else {
     va_start(ap,num_qubits);
   }
@@ -675,9 +677,20 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
     //Get the theta parameter from the last argument passed in
     theta = va_arg(ap,PetscReal);
     (*circ).gate_list[(*circ).num_gates].theta = theta;
+    (*circ).gate_list[(*circ).num_gates].phi = 0;
+    (*circ).gate_list[(*circ).num_gates].lambda = 0;
+  } else if (my_gate_type==U3){
+    theta = va_arg(ap,PetscReal);
+    (*circ).gate_list[(*circ).num_gates].theta = theta;
+    phi = va_arg(ap,PetscReal);
+    (*circ).gate_list[(*circ).num_gates].phi = phi;
+    lambda = va_arg(ap,PetscReal);
+    (*circ).gate_list[(*circ).num_gates].lambda = lambda;
   } else {
     //Set theta to 0
     (*circ).gate_list[(*circ).num_gates].theta = 0;
+    (*circ).gate_list[(*circ).num_gates].phi = 0;
+    (*circ).gate_list[(*circ).num_gates].lambda = 0;
   }
 
   (*circ).num_gates = (*circ).num_gates + 1;
@@ -2345,6 +2358,101 @@ void HADAMARD_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate
   return;
 }
 
+void U3_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                      PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],my_levels;
+  PetscScalar vals_i1[2],vals_i2[2];
+  PetscReal theta,lambda,phi;
+  /*
+   * u3 gate
+   *
+   * u3(theta,phi,lambda)  = | cos(theta/2)              -e^(i lambda) * sin(theta/2)    |
+   *                         | e^(i phi) sin(theta/2)    e^(i (lambda+phi)) cos(theta/2) |
+   * the u3 gate is a general one qubit transformation.
+   * the u2 gate is u3(pi/2,phi,lambda)
+   * the u1 gate is u3(0,0,lambda)
+   * The u3 gate has two elements per row,
+   * with both diagonal anad off diagonal elements
+   *
+   */
+  theta = gate.theta;
+  phi = gate.phi;
+  lambda = gate.lambda;
+  if (tensor_control!= 0) {
+    my_levels = 2; //Hardcoded becase single qubit gate
+    _get_n_after_1qbit(i,gate.qubit_numbers[0],tensor_control,&n_after,&i_sub);
+    *num_js = 2;
+    if (i_sub==0) {
+      // Diagonal element
+      js[0]   = i;
+      vals[0] = PetscCosReal(theta/2);
+
+      // Off diagonal element
+      tmp_int = i - 0 * n_after;
+      k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(my_levels*n_after);
+      js[1]   = (0 + 1) * n_after + k1 + k2*my_levels*n_after;
+      vals[1] = -PetscExpComplex(PETSC_i*lambda)*PetscSinReal(theta/2);
+
+    } else if (i_sub==1){
+      // Diagonal element
+      js[0]   = i;
+      vals[0] = PetscExpComplex(PETSC_i*(lambda+phi))*PetscCosReal(theta/2);
+      // Off diagonal element
+      tmp_int = i - (0+1) * n_after;
+      k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(my_levels*n_after);
+      js[1]   = 0 * n_after + k1 + k2*my_levels*n_after;
+      vals[1] = PetscExpComplex(PETSC_i*phi)*PetscSinReal(theta/2);
+
+    } else {
+      if (nid==0){
+        printf("ERROR! u3 gate is only defined for qubits\n");
+        exit(0);
+      }
+    }
+  } else {
+    /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/total_levels;
+    i2 = i%total_levels;
+
+    /* Now, get js for U* (i1) by calling this function */
+    U3_get_val_j_from_global_i(i1,gate,&num_js_i1,js_i1,vals_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    U3_get_val_j_from_global_i(i2,gate,&num_js_i2,js_i2,vals_i2,-1);
+
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *num_js = 0;
+    for(k1=0;k1<num_js_i1;k1++){
+      for(k2=0;k2<num_js_i2;k2++){
+        js[*num_js] = total_levels * js_i1[k1] + js_i2[k2];
+        //Need to take complex conjugate to get true U*
+        vals[*num_js] = PetscConjComplex(vals_i1[k1])*vals_i2[k2];
+
+        *num_js = *num_js + 1;
+      }
+    }
+  }
+
+  return;
+}
+
 
 void EYE_get_val_j_from_global_i(PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                       PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
@@ -2974,7 +3082,7 @@ void _get_n_after_1qbit(PetscInt i,int qubit_number,PetscInt tensor_control,Pets
 void _check_gate_type(gate_type my_gate_type,int *num_qubits){
 
   if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE||
-      my_gate_type==RZ||my_gate_type==RX||my_gate_type==RY) {
+      my_gate_type==RZ||my_gate_type==RX||my_gate_type==RY||my_gate_type==U3) {
     *num_qubits = 1;
   } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX){
     *num_qubits = 2;
@@ -3003,4 +3111,5 @@ void _initialize_gate_function_array(){
   _get_val_j_functions_gates[RX+_min_gate_enum] = RX_get_val_j_from_global_i;
   _get_val_j_functions_gates[RY+_min_gate_enum] = RY_get_val_j_from_global_i;
   _get_val_j_functions_gates[RZ+_min_gate_enum] = RZ_get_val_j_from_global_i;
+  _get_val_j_functions_gates[U3+_min_gate_enum] = U3_get_val_j_from_global_i;
 }
