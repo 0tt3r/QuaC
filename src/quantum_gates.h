@@ -4,6 +4,7 @@
 #include "operators_p.h"
 #include "operators.h"
 #include "kron_p.h"
+#include "qsystem_p.h"
 #include <petscksp.h>
 #include <petscts.h>
 
@@ -28,14 +29,9 @@ struct quantum_gate_struct{
   gate_type my_gate_type;
   int *qubit_numbers;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+  void (*_get_val_j_from_global_i_sys)(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
   PetscReal theta; //Only used for rotation gates
 };
-
-typedef struct circuit{
-  PetscInt num_gates,gate_list_size,current_gate;
-  PetscReal start_time;
-  struct quantum_gate_struct *gate_list;
-} circuit;
 
 
 PetscScalar _get_val_in_subspace_gate(PetscInt,gate_type,PetscInt,PetscInt*,PetscInt*);

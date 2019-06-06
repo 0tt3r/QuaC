@@ -2,6 +2,8 @@
 #include "quac_p.h"
 #include "operators.h"
 #include "qsystem.h"
+#include "quantum_gates.h"
+#include "quantum_circuits.h"
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -54,6 +56,9 @@ void initialize_system(qsystem *qsys){
   temp->Istart = -1;
   temp->Iend   = -1;
 
+  //Circuit info
+  temp->num_circuits = -1;
+  temp->current_circuit = 0;
 
   *qsys = temp;
   return;
@@ -435,9 +440,18 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
   PetscViewer    mat_view;
   TS             ts; /* timestepping context */
   Mat            AA;
-  PetscInt       steps;
+  PetscInt       steps,nevents,direction;
+  PetscBool      terminate;
+
   PetscLogStagePop();
   PetscLogStagePush(solve_stage);
+
+
+  if(sys->mat_allocated!=1){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Matrix does not seem to be constructed! You need to\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       call construct_matrix!\n");
+    exit(0);
+  }
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*
    *       Create the timestepping solver and set various options       *
@@ -493,6 +507,19 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
 
   TSSetType(ts,TSRK);
   TSRKSetType(ts,TSRK3BS);
+
+  /* If we have a circuit to apply, set up the event handler */
+  if (sys->num_circuits > 0) {
+    nevents   =  1; //Only one event for now (did we cross a gate?)
+    direction = -1; //We only want to count an event if we go from positive to negative
+    terminate = PETSC_FALSE; //Keep time stepping after we passed our event
+    /* Arguments are: ts context, nevents, direction of zero crossing, whether to terminate,
+     * a function to check event status, a function to apply events, private data context.
+     */
+    TSSetEventHandler(ts,nevents,&direction,&terminate,_sys_QC_EventFunction,_sys_QC_PostEventFunction,sys);
+  }
+
+
 
   TSSetFromOptions(ts);
   TSSolve(ts,x->data);

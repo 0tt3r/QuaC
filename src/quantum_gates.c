@@ -5,7 +5,10 @@
 #include <petsc.h>
 #include <stdarg.h>
 
-
+/*
+ *
+ * FIXME: Add destroy circuit
+ */
 int _num_quantum_gates = 0;
 int _current_gate = 0;
 struct quantum_gate_struct _quantum_gate_list[MAX_GATES];
@@ -118,6 +121,8 @@ PetscErrorCode _QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[
   return(0);
 }
 
+
+
 /* Add a gate to the list */
 void add_gate(PetscReal time,gate_type my_gate_type,...) {
   int num_qubits=0,qubit,i;
@@ -198,7 +203,8 @@ void _apply_gate(struct quantum_gate_struct this_gate,Vec rho){
   PetscLogEventEnd(_apply_gate_event,0,0,0,0);
 }
 
-/*z
+
+/*
  * _construct_gate_mat constructs the matrix needed for the quantum
  * computing gates.
  *
@@ -587,6 +593,7 @@ PetscScalar _get_val_in_subspace_gate(PetscInt i,gate_type my_gate_type,PetscInt
 
 }
 
+
 /*
  * create_circuit initializez the circuit struct. Gates can be added
  * later.
@@ -642,6 +649,7 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
   _check_gate_type(my_gate_type,&num_qubits);
 
   if ((*circ).num_gates==(*circ).gate_list_size){
+    //FIXME: Put reallocation of array here?
     if (nid==0){
       printf("ERROR! Gate list not large enough!\n");
       exit(1);
@@ -664,8 +672,10 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
     qubit = va_arg(ap,int);
     if (qubit>=num_subsystems) {
       if (nid==0){
-        // Disable warning because of qasm parser will make the circuit before
+        // Disable warning because qasm parser will make the circuit before
         // the qubits are allocated
+        // In rewrite, this check is not needed, since circuits are independent
+        // of systems.
         //printf("Warning! Qubit number greater than total systems\n");
       }
     }
@@ -723,6 +733,9 @@ void add_circuit_to_circuit(circuit *circ,circuit circ_to_add,PetscReal time){
 
   return;
 }
+
+
+
 
 /* register a circuit to be run a specific time during the time stepping */
 void start_circuit_at_time(circuit *circ,PetscReal time){

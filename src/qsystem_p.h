@@ -19,6 +19,14 @@ typedef struct {
   operator *ops;
 } mat_term;
 
+
+typedef struct circuit{
+  PetscInt num_gates,gate_list_size,current_gate;
+  PetscReal start_time;
+  struct quantum_gate_struct *gate_list;
+} circuit;
+
+
 typedef struct qsystem{
   PetscInt num_time_indep,num_time_dep;
   PetscInt alloc_time_indep,alloc_time_dep;
@@ -41,6 +49,10 @@ typedef struct qsystem{
   PetscInt Istart,Iend,my_num;
 
   PetscErrorCode (*ts_monitor)(TS,PetscInt,PetscReal,Vec,void*);
+
+  //Circuit related
+  PetscInt num_circuits,circuit_list_size,current_circuit;
+  circuit *circuit_list;
 
 } *qsystem;
 

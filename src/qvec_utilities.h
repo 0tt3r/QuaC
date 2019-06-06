@@ -19,7 +19,8 @@ void destroy_qvec(qvec*);
 void add_to_qvec_fock_op(PetscScalar,qvec,PetscInt,...);
 
 void add_to_qvec_fock_op_list(PetscScalar,qvec,PetscInt,operator*,PetscInt*);
-void add_to_qvec_loc(PetscScalar,PetscInt,qvec);
+void add_to_qvec(qvec,PetscScalar,...);
+void add_to_qvec_loc(qvec,PetscScalar,PetscInt);
 void get_qvec_loc_fock_op(qvec,PetscInt*,PetscInt,...);
 void get_qvec_loc_fock_op_list(qvec,PetscInt*,PetscInt,operator[],PetscInt[]);
 

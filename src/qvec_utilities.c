@@ -9,6 +9,8 @@
 /*
  * FIXME:
  *    Add create_{dm,wf}_qvec to create any sized dm, even if it isn't tied to a system
+ *    Add print_qvec_sparse
+ *    Add print_qvec_file
  */
 
 
@@ -143,7 +145,6 @@ void get_wf_element_qvec(qvec state,PetscInt i,PetscScalar *val){
  * the operators added thus far
  */
 void create_qvec_sys(qsystem sys,qvec *new_qvec){
-
   //Automatically decide whether to make a DM or WF
   if (sys->dm_equations){
     create_dm_sys(sys,new_qvec);
@@ -180,7 +181,6 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
 
   PetscPrintf(PETSC_COMM_WORLD,"Creating density matrix vector for Liouvillian solver.\n");
   _create_vec(&(temp->data),sys->dim,sys->my_num);
-
 
   VecGetSize(temp->data,&n);
   VecGetOwnershipRange(temp->data,&Istart,&Iend);
@@ -261,7 +261,7 @@ void add_to_qvec_fock_op(PetscScalar alpha,qvec state,PetscInt num_ops,...){
   va_end(ap);
 
   get_qvec_loc_fock_op_list(state,&loc,num_ops,ops,fock_states);
-  add_to_qvec_loc(alpha,loc,state);
+  add_to_qvec_loc(state,alpha,loc);
 
   free(ops);
   free(fock_states);
@@ -279,16 +279,17 @@ void add_to_qvec_fock_op_list(PetscScalar alpha,qvec state,PetscInt num_ops,oper
 
   get_qvec_loc_fock_op_list(state,&loc,num_ops,ops,fock_states);
 
-  add_to_qvec_loc(alpha,loc,state);
+  add_to_qvec_loc(state,alpha,loc);
 
   return;
 }
 
 /*
  * Add alpha to the element at location loc in the qvec
+ * Does not discriminate between WF and DM -- loc needs to be correctly vectorized if DM!
  */
 
-void add_to_qvec_loc(PetscScalar alpha,PetscInt loc,qvec state){
+void add_to_qvec_loc(qvec state,PetscScalar alpha,PetscInt loc){
 
   if (loc>state->n||loc<0){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! Adding to a qvec location that is out of range!\n");
@@ -297,6 +298,45 @@ void add_to_qvec_loc(PetscScalar alpha,PetscInt loc,qvec state){
 
   if (loc>=state->Istart&&loc<state->Iend){
     VecSetValue(state->data,loc,alpha,ADD_VALUES);
+  }
+
+  return;
+}
+
+
+/*
+ * Add alpha to the element at location loc in the qvec
+ */
+
+void add_to_qvec(qvec state,PetscScalar alpha,...){
+  va_list  ap;
+  PetscInt loc,loc2,num_locs;
+
+  if (state->my_type==DENSITY_MATRIX){
+    /*
+     * Since this is a density matrix, we have to 'vectorize' the locations
+     * and then call add_to_qvec_loc
+     */
+    num_locs = 2;
+    va_start(ap,num_locs);
+    loc = va_arg(ap,PetscInt);
+    loc2 = va_arg(ap,PetscInt);
+    ///  location = sqrt(dm_size)*col + row;
+    loc = sqrt(state->n)*loc + loc2;
+
+    add_to_qvec_loc(state,alpha,loc);
+    va_end(ap);
+
+  } else if (state->my_type==WAVEFUNCTION){
+    /*
+     * Since this is a wavefunction, the input loc is the true location
+     * so we can just call add_to_qvec_loc
+     */
+    num_locs = 1;
+    va_start(ap,num_locs);
+    loc = va_arg(ap,PetscInt);
+    add_to_qvec_loc(state,alpha,loc);
+    va_end(ap);
   }
 
   return;
