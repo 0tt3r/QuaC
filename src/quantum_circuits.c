@@ -180,9 +180,11 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
 
     MatMPIAIJSetPreallocation(tmp_mat2,2,NULL,2,NULL);
 
-    circ.gate_list[i_mat]._get_val_j_from_global_i_sys(sys,i,circ.gate_list[i_mat],&num_js,these_js,op_vals,-1); // Get the corresponding j and val
-    MatSetValues(tmp_mat2,1,&i,num_js,these_js,op_vals,ADD_VALUES);
-
+    MatGetOwnershipRange(tmp_mat2,&Istart,&Iend);
+    for (i=Istart;i<Iend;i++){
+      circ.gate_list[i_mat]._get_val_j_from_global_i_sys(sys,i,circ.gate_list[i_mat],&num_js,these_js,op_vals,-1); // Get the corresponding j and val
+      MatSetValues(tmp_mat2,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+    }
     MatAssemblyBegin(tmp_mat2,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(tmp_mat2,MAT_FINAL_ASSEMBLY);
 
@@ -197,7 +199,7 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
   }
 
   //Copy tmp_mat1 into *matrix_out
-  MatConvert(tmp_mat1,MATSAME,MAT_INITIAL_MATRIX,matrix_out);;
+  MatConvert(tmp_mat1,MATSAME,MAT_INITIAL_MATRIX,matrix_out);
 
   MatDestroy(&tmp_mat1);
   return;
