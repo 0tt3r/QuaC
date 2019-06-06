@@ -97,7 +97,7 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
     _initialize_gate_function_array_sys();
     _gate_array_initialized = 1;
   }
-  printf("my_gate_type: %d\n",my_gate_type);
+
   _check_gate_type(my_gate_type,&num_qubits);
 
   if ((*circ).num_gates==(*circ).gate_list_size){
@@ -145,6 +145,64 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
   (*circ).num_gates = (*circ).num_gates + 1;
   return;
 }
+
+void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
+  PetscScalar op_vals[2];
+  PetscInt Istart,Iend,i_mat;
+  PetscInt i,these_js[2],num_js;
+  Mat tmp_mat1,tmp_mat2,tmp_mat3;
+
+  // Should this inherit its stucture from full_A?
+
+  MatCreate(PETSC_COMM_WORLD,&tmp_mat1);
+  MatSetType(tmp_mat1,MATMPIAIJ);
+  MatSetSizes(tmp_mat1,PETSC_DECIDE,PETSC_DECIDE,sys->total_levels,sys->total_levels);
+  MatSetFromOptions(tmp_mat1);
+
+  MatMPIAIJSetPreallocation(tmp_mat1,2,NULL,2,NULL);
+
+  /* Construct the first matrix in tmp_mat1 */
+  MatGetOwnershipRange(tmp_mat1,&Istart,&Iend);
+  for (i=Istart;i<Iend;i++){
+    circ.gate_list[0]._get_val_j_from_global_i_sys(sys,i,circ.gate_list[0],&num_js,these_js,op_vals,-1); // Get the corresponding j and val
+    MatSetValues(tmp_mat1,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+  }
+
+  MatAssemblyBegin(tmp_mat1,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(tmp_mat1,MAT_FINAL_ASSEMBLY);
+
+  for (i_mat=1;i_mat<circ.num_gates;i_mat++){
+    // Create the next matrix
+    MatCreate(PETSC_COMM_WORLD,&tmp_mat2);
+    MatSetType(tmp_mat2,MATMPIAIJ);
+    MatSetSizes(tmp_mat2,PETSC_DECIDE,PETSC_DECIDE,sys->total_levels,sys->total_levels);
+    MatSetFromOptions(tmp_mat2);
+
+    MatMPIAIJSetPreallocation(tmp_mat2,2,NULL,2,NULL);
+
+    circ.gate_list[i_mat]._get_val_j_from_global_i_sys(sys,i,circ.gate_list[i_mat],&num_js,these_js,op_vals,-1); // Get the corresponding j and val
+    MatSetValues(tmp_mat2,1,&i,num_js,these_js,op_vals,ADD_VALUES);
+
+    MatAssemblyBegin(tmp_mat2,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(tmp_mat2,MAT_FINAL_ASSEMBLY);
+
+    // Now do matrix matrix multiply
+    MatMatMult(tmp_mat2,tmp_mat1,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&tmp_mat3);
+    MatDestroy(&tmp_mat1);
+    MatDestroy(&tmp_mat2); //Do I need to destroy it?
+
+    //Store tmp_mat3 into tmp_mat1
+    MatConvert(tmp_mat3,MATSAME,MAT_INITIAL_MATRIX,&tmp_mat1);
+    MatDestroy(&tmp_mat3);
+  }
+
+  //Copy tmp_mat1 into *matrix_out
+  MatConvert(tmp_mat1,MATSAME,MAT_INITIAL_MATRIX,matrix_out);;
+
+  MatDestroy(&tmp_mat1);
+  return;
+}
+
 
 /* register a circuit to be run a specific time during the time stepping */
 void apply_circuit_to_sys(qsystem sys,circuit *circ,PetscReal time){
