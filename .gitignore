@@ -5,6 +5,7 @@
 *.elf
 
 # Misc
+*.dat
 *.png
 *.aux
 *.dvi
