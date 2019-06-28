@@ -2987,7 +2987,7 @@ void _get_n_after_1qbit(PetscInt i,int qubit_number,PetscInt tensor_control,Pets
 void _check_gate_type(gate_type my_gate_type,int *num_qubits){
 
   if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE||
-      my_gate_type==RZ||my_gate_type==RX||my_gate_type==RY) {
+      my_gate_type==RZ||my_gate_type==RX||my_gate_type==RY||my_gate_type==U3) {
     *num_qubits = 1;
   } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX){
     *num_qubits = 2;
