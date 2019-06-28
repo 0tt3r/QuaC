@@ -22,6 +22,7 @@ void quil_read(char filename[],PetscInt *num_qubits,circuit *circ){
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_qasm_read!\n");
+      exit(1);
     }
   }
 
@@ -204,6 +205,7 @@ void projectq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_qasm_read!\n");
+      exit(1);
     }
   }
 
@@ -324,6 +326,7 @@ void projectq_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+      exit(1);
     }
   }
 
@@ -389,6 +392,7 @@ void projectq_vqe_get_expectation_squared(char filename[],Vec rho,PetscScalar *t
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+      exit(1);
     }
   }
 
@@ -464,6 +468,7 @@ void projectq_vqe_get_expectation_encoded(char filename[],Vec rho,PetscScalar *t
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+      exit(1);
     }
   }
 
@@ -527,6 +532,7 @@ void qiskit_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in qiskit_qasm_read!\n");
+      exit(1);
     }
   }
 
@@ -586,15 +592,15 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time){
         } else if (my_gate_type<0){
           //Multiqubit gate
           sscanf(token,"q[%d],q[%d];",&qubit1,&qubit2);
-          add_gate_to_circuit(circ,time,my_gate_type,qubit1,qubit2);
+          add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,qubit2);
         } else {
           //Single qubit gate
           sscanf(token,"q[%d];",&qubit1);
           if (my_gate_type==U3){
             //U3 gate
-            add_gate_to_circuit(circ,time,my_gate_type,qubit1,angle,angle2,angle3);
+            add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,angle,angle2,angle3);
           } else {
-            add_gate_to_circuit(circ,time,my_gate_type,qubit1);
+            add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1);
           }
         }
       } else {
@@ -621,11 +627,13 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time){
         my_gate_type = U3;
         //u3(pi/2,phi,lambda)
         sscanf(token,"u3(%lf,%lf,%lf)",&angle,&angle2,&angle3);
+      } else if (strstr(token,"x")) {
+        my_gate_type = SIGMAX;
       } else if (strstr(token,"barrier")){
         //Skip barrier
         skip_gate = 1;
       } else {
-        printf("%s\n",token);
+        PetscPrintf(PETSC_COMM_WORLD,"%s\n",token);
         PetscPrintf(PETSC_COMM_WORLD,"ERROR! Gate type not recognized in qiskit_qasm!\n");
         exit(0);
       }
@@ -650,6 +658,7 @@ void qiskit_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val){
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in qiskit_vqe_get_expectation!\n");
+      exit(1);
     }
   }
 
