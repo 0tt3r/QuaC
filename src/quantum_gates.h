@@ -9,6 +9,7 @@
 #include <petscts.h>
 
 typedef enum {
+  NULL_GATE = -1000,
   CZX  = -5,
   CmZ  = -4,
   CZ   = -3,
@@ -21,7 +22,8 @@ typedef enum {
   EYE    = 5,
   RX     = 6,
   RY     = 7,
-  RZ     = 8
+  RZ     = 8,
+  U3     = 9
 } gate_type;
 
 struct quantum_gate_struct{
@@ -30,7 +32,7 @@ struct quantum_gate_struct{
   int *qubit_numbers;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
   void (*_get_val_j_from_global_i_sys)(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
-  PetscReal theta; //Only used for rotation gates
+  PetscReal theta,phi,lambda; //Only used for rotation gates
 };
 
 
