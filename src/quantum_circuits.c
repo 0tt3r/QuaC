@@ -270,7 +270,6 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   MatSetUp(gate_mat);
   /* Construct the gate matrix, on the fly */
   MatGetOwnershipRange(gate_mat,&Istart,&Iend); //Could be different Istart and Iend than Hamiltonian mat
-
   for (i=Istart;i<Iend;i++){
     if (sys->dm_equations){
       // Get the corresponding j and val for the superoperator U* cross U
@@ -281,6 +280,7 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
     }
     MatSetValues(gate_mat,1,&i,num_js,these_js,op_vals,ADD_VALUES);
   }
+
   MatAssemblyBegin(gate_mat,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(gate_mat,MAT_FINAL_ASSEMBLY);
   /* MatView(gate_mat,PETSC_VIEWER_STDOUT_SELF); */
@@ -1840,4 +1840,5 @@ void _initialize_gate_function_array_sys(){
   _get_val_j_functions_gates_sys[RX+_min_gate_enum] = RX_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[RY+_min_gate_enum] = RY_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[RZ+_min_gate_enum] = RZ_get_val_j_from_global_i_sys;
+  _get_val_j_functions_gates_sys[U3+_min_gate_enum] = U3_get_val_j_from_global_i_sys;
 }
