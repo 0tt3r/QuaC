@@ -8,6 +8,7 @@
 #include <petscts.h>
 
 typedef enum {
+  NULL_GATE = -1000,
   CZX  = -5,
   CmZ  = -4,
   CZ   = -3,
@@ -20,7 +21,8 @@ typedef enum {
   EYE    = 5,
   RX     = 6,
   RY     = 7,
-  RZ     = 8
+  RZ     = 8,
+  U3     = 9
 } gate_type;
 
 struct quantum_gate_struct{
@@ -28,7 +30,7 @@ struct quantum_gate_struct{
   gate_type my_gate_type;
   int *qubit_numbers;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
-  PetscReal theta; //Only used for rotation gates
+  PetscReal theta,lambda,phi; //Only used for rotation gates
 };
 
 typedef struct circuit{
@@ -74,6 +76,7 @@ void EYE_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,P
 void RX_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void RY_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void RZ_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void U3_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 
 #define MAX_GATES 100 // Consider not making this a define
 
