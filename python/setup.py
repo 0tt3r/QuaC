@@ -4,10 +4,13 @@ import os
 module1 = Extension('quac',
                     include_dirs = [ os.environ['PETSC_DIR'] + '/include',
                                      os.environ['PETSC_DIR'] + '/' + os.environ['PETSC_ARCH'] + '/include',
+                                     os.environ['SLEPC_DIR'] + '/include',
+                                     os.environ['SLEPC_DIR'] + '/' + os.environ['PETSC_ARCH'] + '/include',
                                      os.getcwd() + '/../src' ],
                     library_dirs = [ os.environ['PETSC_DIR'] + '/' + os.environ['PETSC_ARCH'] + '/lib',
+                                     os.environ['SLEPC_DIR'] + '/' + os.environ['PETSC_ARCH'] + '/lib',
                                      os.getcwd() + '/..' ],
-                    libraries = [ 'quac', 'petsc' ],
+                    libraries = [ 'quac', 'petsc', 'slepc' ],
                     sources = ['toolkit.c'],
                     extra_compile_args=['-std=gnu99'])
 

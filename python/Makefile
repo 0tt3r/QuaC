@@ -10,5 +10,5 @@ module: toolkit.c setup.py
 	${PYTHON} setup.py build
 
 test: module
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}/${PETSC_DIR}/${PETSC_ARCH}/lib PYTHONPATH=${BUILD_DIR} ${PYTHON} ./test.py
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PETSC_DIR}/${PETSC_ARCH}/lib:${SLEPC_DIR}/${PETSC_ARCH}/lib PYTHONPATH=${BUILD_DIR} ${PYTHON} ./test.py
 
