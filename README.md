@@ -53,5 +53,97 @@ Once everything is built, it's time for a simple quantum circuit (with, of cours
 import quac
 ```
 
+The first thing that your application must do is to initialize QuaC:
+
+```python
+quac.initialize()
+```
+
+And, with that done, you can create an instance of the QuaC simulator:
+
+```python
+q = quac.Instance()
+```
+
+The QuaC instance contains a number of useful variables that you might access:
+
+```python
+print(q)
+print("node_id: {0:d}".format(q.node_id))
+print("num_nodes: {0:d}".format(q.num_nodes))
+```
+
+We can create a simple quantum circuit:
+
+```python
+c = quac.Circuit()
+print(c)
+```
+
+and initialize it (we provide the maximum number of gates):
+
+```python
+c.initialize(25)
+print(c)
+```
+
+and then add the quantum gates, and for each, add a time:
+
+```python
+c.add_gate(gate="x", qubit1=0)
+c.add_gate(gate="rz", qubit1=0, angle=0.447, time=0.5)
+c.add_gate(gate="y", qubit1=1, time=2.5)
+c.add_gate(gate="cnot", qubit1=0, qubit2=1, time=3)
+print(c)
+```
+
+Our circuit uses two qubits, and we should make sure that our QuaC instance is also setup to simulate that number of qubits:
+
+```python
+q.num_qubits = 2
+q.create_qubits()
+print(q)
+```
+
+Now comes the interesting point: we'll add some noise operators to our system:
+
+```python
+for i in range(0, 2):
+  q.add_lindblad_emission(i, 1e-4)
+  q.add_lindblad_dephasing(i, gamma_2=1e-5)
+  q.add_lindblad_thermal_coupling(i, 1e-5)
+  for j in range(0, 2):
+    if i != j:
+      q.add_lindblad_cross_coupling(i, j, 1e-6)
+```
+
+Next we create the density matrix and add our circuit to the QuaC instance:
+
+```python
+q.create_density_matrix()
+q.start_circuit_at(c)
+```
+
+QuaC is a physics-based quantum simulator, and simulates the evolution of the system in time. We don't need to do anything to observe the system as it is evolving, but if we would like to do so, we can install a time-step monitor. This is a function that gets called by time time stepper as the system is evolving in time (the frequency with which the monitor is called is dynamically determined):
+
+```python
+def mon(q1, s, t):
+  print("monitor: {0}: step {1:d}, time {2:f}".format(q1, s, t))
+  q1.print_density_matrix(filename="dm-test-s{0}".format(s))
+
+q.ts_monitor = mon
+```
+
+Now we can actually evolve the system:
+
+```python
+q.run(4, dt=0.1)
+```
+
+And, finally, we can observe the final density matrix:
+
+```python
+q.print_density_matrix()
+```
 
 
