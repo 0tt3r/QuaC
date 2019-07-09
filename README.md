@@ -97,6 +97,8 @@ c.add_gate(gate="cnot", qubit1=0, qubit2=1, time=3)
 print(c)
 ```
 
+The following gates are provided: CZX, CmZ, CZ, CXZ, CNOT, H, X, Y, Z, I (the identity), RX, RY, RZ.
+
 Our circuit uses two qubits, and we should make sure that our QuaC instance is also setup to simulate that number of qubits:
 
 ```python
