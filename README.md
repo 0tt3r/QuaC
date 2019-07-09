@@ -23,8 +23,8 @@ cd petsc
 export PETSC_DIR=${PWD}
 export PETSC_ARCH=linux-gnu-c-complex 
 
-./configure --with-scalar-type=complex --download-mpich --download-fblaslapack=1 --with-debugging=no \
-  COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices
+./configure --with-scalar-type=complex --download-mpich --download-fblaslapack=1 \
+  --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 
 cd ..
