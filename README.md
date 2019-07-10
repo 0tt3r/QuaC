@@ -6,6 +6,8 @@ QuaC strives to make the process of translating the physics equations into paral
 
 QuaC has both a C API and a Python interface.
 
+https://0tt3r.github.io/QuaC/
+
 ## A Tutorial
 
 ### Building
