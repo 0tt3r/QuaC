@@ -146,6 +146,8 @@ QuaCCircuit_read_qasm(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
     quil_read(filename, &num_qubits, &self->c);
   } else if (!strcasecmp(format, "projectq")) {
     projectq_qasm_read(filename, &num_qubits, &self->c);
+  } else if (!strcasecmp(format, "qiskit")) {
+    qiskit_qasm_read(filename, &num_qubits, &self->c);
   } else {
     PyErr_SetString(PyExc_RuntimeError, "Unknown qasm format!");
     return NULL;
