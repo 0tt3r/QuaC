@@ -67,6 +67,8 @@ quac_clear(PyObject *self, PyObject *args) {
 
 static PetscErrorCode ts_monitor(TS, PetscInt, PetscReal, Vec, void*);
 
+static double time_dep_cb(double, void*);
+
 typedef struct {
   PyObject_HEAD
 
@@ -326,7 +328,7 @@ QuaCInstance_init(QuaCInstance *self, PyObject *args, PyObject *kwds) {
 
 static PyMemberDef QuaCInstance_members[] = {
     {"ts_monitor", T_OBJECT_EX, offsetof(QuaCInstance, ts_monitor_callback), 0,
-     "time-step-monitor callback"},
+     "time-step-coup_1, monitor callback"},
     {"num_qubits", T_LONG, offsetof(QuaCInstance, num_qubits), 0,
      "number of qubits"},
     {"node_id", T_INT, offsetof(QuaCInstance, nid), READONLY,
@@ -466,6 +468,41 @@ QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject
 }
 
 static int
+QuaCInstance_add_ham_num_time_dep(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit;
+  PyObject *coeff;
+
+  static char *kwlist[] = {"qubit", "coeff", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "iO", kwlist,
+                                   &qubit, &coeff))
+    return NULL;
+
+  Py_INCREF(coeff);
+  add_to_ham_time_dep(time_dep_cb, coeff, 1, self->qubits[qubit]->n);
+
+  Py_RETURN_NONE;
+}
+
+static int
+QuaCInstance_add_ham_cross_coupling_time_dep(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit1, qubit2;
+  PyObject *coup_1;
+
+  static char *kwlist[] = {"qubit1", "qubit2", "coup_1", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "iiO", kwlist,
+                                   &qubit1, &qubit2, &coup_1))
+    return NULL;
+
+  Py_INCREF(coup_1);
+  add_to_ham_time_dep(time_dep_cb, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
+  add_to_ham_time_dep(time_dep_cb, coup_1, 2, self->qubits[qubit1], self->qubits[qubit2]->dag);
+
+  Py_RETURN_NONE;
+}
+
+static int
 QuaCInstance_create_dm(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   if (self->rho) {
     PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has already been created!");
@@ -559,12 +596,20 @@ static PyMethodDef QuaCInstance_methods[] = {
      (PyCFunction) QuaCInstance_add_lindblad_cross_coupling, METH_VARARGS | METH_KEYWORDS,
      "Add Lindblad cross_coupling terms."
     },
-    {"add_ham_number",
+    {"add_ham_num",
      (PyCFunction) QuaCInstance_add_ham_num, METH_VARARGS | METH_KEYWORDS,
      "Add a Hamiltonian number-operator term."
     },
     {"add_ham_cross_coupling",
      (PyCFunction) QuaCInstance_add_ham_cross_coupling, METH_VARARGS | METH_KEYWORDS,
+     "Add Hamiltonian cross_coupling terms."
+    },
+    {"add_ham_num_time_dep",
+     (PyCFunction) QuaCInstance_add_ham_num_time_dep, METH_VARARGS | METH_KEYWORDS,
+     "Add a Hamiltonian number-operator term."
+    },
+    {"add_ham_cross_coupling_time_dep",
+     (PyCFunction) QuaCInstance_add_ham_cross_coupling_time_dep, METH_VARARGS | METH_KEYWORDS,
      "Add Hamiltonian cross_coupling terms."
     },
     {"create_density_matrix",
@@ -617,6 +662,27 @@ PetscErrorCode ts_monitor(TS ts, PetscInt step, PetscReal time, Vec rho, void *c
   }
 
   PetscFunctionReturn(0);
+}
+
+double time_dep_cb(double t, void *ctx) {
+  PyObject *tdf = (PyObject *) ctx;
+  PyObject *arglist;
+  PyObject *result;
+
+  if (tdf == Py_None)
+    return 1.0;
+
+  arglist = Py_BuildValue("(d)", t);
+  result = PyObject_CallObject(tdf, arglist);
+  Py_DECREF(arglist);
+
+  if (result) {
+    double v = PyFloat_AsDouble(result);
+    Py_DECREF(result);
+    return v;
+  }
+
+  return 1.0;
 }
 
 static PyMethodDef QuaCMethods[] = {
