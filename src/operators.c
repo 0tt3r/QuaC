@@ -196,13 +196,13 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
 /*
  * add_to_ham_time_dep adds a(t)*op to the time dependent hamiltonian list
  * Inputs:
- *        double (*time_dep_func)(double): time dependent function to multiply op
+ *        double (*time_dep_func)(double, void *): time dependent function to multiply op
  *        int num_ops:  number of operators that will be passed in
  *        operator op1, op2,...,op_{num_ops}: operators to be added to the matrix
  * Outputs:
  *        none
  */
-void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
+void add_to_ham_time_dep(double (*time_dep_func)(double, void *),void *ctx,int num_ops,...){
   PetscInt    i;
   operator    op;
   va_list     ap;
@@ -214,6 +214,7 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
    */
 
   _time_dep_list[_num_time_dep].time_dep_func = time_dep_func;
+  _time_dep_list[_num_time_dep].ctx           = ctx;
   _time_dep_list[_num_time_dep].num_ops       = num_ops;
   _time_dep_list[_num_time_dep].ops = malloc(num_ops*sizeof(operator));
 
@@ -230,13 +231,13 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
 /*
  * add_to_ham_time_dep_p adds a(t)*op to the time dependent hamiltonian list
  * Inputs:
- *        double (*time_dep_func)(double): time dependent function to multiply op
+ *        double (*time_dep_func)(double, void *): time dependent function to multiply op
  *        PetscInt    num_ops:    number of ops in the list (can be vecs)
  *        operator op1...: operators to multiply together and add
  * Outputs:
  *        none
  */
-void add_to_ham_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
+void add_to_ham_time_dep_p(double (*time_dep_func)(double, void *),void *ctx,int num_ops,...){
   PetscInt    i;
   operator    op;
   va_list     ap;
@@ -248,6 +249,7 @@ void add_to_ham_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
    */
 
   _time_dep_list[_num_time_dep].time_dep_func = time_dep_func;
+  _time_dep_list[_num_time_dep].ctx           = ctx;
   _time_dep_list[_num_time_dep].num_ops       = num_ops;
   _time_dep_list[_num_time_dep].ops = malloc(num_ops*sizeof(operator));
 
@@ -261,7 +263,7 @@ void add_to_ham_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
   return;
 }
 
-void add_lin_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
+void add_lin_time_dep_p(double (*time_dep_func)(double, void *),void *ctx,int num_ops,...){
   PetscInt    i;
   operator    op;
   va_list     ap;
@@ -273,6 +275,7 @@ void add_lin_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
    */
 
   _time_dep_list_lin[_num_time_dep_lin].time_dep_func = time_dep_func;
+  _time_dep_list_lin[_num_time_dep_lin].ctx           = ctx;
   _time_dep_list_lin[_num_time_dep_lin].num_ops       = num_ops;
   _time_dep_list_lin[_num_time_dep_lin].ops = malloc(num_ops*sizeof(operator));
 

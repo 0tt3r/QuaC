@@ -559,7 +559,7 @@ PetscErrorCode _RHS_time_dep_ham(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx
   MatCopy(full_A,AA,SAME_NONZERO_PATTERN);
 
   for (i=0;i<_num_time_dep;i++){
-    time_dep_val = _time_dep_list[i].time_dep_func(t);
+    time_dep_val = _time_dep_list[i].time_dep_func(t,_time_dep_list[i].ctx);
     for(j=0;j<_time_dep_list[i].num_ops;j++){
       op = _time_dep_list[i].ops[j];
 
@@ -604,12 +604,12 @@ PetscErrorCode _RHS_time_dep_ham_p(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *c
   MatCopy(full_A,AA,SAME_NONZERO_PATTERN);
 
   for (i=0;i<_num_time_dep;i++){
-    time_dep_val = _time_dep_list[i].time_dep_func(t);
+    time_dep_val = _time_dep_list[i].time_dep_func(t,_time_dep_list[i].ctx);
     _add_ops_to_mat_ham(time_dep_val,AA,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
   }
 
   for (i=0;i<_num_time_dep_lin;i++){
-    time_dep_val = _time_dep_list_lin[i].time_dep_func(t);
+    time_dep_val = _time_dep_list_lin[i].time_dep_func(t,_time_dep_list_lin[i].ctx);
     _add_ops_to_mat_lin(time_dep_val,AA,_time_dep_list_lin[i].num_ops,_time_dep_list_lin[i].ops);
   }
 
