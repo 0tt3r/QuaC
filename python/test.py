@@ -1,4 +1,5 @@
 import quac
+from math import exp, pow, cos
 
 quac.initialize()
 q = quac.Instance()
@@ -30,6 +31,13 @@ for i in range(0, 2):
 
 q.create_density_matrix()
 q.start_circuit_at(c)
+
+def pulse(t, t0):
+  print("computing pulse at: {0:f}, t0 is {1:f}".format(t, t0))
+  return -exp(-0.5*pow(t - t0, 2))*cos(0.1*t)
+
+q.add_ham_num_time_dep(0, lambda t: pulse(t, 1));
+q.add_ham_cross_coupling_time_dep(0, 1, lambda t: pulse(t, 0.8));
 
 def mon(q1, s, t):
   print("monitor: {0}: step {1:d}, time {2:f}".format(q1, s, t))
