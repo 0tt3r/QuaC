@@ -433,6 +433,39 @@ QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyO
 }
 
 static int
+QuaCInstance_add_ham_num(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit;
+  double coeff;
+
+  static char *kwlist[] = {"qubit", "coeff", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "id", kwlist,
+                                   &qubit, &coeff))
+    return NULL;
+
+  add_to_ham(coeff, self->qubits[qubit]->n);
+
+  Py_RETURN_NONE;
+}
+
+static int
+QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit1, qubit2;
+  double coup_1;
+
+  static char *kwlist[] = {"qubit1", "qubit2", "coup_1", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "iid", kwlist,
+                                   &qubit1, &qubit2, &coup_1))
+    return NULL;
+
+  add_to_ham_mult2(coup_1, self->qubits[qubit1]->dag, self->qubits[qubit2]);
+  add_to_ham_mult2(coup_1, self->qubits[qubit1], self->qubits[qubit2]->dag);
+
+  Py_RETURN_NONE;
+}
+
+static int
 QuaCInstance_create_dm(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   if (self->rho) {
     PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has already been created!");
@@ -525,6 +558,14 @@ static PyMethodDef QuaCInstance_methods[] = {
     {"add_lindblad_cross_coupling",
      (PyCFunction) QuaCInstance_add_lindblad_cross_coupling, METH_VARARGS | METH_KEYWORDS,
      "Add Lindblad cross_coupling terms."
+    },
+    {"add_ham_number",
+     (PyCFunction) QuaCInstance_add_ham_num, METH_VARARGS | METH_KEYWORDS,
+     "Add a Hamiltonian number-operator term."
+    },
+    {"add_ham_cross_coupling",
+     (PyCFunction) QuaCInstance_add_ham_cross_coupling, METH_VARARGS | METH_KEYWORDS,
+     "Add Hamiltonian cross_coupling terms."
     },
     {"create_density_matrix",
      (PyCFunction) QuaCInstance_create_dm, METH_NOARGS,
