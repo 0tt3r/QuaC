@@ -9,8 +9,8 @@
 #include "petsc.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
-double pulse1(double);
-double pulse2(double);
+double pulse1(double,void*);
+double pulse2(double,void*);
 
 /* Declared globally so that we can access this in ts_monitor */
 FILE *f_pop;
@@ -79,11 +79,11 @@ int main(int argc,char **args){
   add_to_ham_p(we1,1,qd1->n);
   add_to_ham_p(we2,1,qd2->n);
 
-  add_to_ham_time_dep_p(pulse1,1,qd1->dag);
-  add_to_ham_time_dep_p(pulse1,1,qd1);
+  add_to_ham_time_dep_p(pulse1,NULL,1,qd1->dag);
+  add_to_ham_time_dep_p(pulse1,NULL,1,qd1);
 
-  add_to_ham_time_dep_p(pulse2,1,qd2->dag);
-  add_to_ham_time_dep_p(pulse2,1,qd2);
+  add_to_ham_time_dep_p(pulse2,NULL,1,qd2->dag);
+  add_to_ham_time_dep_p(pulse2,NULL,1,qd2);
 
   add_lin(gamma,qd1);
   add_lin(dep,qd1->n);
@@ -212,7 +212,7 @@ int main(int argc,char **args){
   return 0;
 }
 
-double pulse1(double t){
+double pulse1(double t,void *ctx){
   double pulse_value;
   pulse_value = (amp1*exp(-2 * log(2) * pow((t-td)/(tp),2)) * cos(we_p*(t-td))
                  + amp1*exp(-2*log(2)*pow((t-td2)/(tp),2))*cos(we_p*(t-td2)));
@@ -220,7 +220,7 @@ double pulse1(double t){
   return pulse_value;
 }
 
-double pulse2(double t){
+double pulse2(double t,void *ctx){
   double pulse_value;
   pulse_value = (amp2*exp(-2 * log(2) * pow((t-td)/(tp),2)) * cos(we_p*(t-td))
                  + amp2*exp(-2*log(2)*pow((t-td2)/(tp),2))*cos(we_p*(t-td2)));

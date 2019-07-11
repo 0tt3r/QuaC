@@ -9,7 +9,7 @@
 #include "petsc.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
-double pulse(double);
+double pulse(double,void*);
 
 /* Declared globally so that we can access this in ts_monitor */
 FILE *f_pop;
@@ -65,7 +65,7 @@ int main(int argc,char **args){
 
   /* Add terms to the hamiltonian */
   add_to_ham(we,qd->n);
-  add_to_ham_time_dep(pulse,2,qd->dag,qd);
+  add_to_ham_time_dep(pulse,NULL,2,qd->dag,qd);
 
   add_lin(gamma,qd);
   add_lin(dep,qd->n);
@@ -172,7 +172,7 @@ int main(int argc,char **args){
   return 0;
 }
 
-double pulse(double t){
+double pulse(double t,void *ctx){
   double pulse_value;
   pulse_value = (amp*exp(-2 * log(2) * pow((t-td)/(tp),2)) * cos(we*(t-td))
                  + amp*exp(-2*log(2)*pow((t-td2)/(tp),2))*cos(we*(t-td2)));

@@ -8,8 +8,8 @@
 #include "petsc.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
-double pulse_plasmon(double);
-double pulse_qd(double);
+double pulse_plasmon(double,void*);
+double pulse_qd(double,void*);
 
 /* Declared globally so that we can access this in ts_monitor */
 FILE *f_fid,*f_pop;
@@ -90,9 +90,9 @@ int main(int argc,char **args){
 
   /* add_to_ham(gamma_di,a->n); */
   /* add_to_ham(gamma_di,a->dag); */
-  add_to_ham_time_dep(pulse_plasmon,2,a,a->dag);
-  add_to_ham_time_dep(pulse_qd,2,qd[0],qd[0]->dag);
-  add_to_ham_time_dep(pulse_qd,2,qd[1],qd[1]->dag);
+  add_to_ham_time_dep(pulse_plasmon,NULL,2,a,a->dag);
+  add_to_ham_time_dep(pulse_qd,NULL,2,qd[0],qd[0]->dag);
+  add_to_ham_time_dep(pulse_qd,NULL,2,qd[1],qd[1]->dag);
 
   create_full_dm(&rho);
   set_initial_pop(a,0);
@@ -150,7 +150,7 @@ int main(int argc,char **args){
 }
 
 
-double pulse_plasmon(double time){
+double pulse_plasmon(double time,void *ctx){
   double pulse_value,alpha;
   /* Define units, in AU */
 
@@ -161,7 +161,7 @@ double pulse_plasmon(double time){
 
 }
 
-double pulse_qd(double time){
+double pulse_qd(double time,void *ctx){
   double pulse_value,alpha;
 
   alpha = 2 * log(2.0)/ pow(pulse_duration,2);
@@ -194,7 +194,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
 
   get_fidelity(antisym_bell_dm,ptraced_dm,&fidelity);
   get_bipartite_concurrence(ptraced_dm,&concurrence);
-  pulse_val = pulse_qd(time)/(-mu_q);
+  pulse_val = pulse_qd(time,NULL)/(-mu_q);
   if (nid==0){
     /* Print fidelity and concurrence to file */
     fprintf(f_fid,"%e %e %e %e\n",time*timeunit,fidelity,concurrence,pulse_val);

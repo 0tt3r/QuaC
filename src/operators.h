@@ -26,10 +26,11 @@ typedef struct operator{
 typedef operator *vec_op; /* Treat vec_op as an array of operators  */
 
 typedef struct time_dep_struct{
-  double (*time_dep_func)(double);
+  double (*time_dep_func)(double,void *);
   operator *ops;
   int num_ops;
   Mat mat;
+  void *ctx;
 } time_dep_struct;
 
 
@@ -38,13 +39,13 @@ void create_vec(int,vec_op*);
 
 void add_to_ham_p(PetscScalar,PetscInt,...);
 void add_lin_p(PetscScalar,PetscInt,...);
-void add_to_ham_time_dep_p(double (*)(double),int,...);
-void add_lin_time_dep_p(double (*)(double),int,...);
+void add_to_ham_time_dep_p(double (*)(double,void *),void*,int,...);
+void add_lin_time_dep_p(double (*)(double,void *),void*,int,...);
 
 
 void add_to_ham(PetscScalar,operator);
 void add_to_ham_stiff(PetscScalar,operator);
-void add_to_ham_time_dep(double(*pulse)(double),int,...);
+void add_to_ham_time_dep(double(*pulse)(double,void*),void*,int,...);
 void add_to_ham_mult2(PetscScalar,operator,operator);
 void add_to_ham_stiff_mult2(PetscScalar,operator,operator);
 void add_to_ham_mult3(PetscScalar,operator,operator,operator);

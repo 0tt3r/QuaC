@@ -8,7 +8,7 @@
 #include "petsc.h"
 
 PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
-double pulse(double);
+double pulse(double,void*);
 FILE *f_pop;
 /* Declared globally so that we can access this in ts_monitor */
 
@@ -29,7 +29,7 @@ void timedep_test(double **final_populations,int *num_pop){
   add_to_ham_mult2(-g,a->dag,b);
   /* add_to_ham(1.0,a->dag); */
   /* add_to_ham(1.0,a); */
-  add_to_ham_time_dep(pulse,2,a->dag,a);
+  add_to_ham_time_dep(pulse,NULL,2,a->dag,a);
   kappa1 = 1.5;
   add_lin(kappa1,a);
 
@@ -81,7 +81,7 @@ int main(int argc,char **args){
 }
 #endif
 
-double pulse(double time){
+double pulse(double time, void *ctx){
   double pulse_value;
 
   pulse_value = 1 * exp(-pow(time/5,2));
@@ -105,7 +105,7 @@ PetscErrorCode ts_monitor(TS ts,PetscInt step,PetscReal time,Vec dm,void *ctx){
     fprintf(f_pop,"\n");
   }
 
-  pulse_value = pulse(time);
+  pulse_value = pulse(time,NULL);
   free(populations);
   PetscFunctionReturn(0);
 }
