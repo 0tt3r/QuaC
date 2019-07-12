@@ -29,6 +29,11 @@ void get_expectation_value_qvec_list(qvec,PetscScalar*,PetscInt,operator*);
 void _get_expectation_value_wf(qvec,PetscScalar*,PetscInt,operator*);
 void _get_expectation_value_dm(qvec,PetscScalar*,PetscInt,operator*);
 
+
+void print_qvec_file(qvec,char[]);
+void print_dm_qvec_file(qvec,char[]);
+void print_wf_qvec_file(qvec,char[]);
+
 void print_qvec(qvec);
 void print_dm_qvec(qvec);
 void print_wf_qvec(qvec);

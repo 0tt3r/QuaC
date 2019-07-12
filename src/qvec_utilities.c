@@ -14,6 +14,78 @@
  */
 
 
+/*
+ * Print the qvec densely
+ * Not recommended for large matrices.
+ * NOTE: Should be called from all cores!
+ */
+void print_qvec_file(qvec state,char filename[]){
+
+  if(state->my_type==DENSITY_MATRIX){
+    print_dm_qvec_file(state,filename);
+  } else {
+    print_wf_qvec_file(state,filename);
+  }
+
+}
+
+void print_dm_qvec_file(qvec dm,char filename[]){
+  PetscScalar val;
+  PetscInt i,j,h_dim;
+  FILE           *fp;
+
+  fp = fopen(filename,"w");
+  if (!fp) {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Cannot open file in print_dm_qvec_file= %s \n",filename);
+    exit(1);
+  }
+
+  h_dim = sqrt(dm->n);
+  for (i=0;i<h_dim;i++){
+    for (j=0;j<h_dim;j++){
+      get_dm_element_qvec(dm,i,j,&val);
+      PetscFPrintf(PETSC_COMM_WORLD,fp,"%4.3e + %4.3ei ",PetscRealPart(val),
+                  PetscImaginaryPart(val));
+    }
+    PetscFPrintf(PETSC_COMM_WORLD,fp,"\n");
+  }
+  PetscFPrintf(PETSC_COMM_WORLD,fp,"\n");
+
+  if (fp) {
+    fclose(fp);
+    fp = NULL;
+  }
+
+  return;
+}
+
+/*
+ * Print the dense wf
+ */
+void print_wf_qvec_file(qvec state,char filename[]){
+  PetscScalar val;
+  PetscInt i;
+  FILE           *fp;
+
+  fp = fopen(filename,"w");
+  if (!fp) {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Cannot open file in print_dm_qvec_file= %s \n",filename);
+    exit(1);
+  }
+
+  for(i=0;i<state->n;i++){
+    get_wf_element_qvec(state,i,&val);
+    PetscFPrintf(PETSC_COMM_WORLD,fp,"%e + %ei\n",PetscRealPart(val),
+                PetscImaginaryPart(val));
+  }
+
+  if (fp) {
+    fclose(fp);
+    fp = NULL;
+  }
+  return;
+}
+
 
 /*
  * Print the qvec densely
@@ -118,7 +190,7 @@ void print_wf_qvec(qvec state){
 
   for(i=0;i<state->n;i++){
     get_wf_element_qvec(state,i,&val);
-    PetscPrintf(PETSC_COMM_WORLD,"%4.3e + %4.3ei\n",PetscRealPart(val),
+    PetscPrintf(PETSC_COMM_WORLD,"%e + %ei\n",PetscRealPart(val),
                 PetscImaginaryPart(val));
   }
   return;
