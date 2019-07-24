@@ -27,12 +27,18 @@ typedef enum {
 } gate_type;
 
 struct quantum_gate_struct{
-  PetscReal time;
+  PetscReal time,run_time; //run_time is how long the gate takes
   gate_type my_gate_type;
-  int *qubit_numbers;
+  int *qubit_numbers,num_qubits;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
   void (*_get_val_j_from_global_i_sys)(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
   PetscReal theta,phi,lambda; //Only used for rotation gates
+};
+
+struct gate_layer_struct{
+  PetscReal time; //Time struct should be applied
+  PetscInt num_gates;
+  struct quantum_gate_struct *gate_list; //List of gates to apply at that time
 };
 
 

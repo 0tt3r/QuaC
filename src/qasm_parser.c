@@ -559,7 +559,7 @@ void qiskit_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
       found_qubits = 1;
     } else if(found_qubits==1){
       //Add the first gate to list
-      _qiskit_qasm_add_gate(line,circ,time);
+      _qiskit_qasm_add_gate(line,circ,time,*num_qubits);
       time = time + 1.0;
       //        gate_list[0]
     } //else skip the header
@@ -570,7 +570,7 @@ void qiskit_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
   return;
 }
 
-void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time){
+void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_qubits){
   char *token=NULL;
   int qubit1=-1,qubit2=-1,skip_gate=0;
   PetscReal angle,angle2,angle3;
@@ -583,7 +583,7 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time){
     for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
     //Do direct strcmp for some, strstr for others
     //FIXME: Not exhaustive
-    if (strstr(token,"q[")){
+    if (strstr(token,"q[")){ //can't have q named gates
       // qubit numbers
       if (skip_gate==0){
         if (my_gate_type==NULL_GATE){
@@ -592,10 +592,13 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time){
         } else if (my_gate_type<0){
           //Multiqubit gate
           sscanf(token,"q[%d],q[%d];",&qubit1,&qubit2);
+          qubit1 = num_qubits - qubit1 - 1;
+          qubit2 = num_qubits - qubit2 - 1;
           add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,qubit2);
         } else {
           //Single qubit gate
           sscanf(token,"q[%d];",&qubit1);
+          qubit1 = num_qubits - qubit1 - 1;
           if (my_gate_type==U3){
             //U3 gate
             add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,angle,angle2,angle3);

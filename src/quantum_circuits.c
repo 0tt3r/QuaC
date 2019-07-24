@@ -110,7 +110,9 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
   // Store arguments in list
   (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
   (*circ).gate_list[(*circ).num_gates].time = time;
+  (*circ).gate_list[(*circ).num_gates].run_time = -1;
   (*circ).gate_list[(*circ).num_gates].my_gate_type = my_gate_type;
+  (*circ).gate_list[(*circ).num_gates].num_qubits = num_qubits;
   (*circ).gate_list[(*circ).num_gates]._get_val_j_from_global_i_sys = _get_val_j_functions_gates_sys[my_gate_type+_min_gate_enum];
 
   if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
@@ -218,6 +220,60 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
   return;
 }
 
+void schedule_circuit_layers(qsystem sys,circuit *circ){
+  PetscInt *cur_layer_num,i,j,max_layer,this_layer;
+  /*
+   * Schedule the circuit as a sequence of 'layers'. Layers will
+   * then be applied sequentially.
+   */
+  PetscMalloc1(sys->num_subsystems,&cur_layer_num);
+  for(i=0;i<sys->num_subsystems;i++){
+    //All qubits start on layer 0
+    cur_layer_num[i] = 0;
+  }
+
+  // Allocate room for the gate lists in the layers
+  for(i=0;i<(*circ).num_gates;i++){
+    //Cannot have more than num_subsystems in a layer
+    PetscMalloc1(sys->num_subsystems,&((*circ).layers_list[i].gate_list));
+    (*circ).layers_list[i].num_gates = 0;
+  }
+
+  /*
+   * Loop through gate list
+   */
+  for(i=0;i<(*circ).num_gates;i++){
+
+    /*
+     * Find the layer that this gate should go in by finding the largest
+     * layer that one of its constituent qubits is in
+     */
+    max_layer = 0;
+
+    for(j=0;j<(*circ).gate_list[i].num_qubits;j++){
+      this_layer = cur_layer_num[(*circ).gate_list[i].qubit_numbers[j]];
+      if(this_layer>max_layer){
+        max_layer = this_layer;
+      }
+    }
+    // Append gate to the appropriate layer
+    (*circ).layers_list[max_layer].gate_list[(*circ).layers_list[i].num_gates] = (*circ).gate_list[i];
+    (*circ).layers_list[i].num_gates = (*circ).layers_list[i].num_gates + 1;
+    //Increase the layer counter for the involved qubits to max_layer + 1
+    for(j=0;j<(*circ).gate_list[i].num_qubits;j++){
+      cur_layer_num[(*circ).gate_list[i].qubit_numbers[j]] = max_layer + 1;
+    }
+  }
+  max_layer = 0;
+  for(j=0;j<sys->num_subsystems;j++){
+    this_layer = cur_layer_num[j];
+    if(this_layer>max_layer){
+      max_layer = this_layer;
+    }
+  }
+  (*circ).num_layers = max_layer;
+  return;
+}
 
 /* register a circuit to be run a specific time during the time stepping */
 void apply_circuit_to_sys(qsystem sys,circuit *circ,PetscReal time){

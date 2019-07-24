@@ -595,7 +595,7 @@ PetscScalar _get_val_in_subspace_gate(PetscInt i,gate_type my_gate_type,PetscInt
 
 
 /*
- * create_circuit initializez the circuit struct. Gates can be added
+ * create_circuit initializes the circuit struct. Gates can be added
  * later.
  *
  * Inputs:
@@ -608,13 +608,15 @@ PetscScalar _get_val_in_subspace_gate(PetscInt i,gate_type my_gate_type,PetscInt
  */
 
 void create_circuit(circuit *circ,PetscInt num_gates_est){
-  (*circ).start_time   = 0.0;
-  (*circ).num_gates    = 0;
-  (*circ).current_gate = 0;
+  (*circ).start_time     = 0.0;
+  (*circ).num_gates      = 0;
+  (*circ).current_gate   = 0;
+  (*circ).num_layers     = -1;
+  (*circ).current_layer = 0;
   /*
    * If num_gates_est was positive when passed in, use that
    * as the initial gate_list size, otherwise set to
-   * 100. gate_list will be dynamically resized when needed.
+   * 100. gate_list will be dynamically resized when needed, eventually
    */
   if (num_gates_est>0) {
     (*circ).gate_list_size = num_gates_est;
@@ -624,6 +626,9 @@ void create_circuit(circuit *circ,PetscInt num_gates_est){
   }
   // Allocate gate list
   (*circ).gate_list = malloc((*circ).gate_list_size * sizeof(struct quantum_gate_struct));
+  // Allocate layer list -- cannot have more layers than number of gates, but could have less
+  (*circ).layers_list = malloc((*circ).gate_list_size * sizeof(struct gate_layer_struct));
+  return;
 }
 
 /*
@@ -658,6 +663,7 @@ void add_gate_to_circuit(circuit *circ,PetscReal time,gate_type my_gate_type,...
   // Store arguments in list
   (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
   (*circ).gate_list[(*circ).num_gates].time = time;
+  (*circ).gate_list[(*circ).num_gates].num_qubits = num_qubits;
   (*circ).gate_list[(*circ).num_gates].my_gate_type = my_gate_type;
   (*circ).gate_list[(*circ).num_gates]._get_val_j_from_global_i = _get_val_j_functions_gates[my_gate_type+_min_gate_enum];
 

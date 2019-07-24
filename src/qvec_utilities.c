@@ -14,6 +14,16 @@
  */
 
 
+
+
+void qvec_mat_mult(Mat circ_mat,qvec state){
+  Vec tmp;
+  VecDuplicate(state->data,&tmp);
+  MatMult(circ_mat,state->data,tmp);
+  VecCopy(tmp,state->data);
+  VecDestroy(&tmp);
+  return;
+}
 /*
  * Print the qvec densely
  * Not recommended for large matrices.
@@ -75,7 +85,7 @@ void print_wf_qvec_file(qvec state,char filename[]){
 
   for(i=0;i<state->n;i++){
     get_wf_element_qvec(state,i,&val);
-    PetscFPrintf(PETSC_COMM_WORLD,fp,"%e + %ei\n",PetscRealPart(val),
+    PetscFPrintf(PETSC_COMM_WORLD,fp,"%40.30e  %40.30e\n",PetscRealPart(val),
                 PetscImaginaryPart(val));
   }
 

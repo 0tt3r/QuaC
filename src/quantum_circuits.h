@@ -11,6 +11,7 @@
 
 void apply_circuit_to_sys(qsystem,circuit*,PetscReal);
 void combine_circuit_to_mat_sys(qsystem,Mat*,circuit);
+void schedule_circuit_layers(qsystem,circuit*);
 
 void _get_n_after_2qbit_sys(qsystem,PetscInt*,int[],PetscInt,PetscInt*,PetscInt*,PetscInt*,PetscInt*);
 void _get_n_after_1qbit_sys(qsystem,PetscInt,int,PetscInt,PetscInt*,PetscInt*);
