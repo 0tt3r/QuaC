@@ -16,19 +16,32 @@ void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantu
 PetscErrorCode _sys_QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
   qsystem sys = (qsystem) ctx;
   /* Check if the time has passed a gate */
-  PetscInt current_gate,num_gates;
+  PetscInt current_gate,num_gates,current_layer,num_layers;
   PetscLogEventBegin(_qc_event_function_event,0,0,0,0);
   //FIXME: Circuits at time 0 do not work
   if (sys->current_circuit<sys->num_circuits) {
-    current_gate = sys->circuit_list[sys->current_circuit].current_gate;
-    num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
-    if (current_gate<num_gates) {
-      /* We signal that we passed the time by returning a negative number */
-      fvalue[0] = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time
-        +sys->circuit_list[sys->current_circuit].start_time - t;
+    if (sys->circuit_list[sys->current_circuit].num_layers>0){
+      //We have scheduled the circuit, so we will use layers instead of gates
+      current_layer = sys->circuit_list[sys->current_circuit].current_layer;
+      num_layers    = sys->circuit_list[sys->current_circuit].num_layers;
+      if (current_layer<num_layers) {
+        /* We signal that we passed the time by returning a negative number */
+        fvalue[0] = sys->circuit_list[sys->current_circuit].layer_list[current_layer].time
+          +sys->circuit_list[sys->current_circuit].start_time - t;
+      } else {
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! current_layer should never be larger than num_layers in _QC_EventFunction\n");
+        exit(0);
+      }
     } else {
-      if (nid==0){
-        printf("ERROR! current_gate should never be larger than num_gates in _QC_EventFunction\n");
+      //We just go through the gate list
+      current_gate = sys->circuit_list[sys->current_circuit].current_gate;
+      num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
+      if (current_gate<num_gates) {
+        /* We signal that we passed the time by returning a negative number */
+        fvalue[0] = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time
+          +sys->circuit_list[sys->current_circuit].start_time - t;
+      } else {
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! current_gate should never be larger than num_gates in _QC_EventFunction\n");
         exit(0);
       }
     }
@@ -45,31 +58,54 @@ PetscErrorCode _sys_QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue
 PetscErrorCode _sys_QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],
                                      PetscReal t,Vec U,PetscBool forward,void* ctx) {
   qsystem sys = (qsystem) ctx;
-  PetscInt current_gate,num_gates;
-  PetscReal gate_time;
+  PetscInt current_gate,num_gates,current_layer,num_layers,i;
+  PetscReal gate_time,layer_time;
    /* We only have one event at the moment, so we do not need to branch.
     * If we had more than one event, we would put some logic here.
     */
 
   PetscLogEventBegin(_qc_postevent_function_event,0,0,0,0);
   if (nevents) {
-    num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
-    current_gate = sys->circuit_list[sys->current_circuit].current_gate;
-    gate_time = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time;
-    /* Apply all gates at a given time incrementally  */
-    while (current_gate<num_gates && sys->circuit_list[sys->current_circuit].gate_list[current_gate].time == gate_time){
-      /* apply the current gate */
-      _apply_gate_sys(sys,sys->circuit_list[sys->current_circuit].gate_list[current_gate],U);
+    if (sys->circuit_list[sys->current_circuit].num_layers>0){
+      //We have scheduled the circuit, so we will use layers instead of gates
+      num_layers    = sys->circuit_list[sys->current_circuit].num_layers;
+      current_layer = sys->circuit_list[sys->current_circuit].current_layer;
+      layer_time = sys->circuit_list[sys->current_circuit].layer_list[current_layer].time;
+      /* Apply all layers at a given time incrementally  */
+      // NOTE: Should multiple layers be allowed at the same time?
+      while (current_layer<num_layers && sys->circuit_list[sys->current_circuit].layer_list[current_layer].time == layer_time){
+        num_gates = sys->circuit_list[sys->current_circuit].layer_list[current_layer].num_gates;
+        /* Loop through the gates in the layer and apply them */
+        for (i=0;i<num_gates;i++){
+          _apply_gate_sys(sys,sys->circuit_list[sys->current_circuit].layer_list[current_layer].gate_list[i],U);
+        }
+        /* Increment our layer counter */
+        sys->circuit_list[sys->current_circuit].current_layer = sys->circuit_list[sys->current_circuit].current_layer + 1;
+        current_layer = sys->circuit_list[sys->current_circuit].current_layer;
+      }
+      if(sys->circuit_list[sys->current_circuit].current_layer>=sys->circuit_list[sys->current_circuit].num_layers){
+        /* We've exhausted this circuit; move on to the next. */
+        sys->current_circuit = sys->current_circuit + 1;
+      }
 
-      /* Increment our gate counter */
-      sys->circuit_list[sys->current_circuit].current_gate = sys->circuit_list[sys->current_circuit].current_gate + 1;
+    } else {
+      num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
       current_gate = sys->circuit_list[sys->current_circuit].current_gate;
-    }
-    if(sys->circuit_list[sys->current_circuit].current_gate>=sys->circuit_list[sys->current_circuit].num_gates){
-      /* We've exhausted this circuit; move on to the next. */
-      sys->current_circuit = sys->current_circuit + 1;
-    }
+      gate_time = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time;
+      /* Apply all gates at a given time incrementally  */
+      while (current_gate<num_gates && sys->circuit_list[sys->current_circuit].gate_list[current_gate].time == gate_time){
+        /* apply the current gate */
+        _apply_gate_sys(sys,sys->circuit_list[sys->current_circuit].gate_list[current_gate],U);
 
+        /* Increment our gate counter */
+        sys->circuit_list[sys->current_circuit].current_gate = sys->circuit_list[sys->current_circuit].current_gate + 1;
+        current_gate = sys->circuit_list[sys->current_circuit].current_gate;
+      }
+      if(sys->circuit_list[sys->current_circuit].current_gate>=sys->circuit_list[sys->current_circuit].num_gates){
+        /* We've exhausted this circuit; move on to the next. */
+        sys->current_circuit = sys->current_circuit + 1;
+      }
+    }
   }
 
   TSSetSolution(ts,U);
@@ -235,8 +271,8 @@ void schedule_circuit_layers(qsystem sys,circuit *circ){
   // Allocate room for the gate lists in the layers
   for(i=0;i<(*circ).num_gates;i++){
     //Cannot have more than num_subsystems in a layer
-    PetscMalloc1(sys->num_subsystems,&((*circ).layers_list[i].gate_list));
-    (*circ).layers_list[i].num_gates = 0;
+    PetscMalloc1(sys->num_subsystems,&((*circ).layer_list[i].gate_list));
+    (*circ).layer_list[i].num_gates = 0;
   }
 
   /*
@@ -257,8 +293,8 @@ void schedule_circuit_layers(qsystem sys,circuit *circ){
       }
     }
     // Append gate to the appropriate layer
-    (*circ).layers_list[max_layer].gate_list[(*circ).layers_list[i].num_gates] = (*circ).gate_list[i];
-    (*circ).layers_list[i].num_gates = (*circ).layers_list[i].num_gates + 1;
+    (*circ).layer_list[max_layer].gate_list[(*circ).layer_list[max_layer].num_gates] = (*circ).gate_list[i];
+    (*circ).layer_list[max_layer].num_gates = (*circ).layer_list[max_layer].num_gates + 1;
     //Increase the layer counter for the involved qubits to max_layer + 1
     for(j=0;j<(*circ).gate_list[i].num_qubits;j++){
       cur_layer_num[(*circ).gate_list[i].qubit_numbers[j]] = max_layer + 1;

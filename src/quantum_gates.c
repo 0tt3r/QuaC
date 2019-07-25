@@ -611,7 +611,7 @@ void create_circuit(circuit *circ,PetscInt num_gates_est){
   (*circ).start_time     = 0.0;
   (*circ).num_gates      = 0;
   (*circ).current_gate   = 0;
-  (*circ).num_layers     = -1;
+  (*circ).num_layers     = 0;
   (*circ).current_layer = 0;
   /*
    * If num_gates_est was positive when passed in, use that
@@ -627,7 +627,7 @@ void create_circuit(circuit *circ,PetscInt num_gates_est){
   // Allocate gate list
   (*circ).gate_list = malloc((*circ).gate_list_size * sizeof(struct quantum_gate_struct));
   // Allocate layer list -- cannot have more layers than number of gates, but could have less
-  (*circ).layers_list = malloc((*circ).gate_list_size * sizeof(struct gate_layer_struct));
+  (*circ).layer_list = malloc((*circ).gate_list_size * sizeof(struct gate_layer_struct));
   return;
 }
 

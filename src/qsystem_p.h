@@ -24,7 +24,7 @@ typedef struct circuit{
   PetscInt num_gates,gate_list_size,current_gate,num_layers,current_layer;
   PetscReal start_time;
   struct quantum_gate_struct *gate_list;
-  struct gate_layer_struct *layers_list;
+  struct gate_layer_struct *layer_list;
 } circuit;
 
 
