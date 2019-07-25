@@ -31,6 +31,10 @@ void _get_expectation_value_dm(qvec,PetscScalar*,PetscInt,operator*);
 
 void qvec_mat_mult(Mat,qvec);
 
+void get_fidelity_qvec(qvec,qvec,PetscReal*);
+void _get_fidelity_wf_wf(Vec,Vec,PetscReal*);
+void _get_fidelity_dm_dm(Vec,Vec,PetscReal*);
+
 void print_qvec_file(qvec,char[]);
 void print_dm_qvec_file(qvec,char[]);
 void print_wf_qvec_file(qvec,char[]);
