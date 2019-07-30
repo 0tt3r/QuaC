@@ -153,7 +153,7 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
 
   if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
     va_start(ap,num_qubits+1); //FIXME This +1 is probably useless?
-  } else if (my_gate_type==U3){
+  } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
     va_start(ap,num_qubits+3);
   } else {
     va_start(ap,num_qubits);
@@ -179,7 +179,7 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
     (*circ).gate_list[(*circ).num_gates].theta = theta;
     (*circ).gate_list[(*circ).num_gates].phi = 0;
     (*circ).gate_list[(*circ).num_gates].lambda = 0;
-  } else if (my_gate_type==U3){
+  } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
     theta = va_arg(ap,PetscReal);
     (*circ).gate_list[(*circ).num_gates].theta = theta;
     phi = va_arg(ap,PetscReal);
@@ -258,6 +258,7 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
 
 void schedule_circuit_layers(qsystem sys,circuit *circ){
   PetscInt *cur_layer_num,i,j,max_layer,this_layer;
+  PetscReal current_time,max_gate_time;
   /*
    * Schedule the circuit as a sequence of 'layers'. Layers will
    * then be applied sequentially.
@@ -308,6 +309,40 @@ void schedule_circuit_layers(qsystem sys,circuit *circ){
     }
   }
   (*circ).num_layers = max_layer;
+
+  /*
+   * If we had set gate times before, we set the layer times to reflect that,
+   * otherwise, we set them at 1.0 time unit apart, starting at time 1.
+   */
+  // Check if the first gate of the first layer has a time
+  if((*circ).layer_list[0].gate_list[0].run_time>0){
+    // The first layer starts at 1.0 time units by default
+    // FIXME: Maybe make this 0 when I fix the 0 bug?
+
+    current_time = 1.0;
+    for(i=0;i<(*circ).num_layers;i++){
+      (*circ).layer_list[i].time = current_time;
+      //Find the longest gate in the layer
+      max_gate_time = -2;
+      for(j=0;j<(*circ).layer_list[i].num_gates;j++){
+        if((*circ).layer_list[i].gate_list[j].run_time>max_gate_time){
+          max_gate_time = (*circ).layer_list[i].gate_list[j].run_time;
+        }
+      }
+      //Check if none of the gates in the layer had a positive run_time
+      if(max_gate_time<0){
+        PetscPrintf(PETSC_COMM_WORLD,"WARNING: All gate run times for layer were negative; defaulting to 1.0\n");
+        max_gate_time = 1.0;
+      }
+      // Increase current_time by this layers max time
+      current_time = current_time + max_gate_time;
+    }
+  } else {
+    for(i=0;i<(*circ).num_layers;i++){
+      (*circ).layer_list[i].time = i+1;
+    }
+  }
+
   return;
 }
 
@@ -376,6 +411,7 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   MatAssemblyBegin(gate_mat,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(gate_mat,MAT_FINAL_ASSEMBLY);
   /* MatView(gate_mat,PETSC_VIEWER_STDOUT_SELF); */
+
   MatMult(gate_mat,rho,tmp_answer);
   VecCopy(tmp_answer,rho); //Copy our tmp_answer array into rho
 
@@ -1196,6 +1232,25 @@ void HADAMARD_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_
   return;
 }
 
+void U1_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                    PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  /*
+   * The U1 gate is a just a simpler U3, so we call U3 instead
+   */
+  U3_get_val_j_from_global_i_sys(sys,i,gate,num_js,js,vals,tensor_control);
+  return;
+}
+
+void U2_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                    PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  /*
+   * The U2 gate is a just a simpler U3, so we call U3 instead
+   */
+  U3_get_val_j_from_global_i_sys(sys,i,gate,num_js,js,vals,tensor_control);
+  return;
+}
+
+
 void U3_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                       PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
   PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],my_levels;
@@ -1932,5 +1987,8 @@ void _initialize_gate_function_array_sys(){
   _get_val_j_functions_gates_sys[RX+_min_gate_enum] = RX_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[RY+_min_gate_enum] = RY_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[RZ+_min_gate_enum] = RZ_get_val_j_from_global_i_sys;
+  _get_val_j_functions_gates_sys[U1+_min_gate_enum] = U1_get_val_j_from_global_i_sys;
+  _get_val_j_functions_gates_sys[U2+_min_gate_enum] = U2_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[U3+_min_gate_enum] = U3_get_val_j_from_global_i_sys;
+
 }

@@ -599,7 +599,7 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_
           //Single qubit gate
           sscanf(token,"q[%d];",&qubit1);
           qubit1 = num_qubits - qubit1 - 1;
-          if (my_gate_type==U3){
+          if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
             //U3 gate
             add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,angle,angle2,angle3);
           } else {
@@ -617,12 +617,12 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_
       if (strcmp(token,"cx")==0){//strcmp because no angle
         my_gate_type = CNOT;
       } else if (strstr(token,"u1")) {//strstr because changing angle
-        my_gate_type = U3;
+        my_gate_type = U1;
         sscanf(token,"u1(%lf)",&angle3);
         angle = 0;
         angle2 = 0;
       } else if (strstr(token,"u2")) {
-        my_gate_type = U3;
+        my_gate_type = U2;
         //u2(phi,lambda) = u3(pi/2,phi,lambda)
         sscanf(token,"u2(%lf,%lf)",&angle2,&angle3);
         angle = PETSC_PI/2;

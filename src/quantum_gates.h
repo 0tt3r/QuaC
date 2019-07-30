@@ -23,7 +23,9 @@ typedef enum {
   RX     = 6,
   RY     = 7,
   RZ     = 8,
-  U3     = 9
+  U1     = 9,
+  U2     = 10,
+  U3     = 11
 } gate_type;
 
 struct quantum_gate_struct{
