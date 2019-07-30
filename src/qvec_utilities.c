@@ -36,7 +36,6 @@ void print_qvec_file(qvec state,char filename[]){
   } else {
     print_wf_qvec_file(state,filename);
   }
-
 }
 
 void print_dm_qvec_file(qvec dm,char filename[]){
@@ -54,7 +53,7 @@ void print_dm_qvec_file(qvec dm,char filename[]){
   for (i=0;i<h_dim;i++){
     for (j=0;j<h_dim;j++){
       get_dm_element_qvec(dm,i,j,&val);
-      PetscFPrintf(PETSC_COMM_WORLD,fp,"%4.3e + %4.3ei ",PetscRealPart(val),
+      PetscFPrintf(PETSC_COMM_WORLD,fp,"%40.30e  %40.30e ",PetscRealPart(val),
                   PetscImaginaryPart(val));
     }
     PetscFPrintf(PETSC_COMM_WORLD,fp,"\n");
@@ -771,8 +770,12 @@ void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity) {
     _get_fidelity_dm_dm(q1->data,q2->data,fidelity);
   } else if(q1->my_type==WAVEFUNCTION && q2->my_type==WAVEFUNCTION){
     _get_fidelity_wf_wf(q1->data,q2->data,fidelity);
-  } else{
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! get_fidelity_qvec only implemented for dm/dm and wf/wf!\n");
+  } else if(q1->my_type==WAVEFUNCTION && q2->my_type==DENSITY_MATRIX){
+    _get_fidelity_dm_wf(q2->data,q1->data,fidelity);
+  } else if(q2->my_type==WAVEFUNCTION && q1->my_type==DENSITY_MATRIX){
+    _get_fidelity_dm_wf(q1->data,q2->data,fidelity);
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"Types not understand in get_fidelity_qvec!\n");
     exit(9);
   }
   return;
@@ -785,6 +788,75 @@ void _get_fidelity_wf_wf(Vec wf1, Vec wf2,PetscReal *fidelity){
   *fidelity = pow(PetscAbsComplex(val),2);
   return;
 }
+
+
+/*
+ * void get_fidelity calculates the fidelity between two matrices,
+ * where the fidelity is defined as:
+ *         F = <psi | rho | psi >
+ * where rho, psi are the density matrix, wavefunction to calculate the
+ * fidelity between
+ *
+ * Inputs:
+ *         Vec dm   - one density matrix with which to find the fidelity
+ *         Vec wf - the wavefunction
+ * Outpus:
+ *         double *fidelity - the fidelity between the two dms
+ *
+ * NOTE: This is probably inefficient at scale
+ */
+void _get_fidelity_dm_wf(Vec dm,Vec wf,PetscReal *fidelity) {
+  PetscInt          i,j,dm_size,wf_size,local_dm_size;
+  PetscScalar       val;
+  Mat               dm_mat;
+  Vec               result_vec;
+  /* Variables needed for LAPACK */
+
+
+  VecGetSize(dm,&dm_size);
+  VecGetSize(wf,&wf_size);
+
+  if (sqrt(dm_size)!=wf_size){
+    if (nid==0){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! The input density matrix and wavefunction are not compatible!\n");
+      PetscPrintf(PETSC_COMM_WORLD,"       Fidelity cannot be calculated.\n");
+      exit(0);
+    }
+  }
+
+
+  //Make a new temporary vector
+  VecDuplicate(wf,&result_vec);
+
+  /*
+   * We want to work with the density matrix as a matrix directly,
+   */
+  MatCreateDense(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,wf_size,wf_size,NULL,&dm_mat);
+
+  for (i=0;i<wf_size;i++){
+    for (j=0;j<wf_size;j++){
+      get_dm_element(dm,i,j,&val);
+      MatSetValue(dm_mat,i,j,val,INSERT_VALUES);
+    }
+  }
+  MatAssemblyBegin(dm_mat,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(dm_mat,MAT_FINAL_ASSEMBLY);
+
+  /*
+   * calculate rho | psi>
+   */
+  MatMult(dm_mat,wf,result_vec);
+
+  /*
+   * calculate <psi | rho | psi >
+   */
+  VecDot(wf,result_vec,&val);
+  *fidelity = val;
+  MatDestroy(&dm_mat);
+  VecDestroy(&result_vec);
+  return;
+}
+
 
 /*
  * void get_fidelity calculates the fidelity between two matrices,
@@ -799,6 +871,7 @@ void _get_fidelity_wf_wf(Vec wf1, Vec wf2,PetscReal *fidelity){
  * Outpus:
  *         double *fidelity - the fidelity between the two dms
  *
+ * NOTE: This is probably inefficient at scale
  */
 void _get_fidelity_dm_dm(Vec dm,Vec dm_r,PetscReal *fidelity) {
   VecScatter        ctx_dm,ctx_dm_r;
