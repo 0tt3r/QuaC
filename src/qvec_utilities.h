@@ -30,7 +30,7 @@ void _get_expectation_value_wf(qvec,PetscScalar*,PetscInt,operator*);
 void _get_expectation_value_dm(qvec,PetscScalar*,PetscInt,operator*);
 
 void qvec_mat_mult(Mat,qvec);
-
+void loqd_sparse_mat_qvec(char[],Mat*,qvec);
 void get_fidelity_qvec(qvec,qvec,PetscReal*);
 void _get_fidelity_wf_wf(Vec,Vec,PetscReal*);
 void _get_fidelity_dm_dm(Vec,Vec,PetscReal*);

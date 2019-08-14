@@ -979,3 +979,12 @@ void _get_fidelity_dm_dm(Vec dm,Vec dm_r,PetscReal *fidelity) {
   return;
 }
 
+void load_sparse_mat_qvec(char filename[],Mat *write_mat,qvec rho){
+  PetscViewer    fd;
+
+  PetscViewerBinaryOpen(PETSC_COMM_WORLD,filename,FILE_MODE_READ,&fd);
+  MatCreate(PETSC_COMM_WORLD,write_mat);
+  MatLoad(*write_mat,fd);
+  PetscViewerDestroy(&fd);
+  return;
+}

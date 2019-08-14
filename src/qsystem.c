@@ -1,4 +1,4 @@
-#include "kron_p.h" //Includes petscmat.h and operators_p.h
+ #include "kron_p.h" //Includes petscmat.h and operators_p.h
 #include "quac_p.h"
 #include "operators.h"
 #include "qsystem.h"
@@ -503,7 +503,7 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
   TSSetMaxSteps(ts,steps_max);
   TSSetMaxTime(ts,time_max);
   TSSetTime(ts,init_time);
-  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
+  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_MATCHSTEP);
 
   TSSetType(ts,TSRK);
   TSRKSetType(ts,TSRK3BS);
