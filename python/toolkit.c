@@ -142,7 +142,7 @@ QuaCCircuit_read_qasm(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "ss", kwlist,
                                    &format, &filename))
-    return NULL;
+   Py_RETURN_NONE;
 
   if (!strcasecmp(format, "quil")) {
     quil_read(filename, &num_qubits, &self->c);
@@ -152,7 +152,7 @@ QuaCCircuit_read_qasm(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
     qiskit_qasm_read(filename, &num_qubits, &self->c);
   } else {
     PyErr_SetString(PyExc_RuntimeError, "Unknown qasm format!");
-    return NULL;
+   Py_RETURN_NONE;
   }
 
   return PyLong_FromLong(num_qubits);
@@ -166,7 +166,7 @@ QuaCCircuit_init2(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "|l", kwlist,
                                    &num_gates))
-    return NULL;
+   Py_RETURN_NONE;
 
   create_circuit(&self->c, num_gates);
 
@@ -184,7 +184,7 @@ QuaCCircuit_add_gate(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "si|idd", kwlist,
                                    &gate_name, &qubit1, &qubit2, &angle, &time))
-    return NULL;
+   Py_RETURN_NONE;
 
   if (!strcasecmp(gate_name, "CZX")) {
     gate = CZX;
@@ -214,13 +214,13 @@ QuaCCircuit_add_gate(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
     gate = RZ;
   } else {
     PyErr_SetString(PyExc_RuntimeError, "Unknown gate type!");
-    return NULL;
+   Py_RETURN_NONE;
   }
 
   if (((int) gate) < 0) {
     if (qubit2 < 0) {
       PyErr_SetString(PyExc_RuntimeError, "qubit2 must be specified for a two-qubit gate!");
-      return NULL;
+     Py_RETURN_NONE;
     }
 
     add_gate_to_circuit(&self->c, time, gate, qubit1, qubit2);
@@ -354,18 +354,18 @@ QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i", kwlist,
                                    &self->num_levels))
-    return NULL;
+    Py_RETURN_NONE;
 
   if (self->qubits) {
     PyErr_SetString(PyExc_RuntimeError, "qbits for this QuaC instance have already been created!");
-    return NULL;
+    Py_RETURN_NONE;
   } else if (self->num_qubits) {
     self->qubits = (operator *) malloc(sizeof(operator)*self->num_qubits);
     for (int i = 0; i < self->num_qubits; ++i)
       create_op(self->num_levels, &self->qubits[i]);
   }
 
-  Py_RETURN_NONE;
+    Py_RETURN_NONE;
 }
 
 static int
@@ -377,7 +377,7 @@ QuaCInstance_add_lindblad_emission(QuaCInstance *self, PyObject *args, PyObject 
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "id", kwlist,
                                    &qubit, &gamma_1))
-    return NULL;
+    Py_RETURN_NONE;
 
   add_lin(gamma_1, self->qubits[qubit]);
 
@@ -393,7 +393,7 @@ QuaCInstance_add_lindblad_dephasing(QuaCInstance *self, PyObject *args, PyObject
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "id", kwlist,
                                    &qubit, &gamma_2))
-    return NULL;
+    Py_RETURN_NONE;
 
   add_lin(gamma_2, self->qubits[qubit]->n);
 
@@ -409,7 +409,7 @@ QuaCInstance_add_lindblad_thermal_coupling(QuaCInstance *self, PyObject *args, P
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "id|d", kwlist,
                                    &qubit, &therm_1, &n_therm))
-    return NULL;
+   Py_RETURN_NONE;
 
   add_lin(therm_1*(n_therm + 1), self->qubits[qubit]);
   add_lin(therm_1*(n_therm), self->qubits[qubit]->dag);
@@ -426,7 +426,7 @@ QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyO
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "iid", kwlist,
                                    &qubit1, &qubit2, &coup_1))
-    return NULL;
+   Py_RETURN_NONE;
 
   add_lin_mult2(coup_1, self->qubits[qubit1]->dag, self->qubits[qubit2]);
   add_lin_mult2(coup_1, self->qubits[qubit1], self->qubits[qubit2]->dag);
@@ -443,7 +443,7 @@ QuaCInstance_add_ham_num(QuaCInstance *self, PyObject *args, PyObject *kwds) {
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "id", kwlist,
                                    &qubit, &coeff))
-    return NULL;
+   Py_RETURN_NONE;
 
   add_to_ham(coeff, self->qubits[qubit]->n);
 
@@ -459,7 +459,7 @@ QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "iid", kwlist,
                                    &qubit1, &qubit2, &coup_1))
-    return NULL;
+   Py_RETURN_NONE;
 
   add_to_ham_mult2(coup_1, self->qubits[qubit1]->dag, self->qubits[qubit2]);
   add_to_ham_mult2(coup_1, self->qubits[qubit1], self->qubits[qubit2]->dag);
@@ -476,7 +476,7 @@ QuaCInstance_add_ham_num_time_dep(QuaCInstance *self, PyObject *args, PyObject *
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "iO", kwlist,
                                    &qubit, &coeff))
-    return NULL;
+   Py_RETURN_NONE;
 
   Py_INCREF(coeff);
   add_to_ham_time_dep(time_dep_cb, coeff, 1, self->qubits[qubit]->n);
@@ -493,7 +493,7 @@ QuaCInstance_add_ham_cross_coupling_time_dep(QuaCInstance *self, PyObject *args,
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "iiO", kwlist,
                                    &qubit1, &qubit2, &coup_1))
-    return NULL;
+   Py_RETURN_NONE;
 
   Py_INCREF(coup_1);
   add_to_ham_time_dep(time_dep_cb, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
@@ -506,7 +506,7 @@ static int
 QuaCInstance_create_dm(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   if (self->rho) {
     PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has already been created!");
-    return NULL;
+   Py_RETURN_NONE;
   }
 
   create_full_dm(&self->rho);
@@ -525,11 +525,11 @@ QuaCInstance_start_circuit_at(QuaCInstance *self, PyObject *args, PyObject *kwds
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|d", kwlist,
                                    &cir, &time))
-    return NULL;
+   Py_RETURN_NONE;
 
   if (!PyObject_TypeCheck(cir, &QuaCCircuitType)) {
     PyErr_SetString(PyExc_TypeError, "Circuit is not a QuaC.Circuit object!");
-    return NULL;
+   Py_RETURN_NONE;
   }
 
   start_circuit_at_time(&((QuaCCircuit *) cir)->c, time);
@@ -546,7 +546,7 @@ QuaCInstance_print_density_matrix(QuaCInstance *self, PyObject *args, PyObject *
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "|sd", kwlist,
                                    &filename, &num_print_qubits))
-    return NULL;
+   Py_RETURN_NONE;
 
   if (filename) {
     print_dm_sparse_to_file(self->rho, pow(self->num_levels, num_print_qubits), filename);
@@ -566,7 +566,7 @@ QuaCInstance_run(QuaCInstance *self, PyObject *args, PyObject *kwds) {
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "d|ddl", kwlist,
                                    &end_time, &dt, &start_time, &max_steps))
-    return NULL;
+   Py_RETURN_NONE;
 
   set_ts_monitor_ctx(ts_monitor, (void *) self);
 
