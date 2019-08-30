@@ -7,23 +7,42 @@ print(q)
 print("node_id: {0:d}".format(q.node_id))
 print("num_nodes: {0:d}".format(q.num_nodes))
 
+us = 1e-6
+ns = 1e-9
+
+# Some reasonable values for superconducting qubits...
+t1 = 25 * us
+t2 = 20 * us
+
+t1q = 20 * ns
+t2q = 40 * ns # An optimistic value from https://arxiv.org/pdf/1903.02492.pdf
+
+# TODO: NV center numbers (e.g., from https://arxiv.org/pdf/1905.02094.pdf):
+# Measurement time: 10 ms
+# Gate duration: 500 to 2000 us (for both 1- and 2-qubit gates); ^14N is 300 us.
+# T2 times are 4-18 ms; ^14N is 25 ms.
+# T1 = 4e3 seconds.
+
 c = quac.Circuit()
 print(c)
 c.initialize(25)
 print(c)
 c.add_gate(gate="x", qubit1=0)
-c.add_gate(gate="rz", qubit1=0, angle=0.447, time=0.5)
-c.add_gate(gate="y", qubit1=1, time=2.5)
-c.add_gate(gate="cnot", qubit1=0, qubit2=1, time=3)
+c.add_gate(gate="rz", qubit1=0, angle=0.447, time=t1q)
+c.add_gate(gate="y", qubit1=1, time=2*t1q)
+c.add_gate(gate="cnot", qubit1=0, qubit2=1, time=3*t1q)
 print(c)
 
 q.num_qubits = 2
 q.create_qubits()
 print(q)
 
+gamma_1 = 1.0/t1
+gamma_2 = 1.0/t2 - 1.0/(2.0*t1)
+
 for i in range(0, 2):
-  q.add_lindblad_emission(i, 1e-4)
-  q.add_lindblad_dephasing(i, gamma_2=1e-5)
+  q.add_lindblad_emission(i, gamma_1)
+  q.add_lindblad_dephasing(i, gamma_2=gamma_2)
   q.add_lindblad_thermal_coupling(i, 1e-5)
   for j in range(0, 2):
     if i != j:
@@ -45,6 +64,6 @@ def mon(q1, s, t):
 
 q.ts_monitor = mon
 
-q.run(4, dt=0.1)
+q.run(4*us, dt=ns)
 q.print_density_matrix()
 
