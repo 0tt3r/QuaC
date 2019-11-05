@@ -10,8 +10,13 @@
 void create_qvec_sys(qsystem,qvec*);
 void create_dm_sys(qsystem,qvec*);
 void create_wf_sys(qsystem,qvec*);
-
+void create_arb_qvec(qvec *,PetscInt,qvec_type);
 void _create_vec(Vec*,PetscInt,PetscInt);
+
+void read_qvec_dm_binary(qvec*,const char[]);
+void read_qvec_wf_binary(qvec*,const char[]);
+
+
 
 void assemble_qvec(qvec);
 void destroy_qvec(qvec*);
@@ -47,4 +52,8 @@ void get_wf_element_qvec(qvec,PetscInt,PetscScalar*);
 void get_dm_element_qvec(qvec,PetscInt,PetscInt,PetscScalar*);
 void get_dm_element_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
 
+void check_qvec_consisten(qvec,qvec);
+void copy_qvec(qvec,qvec);
+void copy_qvec_wf_to_dm(qvec,qvec);
+void get_hilbert_schmidt_dist_qvec(qvec,qvec,PetscReal*);
 #endif
