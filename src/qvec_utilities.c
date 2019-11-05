@@ -8,13 +8,134 @@
 #include <string.h>
 /*
  * FIXME:
- *    Add create_{dm,wf}_qvec to create any sized dm, even if it isn't tied to a system
  *    Add print_qvec_sparse
  *    Add print_qvec_file
  */
 
+void check_qvec_consistent(qvec state1,qvec state2){
+  PetscInt error=0;
+  if(state1->my_type!=state2->my_type){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvecs have different types!\n");
+    error=1;
+  }
+  if(state1->n!=state2->n){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvecs have different sizes!\n");
+    error=1;
+  }
+  if(error==1){
+    exit(1);
+  }
+  return;
+}
+
+void copy_qvec(qvec source,qvec destination){
+
+  //check that the qvecs are consistent
+  if(source->my_type==WAVEFUNCTION&&destination->my_type==DENSITY_MATRIX){
+    if((source->n*source->n)!=destination->n){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvecs have different sizes!\n");
+      exit(1);
+    }
+    copy_qvec_wf_to_dm(source,destination);
+  } else if(source->my_type==destination->my_type){
+    if(source->n!=destination->n){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvecs have different sizes!\n");
+      exit(1);
+    }
+    VecCopy(source->data,destination->data);
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Coping a DM to a WF does not make sense!\n");
+    exit(1);
+  }
+
+  return;
+}
+
+// Done in serial for now, inefficient
+void copy_qvec_wf_to_dm(qvec source,qvec destination){
+  VecScatter        ctx_wf;
+  Vec wf_local;
+  PetscScalar       *wf_a,this_val;
+  PetscInt          n,i,j,this_row;
+  if(source->n*source->n!=destination->n){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! wf and dm do not have consistent sizes!\n");
+    exit(1);
+  }
+
+  //Collect all data for the wf on one core
+  VecScatterCreateToZero(source->data,&ctx_wf,&wf_local);
+
+  VecScatterBegin(ctx_wf,source->data,wf_local,INSERT_VALUES,SCATTER_FORWARD);
+  VecScatterEnd(ctx_wf,source->data,wf_local,INSERT_VALUES,SCATTER_FORWARD);
+
+  /* Rank 0 now has a local copy of the wf, it will do the calculation */
+  if (nid==0){
+    VecGetArray(wf_local,&wf_a);
+    VecGetSize(wf_local,&n);
+    //Now calculate the outer product
+    for(i=0;i<n;i++){
+      for(j=0;j<n;j++){
+        this_val = wf_a[i]*PetscConjComplex(wf_a[j]);
+        this_row = j*n+i;
+        VecSetValue(destination->data,this_row,this_val,INSERT_VALUES);
+      }
+    }
+  }
+  VecAssemblyBegin(destination->data);
+  VecAssemblyEnd(destination->data);
+  VecDestroy(&wf_local);
+  return;
+}
 
 
+
+//Read in a qvec from a qutip generated file with function file_data_store
+//Not recommended for large vectors
+void read_qvec_wf_binary(qvec *newvec,const char filename[]){
+  qvec temp = NULL;
+  PetscViewer viewer;
+  PetscInt n,Istart,Iend;
+
+  temp = malloc(sizeof(struct qvec));
+  VecCreate(PETSC_COMM_WORLD,&(temp->data));
+  VecSetType(temp->data,VECMPI);
+  PetscViewerBinaryOpen(PETSC_COMM_WORLD,filename,FILE_MODE_READ,&viewer);
+  VecLoad(temp->data,viewer);
+  VecGetSize(temp->data,&n);
+  VecGetOwnershipRange(temp->data,&Istart,&Iend);
+
+  temp->my_type = WAVEFUNCTION;
+  temp->n = n;
+  temp->Istart = Istart;
+  temp->Iend = Iend;
+
+  *newvec = temp;
+  return;
+}
+
+//Read in a qvec from a qutip generated file with function file_data_store
+//Not recommended for large vectors
+void read_qvec_dm_binary(qvec *newvec,const char filename[]){
+  qvec temp = NULL;
+  PetscViewer viewer;
+  PetscInt n,Istart,Iend;
+
+  temp = malloc(sizeof(struct qvec));
+  VecCreate(PETSC_COMM_WORLD,&(temp->data));
+  VecSetType(temp->data,VECMPI);
+  PetscViewerBinaryOpen(PETSC_COMM_WORLD,filename,FILE_MODE_READ,&viewer);
+  VecLoad(temp->data,viewer);
+  VecGetSize(temp->data,&n);
+  VecGetOwnershipRange(temp->data,&Istart,&Iend);
+
+  temp->my_type = DENSITY_MATRIX;
+  temp->n = n;
+  temp->Istart = Istart;
+  temp->Iend = Iend;
+
+  *newvec = temp;
+  return;
+}
 
 void qvec_mat_mult(Mat circ_mat,qvec state){
   Vec tmp;
@@ -220,6 +341,32 @@ void get_wf_element_qvec(qvec state,PetscInt i,PetscScalar *val){
   *val = val_array[0];
   return;
 }
+
+/*
+ * create a qvec object with arbitrary dimensions
+ */
+void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
+  qvec temp = NULL;
+  PetscInt n,Istart,Iend;
+
+  temp = malloc(sizeof(struct qvec));
+
+  _create_vec(&(temp->data),nstates,-1);
+
+  VecGetSize(temp->data,&n);
+  VecGetOwnershipRange(temp->data,&Istart,&Iend);
+
+  temp->my_type = my_type;
+  temp->n = n;
+  temp->Istart = Istart;
+  temp->Iend = Iend;
+
+  *new_qvec = temp;
+
+  return;
+
+}
+
 
 /*
  * create a qvec object as a dm or wf based on
@@ -529,7 +676,12 @@ void _create_vec(Vec *dm,PetscInt dim,PetscInt local_size){
   /* Create the dm, partition with PETSc */
   VecCreate(PETSC_COMM_WORLD,dm);
   VecSetType(*dm,VECMPI);
-  VecSetSizes(*dm,local_size,dim);
+  if(local_size<0){
+    //Negative numbers mean we want PETSc to distribute our
+    VecSetSizes(*dm,PETSC_DECIDE,dim);
+  }else{
+    VecSetSizes(*dm,local_size,dim);
+  }
   /* Set all elements to 0 */
   VecSet(*dm,0.0);
   return;
@@ -750,6 +902,26 @@ void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,
   return;
 }
 
+
+
+void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
+  Vec temp;
+  PetscScalar alpha=-1.0;
+
+  if (q1->my_type==DENSITY_MATRIX && q2->my_type==DENSITY_MATRIX){
+    VecDuplicate(q1->data,&temp);
+    VecCopy(q1->data,temp);
+    VecAXPY(temp,alpha,q2->data);
+    VecNorm(temp,NORM_2,hs_dist);
+    *hs_dist = *hs_dist * (*hs_dist);
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"HS is only for DM-DM comparisons\n");
+    exit(9);
+  }
+  return;
+}
+
+
 /*
  * void get_fidelity calculates the fidelity between two matrices,
  * where the fidelity for density matrices is defined as:
@@ -876,7 +1048,7 @@ void _get_fidelity_dm_wf(Vec dm,Vec wf,PetscReal *fidelity) {
 void _get_fidelity_dm_dm(Vec dm,Vec dm_r,PetscReal *fidelity) {
   VecScatter        ctx_dm,ctx_dm_r;
   PetscInt          i,dm_size,dm_r_size,levels;
-  PetscScalar       *dm_a,*dm_r_a;;
+  PetscScalar       *dm_a,*dm_r_a;
   Mat               dm_mat,dm_mat_r,result_mat;
   Vec               dm_local,dm_r_local;
   /* Variables needed for LAPACK */
