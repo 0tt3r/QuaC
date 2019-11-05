@@ -49,7 +49,9 @@ typedef struct qsystem{
   PetscInt np,nid;
   PetscInt Istart,Iend,my_num;
 
+  //TS monitor related
   PetscErrorCode (*ts_monitor)(TS,PetscInt,PetscReal,Vec,void*);
+  void *ts_ctx;
 
   //Circuit related
   PetscInt num_circuits,circuit_list_size,current_circuit;

@@ -33,7 +33,7 @@ void initialize_system(qsystem *qsys){
   temp->alloc_subsystems = num_init_alloc;
   temp->subsystem_list = malloc(num_init_alloc*sizeof(struct operator));
   //temp->stiff_solver could go here if we used it
-
+  temp->mat_allocated = 0;
   //Alloc some space for the mat terms initially
   temp->num_time_indep = 0;
   temp->num_time_dep = 0;
@@ -278,6 +278,37 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   return;
 }
 
+/*
+ * Clear the mat_terms so that the system can be reused with a different H / L
+ */
+void clear_mat_terms_sys(qsystem sys){
+  PetscInt i;
+
+  if (sys->mat_allocated){
+    //Free the matrix
+    MatDestroy(&(sys->mat_A));
+    sys->mat_allocated = 0; //
+  }
+
+  if(sys->num_time_indep!=0){
+    for(i=0;i<sys->num_time_dep;i++){
+      free(sys->time_dep[i].ops);
+    }
+  }
+
+  if(sys->num_time_dep!=0){
+    for(i=0;i<sys->num_time_indep;i++){
+      free(sys->time_indep[i].ops);
+    }
+  }
+
+  //Reset our counters
+  sys->num_time_indep = 0;
+  sys->num_time_dep = 0;
+
+  return;
+}
+
 void construct_matrix(qsystem sys){
   PetscInt    i;
   PetscScalar tmp_a;
@@ -415,10 +446,11 @@ void _preallocate_matrix(qsystem sys){
  *
  * Inputs:
  *      PetscErrorCode *monitor - function pointer for user ts_monitor function
- *
+ *      void           *ctx     - user-defined struct to store data used in tsmonitor
  */
-void set_ts_monitor_sys(qsystem sys,PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*)){
+void set_ts_monitor_sys(qsystem sys,PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*),void *ctx){
   sys->ts_monitor = (*monitor);
+  sys->ts_ctx     = ctx;
   return;
 }
 
@@ -467,7 +499,7 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
    * Set function to get information at every timestep
    */
   if (sys->ts_monitor!=NULL){
-    TSMonitorSet(ts,sys->ts_monitor,NULL,NULL);
+    TSMonitorSet(ts,sys->ts_monitor,sys->ts_ctx,NULL);
   }
 
   /*
@@ -487,12 +519,12 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
     TSSetRHSJacobian(ts,sys->mat_A,sys->mat_A,TSComputeRHSJacobianConstant,sys);
   }
   /* Print information about the matrix. */
-  PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
-  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); */
-  MatView(sys->mat_A,mat_view);
-  PetscViewerPopFormat(mat_view);
-  PetscViewerDestroy(&mat_view);
+  /* PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view); */
+  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO); */
+  /* /\* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); *\/ */
+  /* MatView(sys->mat_A,mat_view); */
+  /* PetscViewerPopFormat(mat_view); */
+  /* PetscViewerDestroy(&mat_view); */
 
 
 

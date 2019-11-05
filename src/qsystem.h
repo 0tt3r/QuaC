@@ -19,6 +19,7 @@ void add_ham_term_time_dep(qsystem,PetscScalar,PetscScalar(*)(double),PetscInt,.
 void add_lin_term_time_dep(qsystem,PetscScalar,PetscScalar(*)(double),PetscInt,...);
 
 void time_step_sys(qsystem,qvec,PetscReal,PetscReal,PetscReal,PetscInt);
-void set_ts_monitor_sys(qsystem,PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*));
+void set_ts_monitor_sys(qsystem,PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*),void*);
 
+void clear_mat_terms_sys(qsystem);
 #endif
