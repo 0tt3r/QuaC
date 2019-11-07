@@ -922,6 +922,64 @@ void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
 }
 
 
+
+
+/*
+ * void get_superfidelity calculates the superfidelity between two matrices,
+ * where the superfidelity for density matrices is defined as:
+ *         F = Tr(rho sigma) + sqrt(1-Tr(rho*rho))*sqrt(1-Tr(sigma*sigma))
+ * where rho, sigma are the density matrices to calculate the
+ * See https://arxiv.org/pdf/0805.2037.pdf
+ * Inputs:
+ *         qvec q1  - one quantum system
+ *         qvec q2 - the other quantum system
+ * Outpus:
+ *         PetscReal *superfidelity - the fidelity between the two dms
+ *
+ */
+void get_superfidelity_qvec(qvec q1,qvec q2,PetscReal *superfidelity) {
+  qvec tmp_dm;
+  if (q1->my_type==DENSITY_MATRIX && q2->my_type==DENSITY_MATRIX){
+    _get_superfidelity_dm_dm(q1->data,q2->data,superfidelity);
+  } else if(q1->my_type==WAVEFUNCTION && q2->my_type==WAVEFUNCTION){
+    PetscPrintf(PETSC_COMM_WORLD,"Calculating superfidelity between two wavefunctions is not recommended. Use get_fidelity_qvec!\n");
+    exit(9);
+  } else if(q1->my_type==WAVEFUNCTION && q2->my_type==DENSITY_MATRIX){
+    //Copy wf into DM
+    //Inefficient because copy_qvec_wf_to_dm is inefficient
+    create_arb_qvec(&tmp_dm,q2->n,DENSITY_MATRIX);
+    copy_qvec_wf_to_dm(q1,tmp_dm);
+    _get_superfidelity_dm_dm(q2->data,tmp_dm->data,superfidelity);
+    destroy_qvec(&tmp_dm);
+  } else if(q2->my_type==WAVEFUNCTION && q1->my_type==DENSITY_MATRIX){
+    //Copy wf into DM
+    //Inefficient because copy_qvec_wf_to_dm is inefficient
+    create_arb_qvec(&tmp_dm,q1->n,DENSITY_MATRIX);
+    copy_qvec_wf_to_dm(q2,tmp_dm);
+    _get_superfidelity_dm_dm(q1->data,tmp_dm->data,superfidelity);
+    destroy_qvec(&tmp_dm);
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"Types not understand in get_superfidelity_qvec!\n");
+    exit(9);
+  }
+  return;
+}
+
+void  _get_superfidelity_dm_dm(Vec dm1,Vec dm2,PetscReal *superfidelity){
+  PetscScalar val1,val2,val3;
+
+  //Get Tr(rho sigma) = <<rho | sigma >>
+  VecDot(dm1,dm2,&val1);
+  //Get Tr(rho rho) = <<rho | rho >>
+  VecDot(dm1,dm1,&val2);
+  //Get Tr(sigma sigma) = <<sigma | sigma >>
+  VecDot(dm2,dm2,&val3);
+
+  *superfidelity = PetscSqrtReal(PetscRealPart(val1 + PetscSqrtComplex(1-val2)*PetscSqrtComplex(1-val3)));
+  return;
+}
+
+
 /*
  * void get_fidelity calculates the fidelity between two matrices,
  * where the fidelity for density matrices is defined as:
@@ -933,7 +991,7 @@ void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
  *         qvec  q1  - one quantum system
  *         qvec q2 - the other quantum system
  * Outpus:
- *         double *fidelity - the fidelity between the two dms
+ *         PetscReal *fidelity - the fidelity between the two dms
  *
  */
 void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity) {

@@ -41,6 +41,9 @@ void _get_fidelity_wf_wf(Vec,Vec,PetscReal*);
 void _get_fidelity_dm_dm(Vec,Vec,PetscReal*);
 void _get_fidelity_dm_wf(Vec,Vec,PetscReal*);
 
+void get_superfidelity_qvec(qvec,qvec,PetscReal*);
+void  _get_superfidelity_dm_dm(Vec,Vec,PetscReal*);
+
 void print_qvec_file(qvec,char[]);
 void print_dm_qvec_file(qvec,char[]);
 void print_wf_qvec_file(qvec,char[]);
