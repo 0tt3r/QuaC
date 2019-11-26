@@ -11,5 +11,6 @@ void _quil_get_angle_pi(char[],PetscReal*);
 
 void qiskit_vqe_get_expectation(char[],Vec,PetscScalar*);
 void qiskit_qasm_read(char[],PetscInt*,circuit*);
-void _qiskit_qasm_add_gate(char*,circuit*,PetscReal,PetscInt);
+void cirq_qasm_read(char[],PetscInt*,circuit*);
+void _qiskit_qasm_add_gate(char*,circuit*,PetscReal,PetscInt,PetscInt);
 void _qasm_get_angles_from_string(char[],PetscReal*,PetscReal*,PetscReal*);

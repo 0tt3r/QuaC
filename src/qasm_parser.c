@@ -623,7 +623,7 @@ void qiskit_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
       //FIXME: Will fail if there are spaces somewhere, or if the first character is a space, etc
       if(!isspace(line[0])){
         //Add the first gate to list
-        _qiskit_qasm_add_gate(line,circ,time,*num_qubits);
+        _qiskit_qasm_add_gate(line,circ,time,*num_qubits,1);
         time = time + 1.0;
       }
     } //else skip the header
@@ -634,13 +634,82 @@ void qiskit_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
   return;
 }
 
-void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_qubits){
+void cirq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
+  FILE *fp;
+  int ch = 0,lines=0,found_qubits=0,blank_lines=0,comment_lines=0;
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  PetscReal time=1.0;
+
+  fp = fopen(filename,"r");
+
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in qiskit_qasm_read!\n");
+      exit(1);
+    }
+  }
+
+  //Count number of lines
+  while(!feof(fp)){
+    ch = fgetc(fp);
+    if(ch == '\n'){
+        lines++;
+      }
+    if (ch  ==  '\n'){
+      if ((ch = fgetc(fp))  ==  '\n'){
+        fseek(fp, -1, 1);
+        blank_lines++;
+      }
+    }
+  }
+  fseek(fp, 0, 0);
+  while ((ch = fgetc(fp)) != EOF){
+    if (ch  ==  '/'){
+      if ((ch = fgetc(fp))  ==  '/'){
+        comment_lines++;
+      }
+    }
+  }
+
+  //Rewind file
+  rewind(fp);
+  //Subtract off 3 because of the header, subtract comments and blank lines, too
+  lines = lines - 3 - blank_lines - comment_lines;
+  //Allocate the circuit
+
+  create_circuit(circ,lines);
+  found_qubits = 0;
+  *num_qubits = 0;
+  while ((read = getline(&line, &len, fp)) != -1){
+    if (strstr(line,"qreg")){
+      //Get number of qubits by reading qreg line
+      sscanf(line,"qreg q[%d];",num_qubits);
+      found_qubits = 1;
+    } else if(found_qubits==1){
+      //Skip lines that are only a newline - 'blank lines'
+      //FIXME: Will fail if there are spaces somewhere, or if the first character is a space, etc
+      if(!isspace(line[0])){
+        //Add the first gate to list
+        _qiskit_qasm_add_gate(line,circ,time,*num_qubits,0);
+        time = time + 1.0;
+      }
+    } //else skip the header
+  }
+
+  fclose(fp);
+  if (line) free(line);
+  return;
+}
+
+void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_qubits,PetscInt qiskit_ordering){
   char *token=NULL,pi_string[256];
   int qubit1=-1,qubit2=-1,skip_gate=0;
   PetscReal angle,angle2,angle3;
   gate_type my_gate_type=NULL_GATE;
   size_t i,j;
-
+  //qiskit_ordering reorders the qubits so that the wavefunction the is printed out is consistent with qiskit
   // Split string on ' ' to separate gate type and qubits
   while (token=strsep(&line," ")) {
     //Strip whitespace
@@ -656,13 +725,17 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_
         } else if (my_gate_type<0){
           //Multiqubit gate
           sscanf(token,"q[%d],q[%d];",&qubit1,&qubit2);
-          qubit1 = num_qubits - qubit1 - 1;
-          qubit2 = num_qubits - qubit2 - 1;
+          if(qiskit_ordering==1){
+            qubit1 = num_qubits - qubit1 - 1;
+            qubit2 = num_qubits - qubit2 - 1;
+          }
           add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,qubit2);
         } else {
           //Single qubit gate
           sscanf(token,"q[%d];",&qubit1);
-          qubit1 = num_qubits - qubit1 - 1;
+          if(qiskit_ordering==1){
+            qubit1 = num_qubits - qubit1 - 1;
+          }
           if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
             //U3 gate
             add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,angle,angle2,angle3);
@@ -690,17 +763,14 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_
         my_gate_type = HADAMARD;
       } else if (strstr(token,"rx")) {//strstr because changing angle
         my_gate_type = RX;
-        ///FIX
         sscanf(token,"rx(%s)",&pi_string);
         _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
       } else if (strstr(token,"ry")) {//strstr because changing angle
         my_gate_type = RY;
-        ///FIX
         sscanf(token,"ry(%s)",&pi_string);
         _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
       } else if (strstr(token,"rz")) {//strstr because changing angle
         my_gate_type = RZ;
-        ///FIX
         sscanf(token,"rz(%s)",&pi_string);
         _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
       } else if (strstr(token,"u1")) {//strstr because changing angle
