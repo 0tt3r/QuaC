@@ -1486,8 +1486,8 @@ void RZ_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
   /*
    * RZ gate
    *
-   *   | exp(i*theta/2)   0               |
-   *   | 0                -exp(i*theta/2) |
+   *   | 1   0            |
+   *   | 0   exp(i*theta) |
    *
    */
 
@@ -1499,12 +1499,14 @@ void RZ_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
     if (i_sub==0) {
       // Diagonal element
       js[0] = i;
-      vals[0] = PetscExpComplex(PETSC_i*theta/2);
+      //      vals[0] = PetscExpComplex(PETSC_i*theta/2);
+      vals[0] = 1;//PetscExpComplex(PETSC_i*theta/2);
 
     } else if (i_sub==1){
       // Diagonal element
       js[0] = i;
-      vals[0] = PetscExpComplex(-PETSC_i*theta/2);
+      //vals[0] = PetscExpComplex(-PETSC_i*theta/2);
+      vals[0] = PetscExpComplex(PETSC_i*theta);
 
     } else {
       if (nid==0){
@@ -1560,8 +1562,8 @@ void RY_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
   /*
    * RY gate
    *
-   *   | cos(theta/2)   sin(theta/2)  |
-   *   | -sin(theta/2)  cos(theta/2)  |
+   *   | cos(theta/2)   -sin(theta/2)  |
+   *   | sin(theta/2)    cos(theta/2)  |
    *
    */
 
@@ -1579,7 +1581,7 @@ void RY_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]     = (0 + 1) * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = PetscSinReal(theta/2);
+      vals[1]   = -PetscSinReal(theta/2);
 
 
     } else if (i_sub==1){
@@ -1592,7 +1594,7 @@ void RY_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]   = 0 * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = -PetscSinReal(theta/2);
+      vals[1]   = PetscSinReal(theta/2);
 
 
     } else {
@@ -1650,8 +1652,8 @@ void RX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
   /*
    * RX gate
    *
-   *   | cos(theta/2)    i*sin(theta/2) |
-   *   | i*sin(theta/2)  cos(theta/2)   |
+   *   | cos(theta/2)    -i*sin(theta/2) |
+   *   | -i*sin(theta/2)  cos(theta/2)   |
    *
    */
 
@@ -1670,7 +1672,7 @@ void RX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]     = (0 + 1) * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = PETSC_i * PetscSinReal(theta/2);
+      vals[1]   = -PETSC_i * PetscSinReal(theta/2);
 
 
     } else if (i_sub==1){
@@ -1683,7 +1685,7 @@ void RX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]   = 0 * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = PETSC_i * PetscSinReal(theta/2);
+      vals[1]   = -PETSC_i * PetscSinReal(theta/2);
 
 
     } else {
