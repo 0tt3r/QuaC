@@ -693,19 +693,16 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_
         ///FIX
         sscanf(token,"rx(%s)",&pi_string);
         _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
-        printf("angle: %f\n",angle);
       } else if (strstr(token,"ry")) {//strstr because changing angle
         my_gate_type = RY;
         ///FIX
         sscanf(token,"ry(%s)",&pi_string);
         _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
-        printf("angle: %f\n",angle);
       } else if (strstr(token,"rz")) {//strstr because changing angle
         my_gate_type = RZ;
         ///FIX
         sscanf(token,"rz(%s)",&pi_string);
         _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
-        printf("angle: %f\n",angle);
       } else if (strstr(token,"u1")) {//strstr because changing angle
         my_gate_type = U1;
         sscanf(token,"u1(%s)",&pi_string);
