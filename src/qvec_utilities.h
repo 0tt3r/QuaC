@@ -48,10 +48,16 @@ void print_qvec_file(qvec,char[]);
 void print_dm_qvec_file(qvec,char[]);
 void print_wf_qvec_file(qvec,char[]);
 
+void get_log_xeb_fidelity(qvec,qvec,PetscReal*);
+void get_linear_xeb_fidelity(qvec,qvec,PetscReal*);
+void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
+void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
+
 void print_qvec(qvec);
 void print_dm_qvec(qvec);
 void print_wf_qvec(qvec);
 void get_wf_element_qvec(qvec,PetscInt,PetscScalar*);
+void get_wf_element_qvec_local(qvec,PetscInt,PetscScalar*);
 void get_dm_element_qvec(qvec,PetscInt,PetscInt,PetscScalar*);
 void get_dm_element_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
 

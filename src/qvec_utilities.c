@@ -342,12 +342,30 @@ void get_wf_element_qvec(qvec state,PetscInt i,PetscScalar *val){
   return;
 }
 
+void get_wf_element_qvec_local(qvec state,PetscInt i,PetscScalar *val){
+  PetscInt location[1];
+  PetscScalar val_array[1];
+
+  location[0] = i;
+  if (location[0]>=state->Istart&&location[0]<state->Iend) {
+    VecGetValues(state->data,1,location,val_array);
+  } else{
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Can only get elements local to a core in !\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       get_wf_element_qvec_local.\n");
+    exit(0);
+  }
+
+  *val = val_array[0];
+  return;
+}
+
 /*
  * create a qvec object with arbitrary dimensions
  */
 void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
   qvec temp = NULL;
-  PetscInt n,Istart,Iend;
+  PetscInt n,Istart,Iend,iVar;
+  PetscReal fVar;
 
   temp = malloc(sizeof(struct qvec));
 
@@ -358,6 +376,22 @@ void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
 
   temp->my_type = my_type;
   temp->n = n;
+  if(my_type==WAVEFUNCTION){
+    temp->total_levels = n;
+  } else if(my_type==DENSITY_MATRIX){
+    //Perhaps check that n in a true square?
+    fVar = sqrt((double)(n));
+    iVar = fVar;
+    if(iVar==fVar){
+      temp->total_levels = iVar;
+    } else {
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! n for DENSITY_MATRIX must be perfect square!\n");
+      exit(9);
+    }
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Type not understood in create_arb_qvec.\n");
+    exit(9);
+  }
   temp->Istart = Istart;
   temp->Iend = Iend;
 
@@ -415,6 +449,7 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
 
   temp->my_type = DENSITY_MATRIX;
   temp->n = n;
+  temp->total_levels = sqrt(n);
   temp->Istart = Istart;
   temp->Iend = Iend;
 
@@ -458,6 +493,7 @@ void create_wf_sys(qsystem sys,qvec *new_wf){
 
   temp->my_type = WAVEFUNCTION;
   temp->n = n;
+  temp->total_levels = n;
   temp->Istart = Istart;
   temp->Iend = Iend;
 
@@ -908,20 +944,190 @@ void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
   Vec temp;
   PetscScalar alpha=-1.0;
 
+  //Check sizes
+
+
   if (q1->my_type==DENSITY_MATRIX && q2->my_type==DENSITY_MATRIX){
-    VecDuplicate(q1->data,&temp);
-    VecCopy(q1->data,temp);
-    VecAXPY(temp,alpha,q2->data);
-    VecNorm(temp,NORM_2,hs_dist);
-    *hs_dist = *hs_dist * (*hs_dist);
+    if (q1->n==q2->n){
+      VecDuplicate(q1->data,&temp);
+      VecCopy(q1->data,temp);
+      VecAXPY(temp,alpha,q2->data);
+      VecNorm(temp,NORM_2,hs_dist);
+      *hs_dist = *hs_dist * (*hs_dist);
+    } else {
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! DMs are not the same size in hs_dist\n");
+      exit(9);
+    }
   } else {
-    PetscPrintf(PETSC_COMM_WORLD,"HS is only for DM-DM comparisons\n");
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! HS is only for DM-DM comparisons\n");
     exit(9);
   }
   return;
 }
 
+void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid){
+  PetscReal *probs_ref,*probs_exp,tmp_lin_xeb_fid[1];
+  PetscInt nloc_ref,nloc_exp,i;
+  /*
+   * Our 'experiment' is stored in a dm and we can extract the bitstring
+   * probabilities by just taking the diagonal part
+   * Similarly, for our reference
+   */
+  if(ref->total_levels!=exp->total_levels){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
+    exit(9);
+  }
 
+  if(ref->my_type==DENSITY_MATRIX && exp->my_type==DENSITY_MATRIX){
+    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! DMs should be distributed the same way in get_linear_xeb_fidelity!\n");
+      exit(9);
+    }
+    _get_bitstring_probs_dm(ref,&nloc_ref,&probs_ref);
+    _get_bitstring_probs_dm(exp,&nloc_exp,&probs_exp);
+  } else if(ref->my_type==WAVEFUNCTION && exp->my_type==WAVEFUNCTION){
+    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! WFs should be distributed the same way in get_linear_xeb_fidelity!\n");
+      exit(9);
+    }
+    _get_bitstring_probs_wf(ref,&nloc_ref,&probs_ref);
+    _get_bitstring_probs_wf(exp,&nloc_exp,&probs_exp);
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! get_linear_xeb_fidelity only implemented for DM - DM or WF - WF comparisons!\n");
+    exit(9);
+  }
+
+  /*
+   * linear xeb fid estimator:
+   * F_lxeb = <D p(q) - 1>, but we have the distribution of the bitstrings q, so
+   * F_lxeb = D \sum_i p_exp(q_i) p_true(q_i) - 1
+   * where D is total hilbert space size
+   */
+  tmp_lin_xeb_fid[0] = 0;
+  for(i=0;i<nloc_ref;i++){
+    tmp_lin_xeb_fid[0] = tmp_lin_xeb_fid[0] + probs_exp[i]*probs_ref[i];
+  }
+  //Collect all cores
+  MPI_Allreduce(MPI_IN_PLACE,tmp_lin_xeb_fid,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  *lin_xeb_fid = ref->total_levels * tmp_lin_xeb_fid[0] - 1;
+
+  free(probs_exp);
+  free(probs_ref);
+  return;
+}
+
+
+void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
+  PetscReal gamma=0.57721566490153286060651209008240243104215933593992;
+  PetscReal *probs_ref,*probs_exp,tmp_log_xeb_fid[1];
+  PetscInt nloc_ref,nloc_exp,i;
+
+  /*
+   * Our 'experiment' is stored in a dm and we can extract the bitstring
+   * probabilities by just taking the diagonal part
+   * Similarly, for our reference
+   */
+  if(ref->total_levels!=exp->total_levels){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
+    exit(9);
+  }
+
+  if(ref->my_type==DENSITY_MATRIX && exp->my_type==DENSITY_MATRIX){
+    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! DMs should be distributed the same way in get_linear_xeb_fidelity!\n");
+      exit(9);
+    }
+    _get_bitstring_probs_dm(ref,&nloc_ref,&probs_ref);
+    _get_bitstring_probs_dm(exp,&nloc_exp,&probs_exp);
+  } else if(ref->my_type==WAVEFUNCTION && exp->my_type==WAVEFUNCTION){
+    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! WFs should be distributed the same way in get_linear_xeb_fidelity!\n");
+      exit(9);
+    }
+    _get_bitstring_probs_wf(ref,&nloc_ref,&probs_ref);
+    _get_bitstring_probs_wf(exp,&nloc_exp,&probs_exp);
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! get_linear_xeb_fidelity only implemented for DM - DM or WF - WF comparisons!\n");
+    exit(9);
+  }
+
+  /*
+   * linear xeb fid estimator:
+   * F_lxeb = <log(D p(q)) + gamma>, but we have the distribution of the bitstrings q, so
+   * F_lxeb =  \sum_i p_exp (q_i) log(D p_true(q_i)) + gamma
+   * where D is total hilbert space size and gamma is the Euler Mascheroni Constant
+   */
+
+  tmp_log_xeb_fid[0] = 0;
+  for(i=0;i<nloc_ref;i++){
+    if(probs_ref[i]==0.0){
+      tmp_log_xeb_fid[0] = tmp_log_xeb_fid[0] + probs_exp[i]*PetscLogReal(3e-33);
+    } else{
+      tmp_log_xeb_fid[0] = tmp_log_xeb_fid[0] + probs_exp[i]*PetscLogReal(probs_ref[i]);
+    }
+  }
+  //Collect all cores
+  MPI_Allreduce(MPI_IN_PLACE,tmp_log_xeb_fid,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  *log_xeb_fid = PetscLogReal(ref->total_levels) + tmp_log_xeb_fid[0] + gamma;
+
+  free(probs_exp);
+  free(probs_ref);
+
+  return;
+}
+
+
+
+void _get_bitstring_probs_dm(qvec q1,PetscInt *num_loc,PetscReal **probs){
+  PetscScalar tmp_scalar=0;
+  PetscInt i=0,loc=0,num_loc_t=0;
+
+  num_loc_t = 0;
+  //Loops over 2^n, but only touches local elements. Perhaps rewrite so it only loops over local parts
+  //Count number of local diagonal elements
+  for(i=0;i<q1->total_levels;i++){
+    loc = q1->total_levels*i+i;
+    if(loc>=q1->Istart && loc<q1->Iend){
+      num_loc_t = num_loc_t+1;
+    }
+  }
+  *num_loc = num_loc_t;
+  //Allocate array
+  (*probs) = malloc(num_loc_t*sizeof(PetscReal));
+  num_loc_t=0;
+  for(i=0;i<q1->total_levels;i++){
+    loc = q1->total_levels*i+i;
+    if(loc>=q1->Istart && loc<q1->Iend){
+      //Get local diagonal parts for both q1 and q2
+      get_dm_element_qvec_local(q1,i,i,&tmp_scalar);
+      (*probs)[num_loc_t] = PetscRealPart(tmp_scalar);
+      num_loc_t = num_loc_t+1;
+    }
+  }
+
+  return;
+}
+
+
+void _get_bitstring_probs_wf(qvec q1,PetscInt *num_loc,PetscReal **probs){
+  PetscScalar tmp_scalar=0;
+  PetscInt i=0,loc=0,j=0;
+
+  //Allocate array
+  *num_loc = q1->Iend-q1->Istart;
+  (*probs) = malloc((*num_loc)*sizeof(PetscReal));
+  for(i=0;i<q1->total_levels;i++){
+    loc = i;
+    if(loc>=q1->Istart && loc<q1->Iend){
+      //Get local diagonal parts for both q1 and q2
+      get_wf_element_qvec_local(q1,loc,&tmp_scalar);
+      (*probs)[j] = pow(PetscRealPart(PetscAbsComplex(tmp_scalar)),2);
+      j++;
+    }
+  }
+
+  return;
+}
 
 
 /*
