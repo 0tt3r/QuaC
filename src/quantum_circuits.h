@@ -15,6 +15,7 @@ void schedule_circuit_layers(qsystem,circuit*);
 
 void _get_n_after_2qbit_sys(qsystem,PetscInt*,int[],PetscInt,PetscInt*,PetscInt*,PetscInt*,PetscInt*);
 void _get_n_after_1qbit_sys(qsystem,PetscInt,int,PetscInt,PetscInt*,PetscInt*);
+void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void HADAMARD_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void CNOT_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void SIGMAX_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);

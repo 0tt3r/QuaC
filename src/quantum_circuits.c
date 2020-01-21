@@ -6,6 +6,7 @@
 #include <petsc.h>
 #include <stdarg.h>
 
+#define GATE_MAX_ELEM_ROW 4
 
 //FIXME: This should maybe be accessible by a user to register a new gate?
 
@@ -126,8 +127,9 @@ PetscErrorCode _sys_QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_l
 void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type,...){
   PetscReal theta,phi,lambda;
   int num_qubits=0,qubit,i;
+  void *gate_ctx;
   va_list ap;
-
+  custom_gate_func_type custom_gate_func;
   if (_gate_array_initialized==0){
     //Initialize the array of gate function pointers
     _initialize_gate_function_array_sys();
@@ -151,8 +153,10 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
   (*circ).gate_list[(*circ).num_gates].num_qubits = num_qubits;
   (*circ).gate_list[(*circ).num_gates]._get_val_j_from_global_i_sys = _get_val_j_functions_gates_sys[my_gate_type+_min_gate_enum];
 
-  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
-    va_start(ap,num_qubits+1); //FIXME This +1 is probably useless?
+  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ){
+    va_start(ap,num_qubits+1);
+  } else if (my_gate_type==CUSTOM2QGATE||my_gate_type==CUSTOM1QGATE) {
+    va_start(ap,num_qubits+2);
   } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
     va_start(ap,num_qubits+3);
   } else {
@@ -173,12 +177,17 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
     }
     (*circ).gate_list[(*circ).num_gates].qubit_numbers[i] = qubit;
   }
+  //Set parameters to 0
+  (*circ).gate_list[(*circ).num_gates].theta = 0;
+  (*circ).gate_list[(*circ).num_gates].phi = 0;
+  (*circ).gate_list[(*circ).num_gates].lambda = 0;
+  (*circ).gate_list[(*circ).num_gates].gate_ctx = NULL;
+  (*circ).gate_list[(*circ).num_gates].custom_func = NULL;
+
   if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ){
     //Get the theta parameter from the last argument passed in
     theta = va_arg(ap,PetscReal);
     (*circ).gate_list[(*circ).num_gates].theta = theta;
-    (*circ).gate_list[(*circ).num_gates].phi = 0;
-    (*circ).gate_list[(*circ).num_gates].lambda = 0;
   } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
     theta = va_arg(ap,PetscReal);
     (*circ).gate_list[(*circ).num_gates].theta = theta;
@@ -186,21 +195,22 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
     (*circ).gate_list[(*circ).num_gates].phi = phi;
     lambda = va_arg(ap,PetscReal);
     (*circ).gate_list[(*circ).num_gates].lambda = lambda;
-  } else {
-    //Set theta to 0
-    (*circ).gate_list[(*circ).num_gates].theta = 0;
-    (*circ).gate_list[(*circ).num_gates].phi = 0;
-    (*circ).gate_list[(*circ).num_gates].lambda = 0;
+  } else if (my_gate_type==CUSTOM2QGATE||my_gate_type==CUSTOM1QGATE){
+    gate_ctx = va_arg(ap,void *);
+    (*circ).gate_list[(*circ).num_gates].gate_ctx = gate_ctx;
+    custom_gate_func = va_arg(ap,custom_gate_func_type);
+    (*circ).gate_list[(*circ).num_gates].custom_func = custom_gate_func;
   }
+
 
   (*circ).num_gates = (*circ).num_gates + 1;
   return;
 }
 
 void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
-  PetscScalar op_vals[2];
+  PetscScalar op_vals[GATE_MAX_ELEM_ROW];
   PetscInt Istart,Iend,i_mat;
-  PetscInt i,these_js[2],num_js;
+  PetscInt i,these_js[GATE_MAX_ELEM_ROW],num_js;
   Mat tmp_mat1,tmp_mat2,tmp_mat3;
 
   // Should this inherit its stucture from full_A?
@@ -210,7 +220,7 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
   MatSetSizes(tmp_mat1,PETSC_DECIDE,PETSC_DECIDE,sys->total_levels,sys->total_levels);
   MatSetFromOptions(tmp_mat1);
 
-  MatMPIAIJSetPreallocation(tmp_mat1,2,NULL,2,NULL);
+  MatMPIAIJSetPreallocation(tmp_mat1,GATE_MAX_ELEM_ROW,NULL,GATE_MAX_ELEM_ROW,NULL);
 
   /* Construct the first matrix in tmp_mat1 */
   MatGetOwnershipRange(tmp_mat1,&Istart,&Iend);
@@ -229,7 +239,7 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
     MatSetSizes(tmp_mat2,PETSC_DECIDE,PETSC_DECIDE,sys->total_levels,sys->total_levels);
     MatSetFromOptions(tmp_mat2);
 
-    MatMPIAIJSetPreallocation(tmp_mat2,2,NULL,2,NULL);
+    MatMPIAIJSetPreallocation(tmp_mat2,GATE_MAX_ELEM_ROW,NULL,GATE_MAX_ELEM_ROW,NULL);
 
     MatGetOwnershipRange(tmp_mat2,&Istart,&Iend);
     for (i=Istart;i<Iend;i++){
@@ -383,8 +393,8 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   PetscInt i,num_js,*these_js,Istart,Iend;
   // FIXME: maybe total_levels*2 is too much or not enough? Consider having a better bound.
 
-  op_vals  = malloc(sys->total_levels*2*sizeof(PetscScalar)); //Up to two elements per row in the DM case
-  these_js = malloc(sys->total_levels*2*sizeof(PetscInt)); //Up to two elements per row in the DM case
+  op_vals  = malloc(sys->total_levels*2*GATE_MAX_ELEM_ROW*sizeof(PetscScalar)); //Up to four elements per row in the DM case
+  these_js = malloc(sys->total_levels*2*GATE_MAX_ELEM_ROW*sizeof(PetscInt)); //Up to four elements per row in the DM case
   PetscLogEventBegin(_apply_gate_event,0,0,0,0);
 
   VecDuplicate(rho,&tmp_answer); //Create a new vec with the same size as rho
@@ -393,7 +403,7 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   MatCreate(PETSC_COMM_WORLD,&gate_mat);
   MatSetSizes(gate_mat,PETSC_DECIDE,PETSC_DECIDE,sys->dim,sys->dim);
   MatSetFromOptions(gate_mat);
-  MatMPIAIJSetPreallocation(gate_mat,4,NULL,4,NULL); //This matrix is incredibly sparse!
+  MatMPIAIJSetPreallocation(gate_mat,2*GATE_MAX_ELEM_ROW,NULL,2*GATE_MAX_ELEM_ROW,NULL); //This matrix is incredibly sparse!
   MatSetUp(gate_mat);
   /* Construct the gate matrix, on the fly */
   MatGetOwnershipRange(gate_mat,&Istart,&Iend); //Could be different Istart and Iend than Hamiltonian mat
@@ -1121,6 +1131,106 @@ void CZX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_
 
     /* Now, get js for U (i2) by calling this function */
     CZX_get_val_j_from_global_i_sys(sys,i2,gate,&num_js_i2,js_i2,vals_i2,-1);
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *num_js = 0;
+    for(k1=0;k1<num_js_i1;k1++){
+      for(k2=0;k2<num_js_i2;k2++){
+        js[*num_js] = sys->total_levels * js_i1[k1] + js_i2[k2];
+        //Need to take complex conjugate to get true U*
+        vals[*num_js] = PetscConjComplex(vals_i1[k1])*vals_i2[k2];
+
+        *num_js = *num_js + 1;
+      }
+    }
+
+  }
+
+  return;
+}
+
+void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                  PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[4],js_i2[4];
+  PetscInt control,i_tmp,my_levels,j_sub,moved_system,j1;
+  PetscScalar vals_i1[4],vals_i2[4],tmp_val;
+
+  /*
+   * Expand a custom 2q gate
+   */
+
+  if (tensor_control!= 0) {
+    /* 4 is hardcoded because 2 qubits with 2 levels each */
+    my_levels   = 4;
+    // Get the correct hilbert space information
+    i_tmp = i;
+    _get_n_after_2qbit_sys(sys,&i_tmp,gate.qubit_numbers,tensor_control,&n_after,&control,&moved_system,&i_sub);
+
+    *num_js = 4;
+
+
+
+    tmp_int = i_tmp - i_sub * n_after;
+    k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+    k1      = tmp_int%(my_levels*n_after);
+
+
+    j_sub   = 0;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+    vals[0] = tmp_val;
+    js[0] = j1;
+
+    j_sub   = 1;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+    vals[1] = tmp_val;
+    js[1] = j1;
+
+    j_sub   = 2;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+    vals[2] = tmp_val;
+    js[2] = j1;
+
+    j_sub   = 3;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+    vals[3] = tmp_val;
+    js[3] = j1;
+
+  } else {
+        /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/sys->total_levels;
+    i2 = i%sys->total_levels;
+
+    /* Now, get js for U* (i1) by calling this function */
+    CUSTOM2Q_get_val_j_from_global_i_sys(sys,i1,gate,&num_js_i1,js_i1,vals_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    CUSTOM2Q_get_val_j_from_global_i_sys(sys,i2,gate,&num_js_i2,js_i2,vals_i2,-1);
 
     /*
      * Combine j's to get U* cross U
@@ -1976,6 +2086,7 @@ void _get_n_after_1qbit_sys(qsystem sys,PetscInt i,int qubit_number,PetscInt ten
  * Put the gate function pointers into an array
  */
 void _initialize_gate_function_array_sys(){
+  _get_val_j_functions_gates_sys[CUSTOM2QGATE+_min_gate_enum] = CUSTOM2Q_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CZX+_min_gate_enum] = CZX_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CmZ+_min_gate_enum] = CmZ_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CZ+_min_gate_enum] = CZ_get_val_j_from_global_i_sys;
@@ -1992,5 +2103,4 @@ void _initialize_gate_function_array_sys(){
   _get_val_j_functions_gates_sys[U1+_min_gate_enum] = U1_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[U2+_min_gate_enum] = U2_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[U3+_min_gate_enum] = U3_get_val_j_from_global_i_sys;
-
 }

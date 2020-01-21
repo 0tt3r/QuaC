@@ -12,7 +12,7 @@
 int _num_quantum_gates = 0;
 int _current_gate = 0;
 struct quantum_gate_struct _quantum_gate_list[MAX_GATES];
-int _min_gate_enum = 5; // Minimum gate enumeration number
+int _min_gate_enum = 6; // Minimum gate enumeration number
 int _gate_array_initialized = 0;
 int _num_circuits    = 0;
 int _current_circuit = 0;
@@ -608,11 +608,11 @@ PetscScalar _get_val_in_subspace_gate(PetscInt i,gate_type my_gate_type,PetscInt
  */
 
 void create_circuit(circuit *circ,PetscInt num_gates_est){
-  (*circ).start_time     = 0.0;
-  (*circ).num_gates      = 0;
-  (*circ).current_gate   = 0;
-  (*circ).num_layers     = 0;
-  (*circ).current_layer = 0;
+  (*circ).start_time            = 0.0;
+  (*circ).num_gates             = 0;
+  (*circ).current_gate          = 0;
+  (*circ).num_layers            = 0;
+  (*circ).current_layer         = 0;
   /*
    * If num_gates_est was positive when passed in, use that
    * as the initial gate_list size, otherwise set to
@@ -2993,9 +2993,9 @@ void _get_n_after_1qbit(PetscInt i,int qubit_number,PetscInt tensor_control,Pets
 void _check_gate_type(gate_type my_gate_type,int *num_qubits){
 
   if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE||
-      my_gate_type==RZ||my_gate_type==RX||my_gate_type==RY||my_gate_type==U1||my_gate_type==U2||my_gate_type==U3) {
+      my_gate_type==RZ||my_gate_type==RX||my_gate_type==RY||my_gate_type==U1||my_gate_type==U2||my_gate_type==U3||my_gate_type==CUSTOM1QGATE) {
     *num_qubits = 1;
-  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX){
+  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX||my_gate_type==CUSTOM2QGATE){
     *num_qubits = 2;
   } else {
     if (nid==0){

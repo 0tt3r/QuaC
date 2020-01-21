@@ -1,6 +1,9 @@
 #ifndef QSYSTEM_P_H_
 #define QSYSTEM_P_H_
 
+#define MAX_GATES 100 // Consider not making this a define
+
+
 struct qsystem;
 struct mat_term;
 

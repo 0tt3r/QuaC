@@ -10,6 +10,7 @@
 
 typedef enum {
   NULL_GATE = -1000,
+  CUSTOM2QGATE = -6,
   CZX  = -5,
   CmZ  = -4,
   CZ   = -3,
@@ -25,8 +26,12 @@ typedef enum {
   RZ     = 8,
   U1     = 9,
   U2     = 10,
-  U3     = 11
+  U3     = 11,
+  CUSTOM1QGATE = 12
 } gate_type;
+
+
+typedef void(*custom_gate_func_type)(PetscScalar*,PetscInt,PetscInt,void*);
 
 struct quantum_gate_struct{
   PetscReal time,run_time; //run_time is how long the gate takes
@@ -34,7 +39,9 @@ struct quantum_gate_struct{
   int *qubit_numbers,num_qubits;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
   void (*_get_val_j_from_global_i_sys)(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+  custom_gate_func_type custom_func;
   PetscReal theta,phi,lambda; //Only used for rotation gates
+  void *gate_ctx;
 };
 
 struct gate_layer_struct{
@@ -80,8 +87,6 @@ void EYE_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,P
 void RX_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void RY_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void RZ_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
-
-#define MAX_GATES 100 // Consider not making this a define
 
 struct quantum_gate_struct _quantum_gate_list[MAX_GATES];
 extern int _num_quantum_gates;
