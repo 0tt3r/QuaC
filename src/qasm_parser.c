@@ -814,13 +814,14 @@ void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_
   return;
 }
 
-void qiskit_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val){
+void qiskit_vqe_get_expectation(char filename[],qvec rho,PetscScalar *trace_val,PetscInt *num_evs_r,PetscScalar **evs,qsystem sys){
   FILE *fp;
-  char *token=NULL;
+  char *token=NULL,*token2=NULL;
   char *line = NULL,gate_char;
   size_t len = 0,i,j;
   ssize_t read;
-  int token_number,num_ops,qubit_number;
+  int token_number,num_ops,qubit_number,num_evs=0;
+  PetscScalar temp_ev_vals[1000]; //FIXME Temp over allocation
   operator ops[100];
   PetscReal scalar_multiply;
   PetscScalar temp_trace_val;
@@ -835,28 +836,30 @@ void qiskit_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val){
 
   while ((read = getline(&line, &len, fp)) != -1){
     token_number = 0;
-    while (token=strsep(&line," ")) {
+    while (token=strsep(&line,"\t")) {
       //Strip whitespace
-      for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
-      if(token_number==0){
+      /* for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++])); */
+      if(token_number!=0){
+        token2=strsep(&token,"+");
+        token2++;
         //Scalar multiply before pauli string
-        scalar_multiply = atof(token);
-        token_number = 1;
+        scalar_multiply = atof(token2);
       } else {
         num_ops = strlen(token);
         for (i=0;i<num_ops;i++){
           qubit_number = num_ops-i-1; //Might need to be num_ops - i because qiskit has reverse order
           gate_char = token[i];
           if (gate_char=='I'){
-            ops[i] = subsystem_list[qubit_number]->eye;
+            ops[i] = sys->subsystem_list[qubit_number]->eye;
           } else if (gate_char=='X'){
-            ops[i] = subsystem_list[qubit_number]->sig_x;
+            ops[i] = sys->subsystem_list[qubit_number]->sig_x;
           } else if (gate_char=='Y'){
-            ops[i] = subsystem_list[qubit_number]->sig_y;
+            ops[i] = sys->subsystem_list[qubit_number]->sig_y;
           } else if (gate_char=='Z'){
-            ops[i] = subsystem_list[qubit_number]->sig_z;
+            ops[i] = sys->subsystem_list[qubit_number]->sig_z;
           }
         }
+        token_number = 1;
       }
     }
     /*
@@ -867,16 +870,22 @@ void qiskit_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val){
       //This is a hack where I pass many ops, even though many of them
       //may not exist or be valid; they won't be accessed, at least.
       //Consider passing the array instead, and iterating inside?
-      get_expectation_value(rho,&temp_trace_val,num_ops,
-                            ops[0],ops[1],ops[2],ops[3],
-                            ops[4],ops[5],ops[6],ops[7],
-                            ops[8],ops[9],ops[10],ops[11],
-                            ops[12],ops[13],ops[14],ops[15],
-                            ops[16],ops[17],ops[18],ops[19]);
+      /* get_expectation_value_qvec(rho,&temp_trace_val,num_ops,ops[0],ops[1],ops[2],ops[3], */
+      /*                            ops[4],ops[5],ops[6],ops[7],ops[8],ops[9],ops[10],ops[11]); */
+      get_expectation_value_qvec_list(rho,&temp_trace_val,num_ops,ops);
+      temp_ev_vals[num_evs] = temp_trace_val;
       temp_trace_val = temp_trace_val * scalar_multiply;
       *trace_val = *trace_val + temp_trace_val;
+
+      num_evs = num_evs + 1;
+
     }
   }
+  *evs = malloc(num_evs*sizeof(PetscScalar));
+  for(i=0;i<num_evs;i++){
+    (*evs)[i] = temp_ev_vals[i];
+  }
+  *num_evs_r = num_evs;
   return;
 
 }
