@@ -6,7 +6,7 @@
 #include <petsc.h>
 #include <stdarg.h>
 
-#define GATE_MAX_ELEM_ROW 4
+#define GATE_MAX_ELEM_ROW 16
 
 //FIXME: This should maybe be accessible by a user to register a new gate?
 
@@ -393,20 +393,22 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   PetscInt i,num_js,*these_js,Istart,Iend;
   // FIXME: maybe total_levels*2 is too much or not enough? Consider having a better bound.
 
-  op_vals  = malloc(sys->total_levels*2*GATE_MAX_ELEM_ROW*sizeof(PetscScalar)); //Up to four elements per row in the DM case
-  these_js = malloc(sys->total_levels*2*GATE_MAX_ELEM_ROW*sizeof(PetscInt)); //Up to four elements per row in the DM case
   PetscLogEventBegin(_apply_gate_event,0,0,0,0);
+  op_vals  = malloc(GATE_MAX_ELEM_ROW*sizeof(PetscScalar));
+  these_js = malloc(GATE_MAX_ELEM_ROW*sizeof(PetscInt)); //Up to four elements per row in the DM case
+
 
   VecDuplicate(rho,&tmp_answer); //Create a new vec with the same size as rho
 
   //FIXME: Do this allocation once!
   MatCreate(PETSC_COMM_WORLD,&gate_mat);
+  MatSetType(gate_mat,MATMPIAIJ);
   MatSetSizes(gate_mat,PETSC_DECIDE,PETSC_DECIDE,sys->dim,sys->dim);
   MatSetFromOptions(gate_mat);
-  MatMPIAIJSetPreallocation(gate_mat,2*GATE_MAX_ELEM_ROW,NULL,2*GATE_MAX_ELEM_ROW,NULL); //This matrix is incredibly sparse!
-  MatSetUp(gate_mat);
+  MatMPIAIJSetPreallocation(gate_mat,GATE_MAX_ELEM_ROW,NULL,GATE_MAX_ELEM_ROW,NULL); //This matrix is incredibly sparse!
   /* Construct the gate matrix, on the fly */
   MatGetOwnershipRange(gate_mat,&Istart,&Iend); //Could be different Istart and Iend than Hamiltonian mat
+
   for (i=Istart;i<Iend;i++){
     if (sys->dm_equations){
       // Get the corresponding j and val for the superoperator U* cross U
@@ -417,10 +419,8 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
     }
     MatSetValues(gate_mat,1,&i,num_js,these_js,op_vals,ADD_VALUES);
   }
-
   MatAssemblyBegin(gate_mat,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(gate_mat,MAT_FINAL_ASSEMBLY);
-  /* MatView(gate_mat,PETSC_VIEWER_STDOUT_SELF); */
 
   MatMult(gate_mat,rho,tmp_answer);
   VecCopy(tmp_answer,rho); //Copy our tmp_answer array into rho
@@ -430,6 +430,7 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   free(op_vals);
   free(these_js);
   PetscLogEventEnd(_apply_gate_event,0,0,0,0);
+  return;
 }
 
 
@@ -1171,8 +1172,6 @@ void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_
 
     *num_js = 4;
 
-
-
     tmp_int = i_tmp - i_sub * n_after;
     k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
     k1      = tmp_int%(my_levels*n_after);
@@ -1191,6 +1190,7 @@ void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_
     /* Permute back to computational basis */
     _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
     gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+
     vals[1] = tmp_val;
     js[1] = j1;
 
@@ -1199,6 +1199,7 @@ void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_
     /* Permute back to computational basis */
     _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
     gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+
     vals[2] = tmp_val;
     js[2] = j1;
 
@@ -1207,6 +1208,7 @@ void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_
     /* Permute back to computational basis */
     _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
     gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+
     vals[3] = tmp_val;
     js[3] = j1;
 
