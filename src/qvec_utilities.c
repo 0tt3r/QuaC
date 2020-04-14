@@ -965,38 +965,26 @@ void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
   return;
 }
 
-void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid){
-  PetscReal *probs_ref,*probs_exp,tmp_lin_xeb_fid[1];
-  PetscInt nloc_ref,nloc_exp,i;
-  /*
-   * Our 'experiment' is stored in a dm and we can extract the bitstring
-   * probabilities by just taking the diagonal part
-   * Similarly, for our reference
-   */
-  if(ref->total_levels!=exp->total_levels){
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
-    exit(9);
+void get_bitstring_probs(qvec rho,PetscInt *nloc,PetscReal **probs){
+  //FIXME Dangerous to return nloc, exposes parallelism to user
+
+  if(rho->my_type==DENSITY_MATRIX){
+    _get_bitstring_probs_dm(rho,nloc,probs);
+  } else if(rho->my_type==WAVEFUNCTION){
+    _get_bitstring_probs_wf(rho,nloc,probs);
   }
 
-  if(ref->my_type==DENSITY_MATRIX && exp->my_type==DENSITY_MATRIX){
-    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
-      PetscPrintf(PETSC_COMM_WORLD,"ERROR! DMs should be distributed the same way in get_linear_xeb_fidelity!\n");
-      exit(9);
-    }
-    _get_bitstring_probs_dm(ref,&nloc_ref,&probs_ref);
-    _get_bitstring_probs_dm(exp,&nloc_exp,&probs_exp);
-  } else if(ref->my_type==WAVEFUNCTION && exp->my_type==WAVEFUNCTION){
-    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
-      PetscPrintf(PETSC_COMM_WORLD,"ERROR! WFs should be distributed the same way in get_linear_xeb_fidelity!\n");
-      exit(9);
-    }
-    _get_bitstring_probs_wf(ref,&nloc_ref,&probs_ref);
-    _get_bitstring_probs_wf(exp,&nloc_exp,&probs_exp);
-  } else {
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! get_linear_xeb_fidelity only implemented for DM - DM or WF - WF comparisons!\n");
+  return;
+}
+
+void get_linear_xeb_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *lin_xeb_fid){
+  PetscReal tmp_lin_xeb_fid[1];
+  PetscInt i;
+
+  if(nloc_ref!=nloc_exp){
+    printf("ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity_probs!\n");
     exit(9);
   }
-
   /*
    * linear xeb fid estimator:
    * F_lxeb = <D p(q) - 1>, but we have the distribution of the bitstrings q, so
@@ -1009,19 +997,14 @@ void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid){
   }
   //Collect all cores
   MPI_Allreduce(MPI_IN_PLACE,tmp_lin_xeb_fid,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
-  *lin_xeb_fid = ref->total_levels * tmp_lin_xeb_fid[0] - 1;
+  *lin_xeb_fid = h_dim * tmp_lin_xeb_fid[0] - 1;
 
-  free(probs_exp);
-  free(probs_ref);
   return;
 }
 
-
-void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
-  PetscReal gamma=0.57721566490153286060651209008240243104215933593992;
-  PetscReal *probs_ref,*probs_exp,tmp_log_xeb_fid[1];
-  PetscInt nloc_ref,nloc_exp,i;
-
+void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid){
+  PetscReal *probs_ref,*probs_exp;
+  PetscInt nloc_ref,nloc_exp;
   /*
    * Our 'experiment' is stored in a dm and we can extract the bitstring
    * probabilities by just taking the diagonal part
@@ -1031,28 +1014,29 @@ void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
     exit(9);
   }
+  get_bitstring_probs(ref,&nloc_ref,&probs_ref);
+  get_bitstring_probs(exp,&nloc_exp,&probs_exp);
 
-  if(ref->my_type==DENSITY_MATRIX && exp->my_type==DENSITY_MATRIX){
-    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
-      PetscPrintf(PETSC_COMM_WORLD,"ERROR! DMs should be distributed the same way in get_linear_xeb_fidelity!\n");
-      exit(9);
-    }
-    _get_bitstring_probs_dm(ref,&nloc_ref,&probs_ref);
-    _get_bitstring_probs_dm(exp,&nloc_exp,&probs_exp);
-  } else if(ref->my_type==WAVEFUNCTION && exp->my_type==WAVEFUNCTION){
-    if(ref->Istart!=exp->Istart || ref->Iend!=exp->Iend){
-      PetscPrintf(PETSC_COMM_WORLD,"ERROR! WFs should be distributed the same way in get_linear_xeb_fidelity!\n");
-      exit(9);
-    }
-    _get_bitstring_probs_wf(ref,&nloc_ref,&probs_ref);
-    _get_bitstring_probs_wf(exp,&nloc_exp,&probs_exp);
-  } else {
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! get_linear_xeb_fidelity only implemented for DM - DM or WF - WF comparisons!\n");
+  get_linear_xeb_fidelity_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,ref->total_levels,lin_xeb_fid);
+
+  free(probs_exp);
+  free(probs_ref);
+  return;
+}
+
+void get_log_xeb_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *log_xeb_fid){
+  PetscReal gamma=0.57721566490153286060651209008240243104215933593992;
+  PetscReal tmp_log_xeb_fid[1];
+  PetscInt i;
+
+  if(nloc_ref!=nloc_exp){
+    //FIXME Dangerous print here
+    printf("ERROR! Ref and Exp are not the same size in get_log_xeb_fidelity_probs!\n");
     exit(9);
   }
 
   /*
-   * linear xeb fid estimator:
+   * log xeb fid estimator:
    * F_lxeb = <log(D p(q)) + gamma>, but we have the distribution of the bitstrings q, so
    * F_lxeb =  \sum_i p_exp (q_i) log(D p_true(q_i)) + gamma
    * where D is total hilbert space size and gamma is the Euler Mascheroni Constant
@@ -1068,7 +1052,29 @@ void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
   }
   //Collect all cores
   MPI_Allreduce(MPI_IN_PLACE,tmp_log_xeb_fid,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
-  *log_xeb_fid = PetscLogReal(ref->total_levels) + tmp_log_xeb_fid[0] + gamma;
+  *log_xeb_fid = PetscLogReal(h_dim) + tmp_log_xeb_fid[0] + gamma;
+
+  return;
+}
+
+void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
+  PetscReal *probs_ref,*probs_exp;
+  PetscInt nloc_ref,nloc_exp;
+
+  /*
+   * Our 'experiment' is stored in a dm and we can extract the bitstring
+   * probabilities by just taking the diagonal part
+   * Similarly, for our reference
+   */
+  if(ref->total_levels!=exp->total_levels){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
+    exit(9);
+  }
+
+  get_bitstring_probs(ref,&nloc_ref,&probs_ref);
+  get_bitstring_probs(exp,&nloc_exp,&probs_exp);
+
+  get_log_xeb_fidelity_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,ref->total_levels,log_xeb_fid);
 
   free(probs_exp);
   free(probs_ref);
@@ -1076,6 +1082,90 @@ void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
   return;
 }
 
+void get_hog_score_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *hog_score){
+  PetscReal tmp_hog_score[1];
+  PetscInt i;
+
+  if(nloc_ref!=nloc_exp){
+    //FIXME Dangerous print here
+    printf("ERROR! Ref and Exp are not the same size in get_hog_score_probs!\n");
+    exit(9);
+  }
+
+  /*
+   * HOG Score description
+   */
+
+  tmp_hog_score[0] = 0;
+  for(i=0;i<nloc_ref;i++){
+    if(probs_ref[i]>=log(2.0)/h_dim){
+      tmp_hog_score[0] = tmp_hog_score[0] + probs_exp[i];
+    }
+  }
+  //Collect all cores
+  MPI_Allreduce(MPI_IN_PLACE,tmp_hog_score,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  *hog_score = tmp_hog_score[0];
+
+  return;
+}
+
+void get_hog_score(qvec ref,qvec exp,PetscReal *hog_score){
+  PetscReal *probs_ref,*probs_exp;
+  PetscInt nloc_ref,nloc_exp;
+  /*
+   * Our 'experiment' is stored in a dm and we can extract the bitstring
+   * probabilities by just taking the diagonal part
+   * Similarly, for our reference
+   */
+
+  if(ref->total_levels!=exp->total_levels){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
+    exit(9);
+  }
+  get_bitstring_probs(ref,&nloc_ref,&probs_ref);
+  get_bitstring_probs(exp,&nloc_exp,&probs_exp);
+
+  get_hog_score_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,ref->total_levels,hog_score);
+
+  free(probs_exp);
+  free(probs_ref);
+
+  return;
+}
+
+
+void get_hog_score_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *hog_score_fid){
+  PetscReal hog_score;
+
+  if(nloc_ref!=nloc_exp){
+    //FIXME Dangerous print here
+    printf("ERROR! Ref and Exp are not the same size in get_hog_score_probs!\n");
+    exit(9);
+  }
+
+  get_hog_score_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,h_dim,&hog_score);
+  *hog_score_fid = (2*hog_score - 1)/log(2.0);
+
+  return;
+}
+
+void get_hog_score_fidelity(qvec ref,qvec exp,PetscReal *hog_score_fid){
+  PetscReal hog_score;
+
+  /*
+   * Our 'experiment' is stored in a dm and we can extract the bitstring
+   * probabilities by just taking the diagonal part
+   * Similarly, for our reference
+   */
+  if(ref->total_levels!=exp->total_levels){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_hog_score_fidelity!\n");
+    exit(9);
+  }
+
+  get_hog_score(ref,exp,&hog_score);
+  *hog_score_fid = (2*hog_score - 1)/log(2.0);
+  return;
+}
 
 
 void _get_bitstring_probs_dm(qvec q1,PetscInt *num_loc,PetscReal **probs){
@@ -1091,7 +1181,7 @@ void _get_bitstring_probs_dm(qvec q1,PetscInt *num_loc,PetscReal **probs){
       num_loc_t = num_loc_t+1;
     }
   }
-  *num_loc = num_loc_t;
+  *num_loc = num_loc_t-1; //Don't forget to subtract one?
   //Allocate array
   (*probs) = malloc(num_loc_t*sizeof(PetscReal));
   num_loc_t=0;

@@ -50,6 +50,13 @@ void print_wf_qvec_file(qvec,char[]);
 
 void get_log_xeb_fidelity(qvec,qvec,PetscReal*);
 void get_linear_xeb_fidelity(qvec,qvec,PetscReal*);
+void get_log_xeb_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_linear_xeb_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_bitstring_probs(qvec,PetscInt*,PetscReal**);
+void get_hog_score_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_hog_score_fidelity(qvec,qvec,PetscReal*);
+void get_hog_score_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_hog_score(qvec,qvec,PetscReal*);
 void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
 void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
 
