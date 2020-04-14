@@ -74,7 +74,7 @@ int main(int argc,char **args){
   steps_max = 100000;
 
   /* Set the ts_monitor to print results at each time step, if desired */
-  //  set_ts_monitor_sys(system,ts_monitor);
+  //  set_ts_monitor_sys(system,ts_monitor,NULL);
 
   /* create_wf_sys(sys2,&rho); */
   /* mat_val = 1.0; */
