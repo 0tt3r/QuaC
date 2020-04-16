@@ -1,4 +1,4 @@
- #include "kron_p.h" //Includes petscmat.h and operators_p.h
+#include "kron_p.h" //Includes petscmat.h and operators_p.h
 #include "quac_p.h"
 #include "operators.h"
 #include "qsystem.h"
@@ -13,7 +13,7 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS,PetscReal,Vec,Mat,Mat,void*); // Move to
 
 void initialize_system(qsystem *qsys){
   qsystem temp = NULL;
-  PetscInt num_init_alloc = 25;
+  PetscInt num_init_alloc = 50;
   int tmp_nid,tmp_np;
   if (!petsc_initialized){
     if (nid==0){
@@ -186,6 +186,11 @@ void add_ham_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
 
+  if(sys->num_time_indep>sys->alloc_time_indep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_ham_term!\n");
+    exit(9);
+  }
+
   sys->time_indep[sys->num_time_indep].my_term_type = HAM;
   sys->time_indep[sys->num_time_indep].a = a;
   sys->time_indep[sys->num_time_indep].num_ops = num_ops;
@@ -209,6 +214,10 @@ void add_lin_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
 
+  if(sys->num_time_indep>sys->alloc_time_indep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_lin_term!\n");
+    exit(9);
+  }
   sys->dm_equations = 1;//Lindblad equation
   sys->time_indep[sys->num_time_indep].my_term_type = LINDBLAD;
   sys->time_indep[sys->num_time_indep].a = a;
@@ -233,6 +242,10 @@ void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   int      i;
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
+  if(sys->num_time_dep>sys->alloc_time_dep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_ham_term_time_dep!\n");
+    exit(9);
+  }
 
   sys->time_dep[sys->num_time_dep].my_term_type = TD_HAM;
   sys->time_dep[sys->num_time_dep].a = a;
@@ -258,6 +271,11 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   int      i;
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
+
+  if(sys->num_time_dep>sys->alloc_time_dep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_lin_term_time_dep!\n");
+    exit(9);
+  }
 
   sys->dm_equations = 1;//Lindblad equation
   sys->time_dep[sys->num_time_dep].my_term_type = TD_LINDBLAD;
