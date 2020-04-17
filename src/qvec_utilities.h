@@ -58,7 +58,7 @@ void get_hog_score_fidelity(qvec,qvec,PetscReal*);
 void get_hog_score_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
 void get_hog_score(qvec,qvec,PetscReal*);
 void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
-void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
+void _get_bitstring_probs_dm(qvec,PetscInt*,PetscReal**);
 
 void print_qvec(qvec);
 void print_dm_qvec(qvec);
