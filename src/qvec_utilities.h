@@ -68,7 +68,7 @@ void get_wf_element_qvec_local(qvec,PetscInt,PetscScalar*);
 void get_dm_element_qvec(qvec,PetscInt,PetscInt,PetscScalar*);
 void get_dm_element_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
 
-void check_qvec_consisten(qvec,qvec);
+void check_qvec_consistent(qvec,qvec);
 void copy_qvec(qvec,qvec);
 void copy_qvec_wf_to_dm(qvec,qvec);
 void get_hilbert_schmidt_dist_qvec(qvec,qvec,PetscReal*);
