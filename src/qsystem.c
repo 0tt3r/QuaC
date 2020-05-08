@@ -13,7 +13,7 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS,PetscReal,Vec,Mat,Mat,void*); // Move to
 
 void initialize_system(qsystem *qsys){
   qsystem temp = NULL;
-  PetscInt num_init_alloc = 50;
+  PetscInt num_init_alloc = 150;
   int tmp_nid,tmp_np;
   if (!petsc_initialized){
     if (nid==0){
@@ -158,6 +158,9 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
     }
     free(tmp_list);
   }
+
+  /* Save position in hilbert space */
+  (*new_op)->pos_in_h_space = sys->num_subsystems;
 
   sys->subsystem_list[sys->num_subsystems] = (*new_op);
   sys->num_subsystems++;
