@@ -15,6 +15,7 @@ void _create_single_op(PetscInt,PetscInt,op_type,operator*);
 
 void add_ham_term(qsystem,PetscScalar,PetscInt,...);
 void add_lin_term(qsystem,PetscScalar,PetscInt,...);
+void add_lin_term_list(qsystem,PetscScalar,PetscInt,operator*);
 void add_ham_term_time_dep(qsystem,PetscScalar,PetscScalar(*)(double),PetscInt,...);
 void add_lin_term_time_dep(qsystem,PetscScalar,PetscScalar(*)(double),PetscInt,...);
 
