@@ -22,6 +22,7 @@ void quil_read(char filename[],PetscInt *num_qubits,circuit *circ){
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_qasm_read!\n");
+      exit(1);
     }
   }
 
@@ -204,6 +205,7 @@ void projectq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_qasm_read!\n");
+      exit(1);
     }
   }
 
@@ -324,6 +326,7 @@ void projectq_vqe_get_expectation(char filename[],Vec rho,PetscScalar *trace_val
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+      exit(1);
     }
   }
 
@@ -389,6 +392,7 @@ void projectq_vqe_get_expectation_squared(char filename[],Vec rho,PetscScalar *t
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+      exit(1);
     }
   }
 
@@ -464,6 +468,7 @@ void projectq_vqe_get_expectation_encoded(char filename[],Vec rho,PetscScalar *t
   if (fp == NULL){
     if (nid==0){
       printf("ERROR! File not found in projectq_vqe_get_expectation!\n");
+      exit(1);
     }
   }
 
@@ -511,4 +516,376 @@ void projectq_vqe_get_expectation_encoded(char filename[],Vec rho,PetscScalar *t
     }
   }
   return;
+}
+
+void _qasm_get_angles_from_string(char angle_string[256],PetscReal *angle1,PetscReal *angle2,PetscReal *angle3){
+  char numerator[256],denominator[256],*token=NULL;
+  int found_denom=1,i_n,i_d,i,denom,numer,factor;
+  PetscReal this_angle=0;
+  angle_string[strlen(angle_string)-1] = 0; //Remove trailing )
+  //Assume either pi*num or num*pi or pi/num or num/pi, but not, say num*pi*num*num*pi, etc
+  //First, split string on ',', in case this is a multi-angle gate
+  i=0;
+  while (token=strsep(&angle_string,",")) {
+    //Token should be one angle, possibly with pi
+    //Search for 'pi*'
+    if (strstr(token,"pi*")){
+      //We have a 'pi*' then some number
+      sscanf(token,"pi*%lf",&this_angle);
+      this_angle = PETSC_PI * this_angle;
+    } else if(strstr(token,"pi/")){
+      //We have a 'pi/' then some number
+      sscanf(token,"pi/%lf",&this_angle);
+      this_angle = PETSC_PI/(this_angle);
+    } else if(strstr(token,"*pi")){
+      sscanf(token,"%lf*pi",&this_angle);
+      this_angle = PETSC_PI * this_angle;
+    } else if(strstr(token,"pi/")){
+      //We have a '/pi' then some number -- Is this necessaty?
+      sscanf(token,"%lf/pi",&this_angle);
+      this_angle = this_angle/PETSC_PI;
+    } else {
+      //No pi found, just read the angle
+      sscanf(token,"%lf",&this_angle);
+    }
+    if(i==0){
+      *angle1 = this_angle;
+    } else if(i==1){
+      *angle2 = this_angle;
+    } else if (i==2){
+      *angle3 = this_angle;
+    } else{
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! Too many angle parameters in gate!\n");
+      exit(9);
+    }
+    i++;
+  }
+
+  return;
+}
+
+
+void qiskit_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
+  FILE *fp;
+  int ch = 0,lines=0,found_qubits=0,blank_lines=0,comment_lines=0;
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  PetscReal time=1.0;
+
+  fp = fopen(filename,"r");
+
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in qiskit_qasm_read!\n");
+      exit(1);
+    }
+  }
+
+  //Count number of lines
+  while(!feof(fp)){
+    ch = fgetc(fp);
+    if(ch == '\n'){
+        lines++;
+      }
+    if (ch  ==  '\n'){
+      if ((ch = fgetc(fp))  ==  '\n'){
+        fseek(fp, -1, 1);
+        blank_lines++;
+      }
+    }
+  }
+  fseek(fp, 0, 0);
+  while ((ch = fgetc(fp)) != EOF){
+    if (ch  ==  '/'){
+      if ((ch = fgetc(fp))  ==  '/'){
+        comment_lines++;
+      }
+    }
+  }
+
+  //Rewind file
+  rewind(fp);
+  //Subtract off 3 because of the header, subtract comments and blank lines, too
+  lines = lines - 3 - blank_lines - comment_lines;
+  //Allocate the circuit
+
+  create_circuit(circ,lines);
+  found_qubits = 0;
+  *num_qubits = 0;
+  while ((read = getline(&line, &len, fp)) != -1){
+    if (strstr(line,"qreg")){
+      //Get number of qubits by reading qreg line
+      sscanf(line,"qreg q[%d];",num_qubits);
+      found_qubits = 1;
+    } else if(found_qubits==1){
+      //Skip lines that are only a newline - 'blank lines'
+      //FIXME: Will fail if there are spaces somewhere, or if the first character is a space, etc
+      if(!isspace(line[0])){
+        //Add the first gate to list
+        _qiskit_qasm_add_gate(line,circ,time,*num_qubits,1);
+        time = time + 1.0;
+      }
+    } //else skip the header
+  }
+
+  fclose(fp);
+  if (line) free(line);
+  return;
+}
+
+void cirq_qasm_read(char filename[],PetscInt *num_qubits,circuit *circ){
+  FILE *fp;
+  int ch = 0,lines=0,found_qubits=0,blank_lines=0,comment_lines=0;
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  PetscReal time=1.0;
+
+  fp = fopen(filename,"r");
+
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in qiskit_qasm_read!\n");
+      exit(1);
+    }
+  }
+
+  //Count number of lines
+  while(!feof(fp)){
+    ch = fgetc(fp);
+    if(ch == '\n'){
+        lines++;
+      }
+    if (ch  ==  '\n'){
+      if ((ch = fgetc(fp))  ==  '\n'){
+        fseek(fp, -1, 1);
+        blank_lines++;
+      }
+    }
+  }
+  fseek(fp, 0, 0);
+  while ((ch = fgetc(fp)) != EOF){
+    if (ch  ==  '/'){
+      if ((ch = fgetc(fp))  ==  '/'){
+        comment_lines++;
+      }
+    }
+  }
+
+  //Rewind file
+  rewind(fp);
+  //Subtract off 3 because of the header, subtract comments and blank lines, too
+  lines = lines - 3 - blank_lines - comment_lines;
+  //Allocate the circuit
+
+  create_circuit(circ,lines);
+  found_qubits = 0;
+  *num_qubits = 0;
+  while ((read = getline(&line, &len, fp)) != -1){
+    if (strstr(line,"qreg")){
+      //Get number of qubits by reading qreg line
+      sscanf(line,"qreg q[%d];",num_qubits);
+      found_qubits = 1;
+    } else if(found_qubits==1){
+      //Skip lines that are only a newline - 'blank lines'
+      //FIXME: Will fail if there are spaces somewhere, or if the first character is a space, etc
+      if(!isspace(line[0])){
+        //Add the first gate to list
+        _qiskit_qasm_add_gate(line,circ,time,*num_qubits,0);
+        time = time + 1.0;
+      }
+    } //else skip the header
+  }
+
+  fclose(fp);
+  if (line) free(line);
+  return;
+}
+
+void _qiskit_qasm_add_gate(char *line,circuit *circ,PetscReal time,PetscInt num_qubits,PetscInt qiskit_ordering){
+  char *token=NULL,pi_string[256];
+  int qubit1=-1,qubit2=-1,skip_gate=0;
+  PetscReal angle,angle2,angle3;
+  gate_type my_gate_type=NULL_GATE;
+  size_t i,j;
+  //qiskit_ordering reorders the qubits so that the wavefunction the is printed out is consistent with qiskit
+  // Split string on ' ' to separate gate type and qubits
+  while (token=strsep(&line," ")) {
+    //Strip whitespace
+    for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++]));
+    //Do direct strcmp for some, strstr for others
+    //FIXME: Not exhaustive
+    if (strstr(token,"q[")){ //can't have q named gates
+      // qubit numbers
+      if (skip_gate==0){
+        if (my_gate_type==NULL_GATE){
+          PetscPrintf(PETSC_COMM_WORLD,"ERROR! NULL_GATE type encounterd!\n");
+          exit(0);
+        } else if (my_gate_type<0){
+          //Multiqubit gate
+          sscanf(token,"q[%d],q[%d];",&qubit1,&qubit2);
+          if(qiskit_ordering==1){
+            qubit1 = num_qubits - qubit1 - 1;
+            qubit2 = num_qubits - qubit2 - 1;
+          }
+          add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,qubit2);
+        } else {
+          //Single qubit gate
+          sscanf(token,"q[%d];",&qubit1);
+          if(qiskit_ordering==1){
+            qubit1 = num_qubits - qubit1 - 1;
+          }
+          if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
+            //U3 gate
+            add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,angle,angle2,angle3);
+          } else if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ){
+            //Single parameter rotations
+            add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1,angle);
+          } else {
+            //No parameter gates (X, H, Y, Z, etc)
+            add_gate_to_circuit_sys(circ,time,my_gate_type,qubit1);
+          }
+        }
+      } else {
+        //Skipped a barrier
+        skip_gate = 0;
+      }
+    } else {
+      // gate types
+      // FIXME: Only u1,u2,u3,cx,cz,h,rx,ry,rzfor now!
+      // Assume pi was stripped out
+      if (strcmp(token,"cx")==0){//strcmp because no angle
+        my_gate_type = CNOT;
+      } else if (strcmp(token,"cz")==0){//strcmp because no angle
+        my_gate_type = CZ;
+      } else if (strcmp(token,"h")==0){//strcmp because no angle
+        my_gate_type = HADAMARD;
+      } else if (strstr(token,"rx")) {//strstr because changing angle
+        my_gate_type = RX;
+        sscanf(token,"rx(%s)",&pi_string);
+        _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
+      } else if (strstr(token,"ry")) {//strstr because changing angle
+        my_gate_type = RY;
+        sscanf(token,"ry(%s)",&pi_string);
+        _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
+      } else if (strstr(token,"rz")) {//strstr because changing angle
+        my_gate_type = RZ;
+        sscanf(token,"rz(%s)",&pi_string);
+        _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
+      } else if (strstr(token,"u1")) {//strstr because changing angle
+        my_gate_type = U1;
+        sscanf(token,"u1(%s)",&pi_string);
+        _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
+        //        sscanf(token,"u1(%lf)",&angle3);
+        //We read angle in first, but we want that to be angle3 because
+        //of the definition of U1
+        angle3 = angle;
+        angle = 0;
+        angle2 = 0;
+      } else if (strstr(token,"u2")) {
+        my_gate_type = U2;
+        //u2(phi,lambda) = u3(pi/2,phi,lambda)
+        //        sscanf(token,"u2(%lf,%lf)",&angle2,&angle3);
+        sscanf(token,"u2(%s)",&pi_string);
+        _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
+        //reassign angles to fit u3 definition
+        angle3 = angle2;
+        angle2 = angle;
+        angle = PETSC_PI/2;
+      } else if (strstr(token,"u3")) {
+        my_gate_type = U3;
+        sscanf(token,"u3(%s)",&pi_string);
+        _qasm_get_angles_from_string(pi_string,&angle,&angle2,&angle3);
+        /* sscanf(token,"u3(%lf,%lf,%lf)",&angle,&angle2,&angle3); */
+      } else if (strstr(token,"x")) {
+        my_gate_type = SIGMAX;
+      } else if (strstr(token,"barrier")){
+        //Skip barrier
+        skip_gate = 1;
+      } else {
+        PetscPrintf(PETSC_COMM_WORLD,"%s\n",token);
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! Gate type not recognized in qiskit_qasm!\n");
+        exit(0);
+      }
+    }
+  }
+
+  return;
+}
+
+void qiskit_vqe_get_expectation(char filename[],qvec rho,PetscScalar *trace_val,PetscInt *num_evs_r,PetscScalar **evs,qsystem sys){
+  FILE *fp;
+  char *token=NULL,*token2=NULL;
+  char *line = NULL,gate_char;
+  size_t len = 0,i,j;
+  ssize_t read;
+  int token_number,num_ops,qubit_number,num_evs=0;
+  PetscScalar temp_ev_vals[1000]; //FIXME Temp over allocation
+  operator ops[100];
+  PetscReal scalar_multiply;
+  PetscScalar temp_trace_val;
+  fp = fopen(filename,"r");
+  *trace_val = 0.0;
+  if (fp == NULL){
+    if (nid==0){
+      printf("ERROR! File not found in qiskit_vqe_get_expectation!\n");
+      exit(1);
+    }
+  }
+
+  while ((read = getline(&line, &len, fp)) != -1){
+    token_number = 0;
+    while (token=strsep(&line,"\t")) {
+      //Strip whitespace
+      /* for (i=0, j=0; token[j]=token[i]; j+=!isspace(token[i++])); */
+      if(token_number!=0){
+        token2=strsep(&token,"+");
+        token2++;
+        //Scalar multiply before pauli string
+        scalar_multiply = atof(token2);
+      } else {
+        num_ops = strlen(token);
+        for (i=0;i<num_ops;i++){
+          qubit_number = num_ops-i-1; //Might need to be num_ops - i because qiskit has reverse order
+          gate_char = token[i];
+          if (gate_char=='I'){
+            ops[i] = sys->subsystem_list[qubit_number]->eye;
+          } else if (gate_char=='X'){
+            ops[i] = sys->subsystem_list[qubit_number]->sig_x;
+          } else if (gate_char=='Y'){
+            ops[i] = sys->subsystem_list[qubit_number]->sig_y;
+          } else if (gate_char=='Z'){
+            ops[i] = sys->subsystem_list[qubit_number]->sig_z;
+          }
+        }
+        token_number = 1;
+      }
+    }
+    /*
+     * At this point, we have read in the scalar_multiply
+     * and the operator. Now get the value.
+     */
+    if (num_ops!=0){
+      //This is a hack where I pass many ops, even though many of them
+      //may not exist or be valid; they won't be accessed, at least.
+      //Consider passing the array instead, and iterating inside?
+      /* get_expectation_value_qvec(rho,&temp_trace_val,num_ops,ops[0],ops[1],ops[2],ops[3], */
+      /*                            ops[4],ops[5],ops[6],ops[7],ops[8],ops[9],ops[10],ops[11]); */
+      get_expectation_value_qvec_list(rho,&temp_trace_val,num_ops,ops);
+      temp_ev_vals[num_evs] = temp_trace_val;
+      temp_trace_val = temp_trace_val * scalar_multiply;
+      *trace_val = *trace_val + temp_trace_val;
+
+      num_evs = num_evs + 1;
+
+    }
+  }
+  *evs = malloc(num_evs*sizeof(PetscScalar));
+  for(i=0;i<num_evs;i++){
+    (*evs)[i] = temp_ev_vals[i];
+  }
+  *num_evs_r = num_evs;
+  return;
+
 }

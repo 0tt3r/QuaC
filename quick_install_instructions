@@ -1,7 +1,7 @@
 #For example, if you wanted to install PETSc into dir/soft
 mkdir soft
 cd soft
-git clone -b maint https://bitbucket.org/petsc/petsc petsc
+git clone -b maint https://gitlab.com/petsc/petsc.git petsc
 cd petsc/
 export PETSC_DIR=dir/soft/petsc
 export PETSC_ARCH=linux-gnu-c-complex
@@ -15,4 +15,13 @@ export PETSC_ARCH=linux-gnu-c-complex
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} test
 
-#Note, you should set PETSC_DIR=<dir/soft/petsc> and PETSC_ARCH=linux-gnu-c-complex in your bashrc
+#Note, you should set PETSC_DIR=<dir/soft/petsc> and PETSC_ARCH=linux-gnu-c-soft in your bashrc
+
+##Now, make SLEPc
+cd ..
+git clone -b maint https://bitbucket.org/slepc/slepc
+cd slepc
+export SLEPC_DIR=dir/soft/slepc
+./configure
+make SLEPC_DIR=${SLEPC_DIR} PETSC_ARCH=${PETSC_ARCH}
+

@@ -6,6 +6,7 @@
 #include <petsc.h>
 #include <stdarg.h>
 
+#define GATE_MAX_ELEM_ROW 16
 
 //FIXME: This should maybe be accessible by a user to register a new gate?
 
@@ -16,19 +17,32 @@ void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantu
 PetscErrorCode _sys_QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
   qsystem sys = (qsystem) ctx;
   /* Check if the time has passed a gate */
-  PetscInt current_gate,num_gates;
+  PetscInt current_gate,num_gates,current_layer,num_layers;
   PetscLogEventBegin(_qc_event_function_event,0,0,0,0);
   //FIXME: Circuits at time 0 do not work
   if (sys->current_circuit<sys->num_circuits) {
-    current_gate = sys->circuit_list[sys->current_circuit].current_gate;
-    num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
-    if (current_gate<num_gates) {
-      /* We signal that we passed the time by returning a negative number */
-      fvalue[0] = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time
-        +sys->circuit_list[sys->current_circuit].start_time - t;
+    if (sys->circuit_list[sys->current_circuit].num_layers>0){
+      //We have scheduled the circuit, so we will use layers instead of gates
+      current_layer = sys->circuit_list[sys->current_circuit].current_layer;
+      num_layers    = sys->circuit_list[sys->current_circuit].num_layers;
+      if (current_layer<num_layers) {
+        /* We signal that we passed the time by returning a negative number */
+        fvalue[0] = sys->circuit_list[sys->current_circuit].layer_list[current_layer].time
+          +sys->circuit_list[sys->current_circuit].start_time - t;
+      } else {
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! current_layer should never be larger than num_layers in _QC_EventFunction\n");
+        exit(0);
+      }
     } else {
-      if (nid==0){
-        printf("ERROR! current_gate should never be larger than num_gates in _QC_EventFunction\n");
+      //We just go through the gate list
+      current_gate = sys->circuit_list[sys->current_circuit].current_gate;
+      num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
+      if (current_gate<num_gates) {
+        /* We signal that we passed the time by returning a negative number */
+        fvalue[0] = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time
+          +sys->circuit_list[sys->current_circuit].start_time - t;
+      } else {
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! current_gate should never be larger than num_gates in _QC_EventFunction\n");
         exit(0);
       }
     }
@@ -45,31 +59,54 @@ PetscErrorCode _sys_QC_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue
 PetscErrorCode _sys_QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],
                                      PetscReal t,Vec U,PetscBool forward,void* ctx) {
   qsystem sys = (qsystem) ctx;
-  PetscInt current_gate,num_gates;
-  PetscReal gate_time;
+  PetscInt current_gate,num_gates,current_layer,num_layers,i;
+  PetscReal gate_time,layer_time;
    /* We only have one event at the moment, so we do not need to branch.
     * If we had more than one event, we would put some logic here.
     */
 
   PetscLogEventBegin(_qc_postevent_function_event,0,0,0,0);
   if (nevents) {
-    num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
-    current_gate = sys->circuit_list[sys->current_circuit].current_gate;
-    gate_time = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time;
-    /* Apply all gates at a given time incrementally  */
-    while (current_gate<num_gates && sys->circuit_list[sys->current_circuit].gate_list[current_gate].time == gate_time){
-      /* apply the current gate */
-      _apply_gate_sys(sys,sys->circuit_list[sys->current_circuit].gate_list[current_gate],U);
+    if (sys->circuit_list[sys->current_circuit].num_layers>0){
+      //We have scheduled the circuit, so we will use layers instead of gates
+      num_layers    = sys->circuit_list[sys->current_circuit].num_layers;
+      current_layer = sys->circuit_list[sys->current_circuit].current_layer;
+      layer_time = sys->circuit_list[sys->current_circuit].layer_list[current_layer].time;
+      /* Apply all layers at a given time incrementally  */
+      // NOTE: Should multiple layers be allowed at the same time?
+      while (current_layer<num_layers && sys->circuit_list[sys->current_circuit].layer_list[current_layer].time == layer_time){
+        num_gates = sys->circuit_list[sys->current_circuit].layer_list[current_layer].num_gates;
+        /* Loop through the gates in the layer and apply them */
+        for (i=0;i<num_gates;i++){
+          _apply_gate_sys(sys,sys->circuit_list[sys->current_circuit].layer_list[current_layer].gate_list[i],U);
+        }
+        /* Increment our layer counter */
+        sys->circuit_list[sys->current_circuit].current_layer = sys->circuit_list[sys->current_circuit].current_layer + 1;
+        current_layer = sys->circuit_list[sys->current_circuit].current_layer;
+      }
+      if(sys->circuit_list[sys->current_circuit].current_layer>=sys->circuit_list[sys->current_circuit].num_layers){
+        /* We've exhausted this circuit; move on to the next. */
+        sys->current_circuit = sys->current_circuit + 1;
+      }
 
-      /* Increment our gate counter */
-      sys->circuit_list[sys->current_circuit].current_gate = sys->circuit_list[sys->current_circuit].current_gate + 1;
+    } else {
+      num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
       current_gate = sys->circuit_list[sys->current_circuit].current_gate;
-    }
-    if(sys->circuit_list[sys->current_circuit].current_gate>=sys->circuit_list[sys->current_circuit].num_gates){
-      /* We've exhausted this circuit; move on to the next. */
-      sys->current_circuit = sys->current_circuit + 1;
-    }
+      gate_time = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time;
+      /* Apply all gates at a given time incrementally  */
+      while (current_gate<num_gates && sys->circuit_list[sys->current_circuit].gate_list[current_gate].time == gate_time){
+        /* apply the current gate */
+        _apply_gate_sys(sys,sys->circuit_list[sys->current_circuit].gate_list[current_gate],U);
 
+        /* Increment our gate counter */
+        sys->circuit_list[sys->current_circuit].current_gate = sys->circuit_list[sys->current_circuit].current_gate + 1;
+        current_gate = sys->circuit_list[sys->current_circuit].current_gate;
+      }
+      if(sys->circuit_list[sys->current_circuit].current_gate>=sys->circuit_list[sys->current_circuit].num_gates){
+        /* We've exhausted this circuit; move on to the next. */
+        sys->current_circuit = sys->current_circuit + 1;
+      }
+    }
   }
 
   TSSetSolution(ts,U);
@@ -88,10 +125,11 @@ PetscErrorCode _sys_QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_l
  *        ...:   list of qubit gate will act on, other (U for controlled_U?)
  */
 void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type,...){
-  PetscReal theta;
+  PetscReal theta,phi,lambda;
   int num_qubits=0,qubit,i;
+  void *gate_ctx;
   va_list ap;
-
+  custom_gate_func_type custom_gate_func;
   if (_gate_array_initialized==0){
     //Initialize the array of gate function pointers
     _initialize_gate_function_array_sys();
@@ -110,11 +148,17 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
   // Store arguments in list
   (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
   (*circ).gate_list[(*circ).num_gates].time = time;
+  (*circ).gate_list[(*circ).num_gates].run_time = -1;
   (*circ).gate_list[(*circ).num_gates].my_gate_type = my_gate_type;
+  (*circ).gate_list[(*circ).num_gates].num_qubits = num_qubits;
   (*circ).gate_list[(*circ).num_gates]._get_val_j_from_global_i_sys = _get_val_j_functions_gates_sys[my_gate_type+_min_gate_enum];
 
-  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ) {
-    va_start(ap,num_qubits+1); //FIXME This +1 is probably useless?
+  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ){
+    va_start(ap,num_qubits+1);
+  } else if (my_gate_type==CUSTOM2QGATE||my_gate_type==CUSTOM1QGATE) {
+    va_start(ap,num_qubits+2);
+  } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
+    va_start(ap,num_qubits+3);
   } else {
     va_start(ap,num_qubits);
   }
@@ -133,23 +177,40 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
     }
     (*circ).gate_list[(*circ).num_gates].qubit_numbers[i] = qubit;
   }
+  //Set parameters to 0
+  (*circ).gate_list[(*circ).num_gates].theta = 0;
+  (*circ).gate_list[(*circ).num_gates].phi = 0;
+  (*circ).gate_list[(*circ).num_gates].lambda = 0;
+  (*circ).gate_list[(*circ).num_gates].gate_ctx = NULL;
+  (*circ).gate_list[(*circ).num_gates].custom_func = NULL;
+
   if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ){
     //Get the theta parameter from the last argument passed in
     theta = va_arg(ap,PetscReal);
     (*circ).gate_list[(*circ).num_gates].theta = theta;
-  } else {
-    //Set theta to 0
-    (*circ).gate_list[(*circ).num_gates].theta = 0;
+  } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
+    theta = va_arg(ap,PetscReal);
+    (*circ).gate_list[(*circ).num_gates].theta = theta;
+    phi = va_arg(ap,PetscReal);
+    (*circ).gate_list[(*circ).num_gates].phi = phi;
+    lambda = va_arg(ap,PetscReal);
+    (*circ).gate_list[(*circ).num_gates].lambda = lambda;
+  } else if (my_gate_type==CUSTOM2QGATE||my_gate_type==CUSTOM1QGATE){
+    gate_ctx = va_arg(ap,void *);
+    (*circ).gate_list[(*circ).num_gates].gate_ctx = gate_ctx;
+    custom_gate_func = va_arg(ap,custom_gate_func_type);
+    (*circ).gate_list[(*circ).num_gates].custom_func = custom_gate_func;
   }
+
 
   (*circ).num_gates = (*circ).num_gates + 1;
   return;
 }
 
 void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
-  PetscScalar op_vals[2];
+  PetscScalar op_vals[GATE_MAX_ELEM_ROW];
   PetscInt Istart,Iend,i_mat;
-  PetscInt i,these_js[2],num_js;
+  PetscInt i,these_js[GATE_MAX_ELEM_ROW],num_js;
   Mat tmp_mat1,tmp_mat2,tmp_mat3;
 
   // Should this inherit its stucture from full_A?
@@ -159,7 +220,7 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
   MatSetSizes(tmp_mat1,PETSC_DECIDE,PETSC_DECIDE,sys->total_levels,sys->total_levels);
   MatSetFromOptions(tmp_mat1);
 
-  MatMPIAIJSetPreallocation(tmp_mat1,2,NULL,2,NULL);
+  MatMPIAIJSetPreallocation(tmp_mat1,GATE_MAX_ELEM_ROW,NULL,GATE_MAX_ELEM_ROW,NULL);
 
   /* Construct the first matrix in tmp_mat1 */
   MatGetOwnershipRange(tmp_mat1,&Istart,&Iend);
@@ -178,7 +239,7 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
     MatSetSizes(tmp_mat2,PETSC_DECIDE,PETSC_DECIDE,sys->total_levels,sys->total_levels);
     MatSetFromOptions(tmp_mat2);
 
-    MatMPIAIJSetPreallocation(tmp_mat2,2,NULL,2,NULL);
+    MatMPIAIJSetPreallocation(tmp_mat2,GATE_MAX_ELEM_ROW,NULL,GATE_MAX_ELEM_ROW,NULL);
 
     MatGetOwnershipRange(tmp_mat2,&Istart,&Iend);
     for (i=Istart;i<Iend;i++){
@@ -205,6 +266,95 @@ void combine_circuit_to_mat_sys(qsystem sys,Mat *matrix_out,circuit circ){
   return;
 }
 
+void schedule_circuit_layers(qsystem sys,circuit *circ){
+  PetscInt *cur_layer_num,i,j,max_layer,this_layer;
+  PetscReal current_time,max_gate_time;
+  /*
+   * Schedule the circuit as a sequence of 'layers'. Layers will
+   * then be applied sequentially.
+   */
+  PetscMalloc1(sys->num_subsystems,&cur_layer_num);
+  for(i=0;i<sys->num_subsystems;i++){
+    //All qubits start on layer 0
+    cur_layer_num[i] = 0;
+  }
+
+  // Allocate room for the gate lists in the layers
+  for(i=0;i<(*circ).num_gates;i++){
+    //Cannot have more than num_subsystems in a layer
+    PetscMalloc1(sys->num_subsystems,&((*circ).layer_list[i].gate_list));
+    (*circ).layer_list[i].num_gates = 0;
+  }
+
+  /*
+   * Loop through gate list
+   */
+  for(i=0;i<(*circ).num_gates;i++){
+
+    /*
+     * Find the layer that this gate should go in by finding the largest
+     * layer that one of its constituent qubits is in
+     */
+    max_layer = 0;
+
+    for(j=0;j<(*circ).gate_list[i].num_qubits;j++){
+      this_layer = cur_layer_num[(*circ).gate_list[i].qubit_numbers[j]];
+      if(this_layer>max_layer){
+        max_layer = this_layer;
+      }
+    }
+    // Append gate to the appropriate layer
+    (*circ).layer_list[max_layer].gate_list[(*circ).layer_list[max_layer].num_gates] = (*circ).gate_list[i];
+    (*circ).layer_list[max_layer].num_gates = (*circ).layer_list[max_layer].num_gates + 1;
+    //Increase the layer counter for the involved qubits to max_layer + 1
+    for(j=0;j<(*circ).gate_list[i].num_qubits;j++){
+      cur_layer_num[(*circ).gate_list[i].qubit_numbers[j]] = max_layer + 1;
+    }
+  }
+  max_layer = 0;
+  for(j=0;j<sys->num_subsystems;j++){
+    this_layer = cur_layer_num[j];
+    if(this_layer>max_layer){
+      max_layer = this_layer;
+    }
+  }
+  (*circ).num_layers = max_layer;
+
+  /*
+   * If we had set gate times before, we set the layer times to reflect that,
+   * otherwise, we set them at 1.0 time unit apart, starting at time 1.
+   */
+  // Check if the first gate of the first layer has a time
+  if((*circ).layer_list[0].gate_list[0].run_time>0){
+    // The first layer starts at 1.0 time units by default
+    // FIXME: Maybe make this 0 when I fix the 0 bug?
+
+    current_time = 1.0;
+    for(i=0;i<(*circ).num_layers;i++){
+      (*circ).layer_list[i].time = current_time;
+      //Find the longest gate in the layer
+      max_gate_time = -2;
+      for(j=0;j<(*circ).layer_list[i].num_gates;j++){
+        if((*circ).layer_list[i].gate_list[j].run_time>max_gate_time){
+          max_gate_time = (*circ).layer_list[i].gate_list[j].run_time;
+        }
+      }
+      //Check if none of the gates in the layer had a positive run_time
+      if(max_gate_time<0){
+        PetscPrintf(PETSC_COMM_WORLD,"WARNING: All gate run times for layer were negative; defaulting to 1.0\n");
+        max_gate_time = 1.0;
+      }
+      // Increase current_time by this layers max time
+      current_time = current_time + max_gate_time;
+    }
+  } else {
+    for(i=0;i<(*circ).num_layers;i++){
+      (*circ).layer_list[i].time = i+1;
+    }
+  }
+
+  return;
+}
 
 /* register a circuit to be run a specific time during the time stepping */
 void apply_circuit_to_sys(qsystem sys,circuit *circ,PetscReal time){
@@ -243,18 +393,19 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   PetscInt i,num_js,*these_js,Istart,Iend;
   // FIXME: maybe total_levels*2 is too much or not enough? Consider having a better bound.
 
-  op_vals  = malloc(sys->total_levels*2*sizeof(PetscScalar)); //Up to two elements per row in the DM case
-  these_js = malloc(sys->total_levels*2*sizeof(PetscInt)); //Up to two elements per row in the DM case
   PetscLogEventBegin(_apply_gate_event,0,0,0,0);
+  op_vals  = malloc(GATE_MAX_ELEM_ROW*sizeof(PetscScalar));
+  these_js = malloc(GATE_MAX_ELEM_ROW*sizeof(PetscInt)); //Up to four elements per row in the DM case
+
 
   VecDuplicate(rho,&tmp_answer); //Create a new vec with the same size as rho
 
   //FIXME: Do this allocation once!
   MatCreate(PETSC_COMM_WORLD,&gate_mat);
+  MatSetType(gate_mat,MATMPIAIJ);
   MatSetSizes(gate_mat,PETSC_DECIDE,PETSC_DECIDE,sys->dim,sys->dim);
   MatSetFromOptions(gate_mat);
-  MatMPIAIJSetPreallocation(gate_mat,4,NULL,4,NULL); //This matrix is incredibly sparse!
-  MatSetUp(gate_mat);
+  MatMPIAIJSetPreallocation(gate_mat,GATE_MAX_ELEM_ROW,NULL,GATE_MAX_ELEM_ROW,NULL); //This matrix is incredibly sparse!
   /* Construct the gate matrix, on the fly */
   MatGetOwnershipRange(gate_mat,&Istart,&Iend); //Could be different Istart and Iend than Hamiltonian mat
 
@@ -270,7 +421,7 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   }
   MatAssemblyBegin(gate_mat,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(gate_mat,MAT_FINAL_ASSEMBLY);
-  /* MatView(gate_mat,PETSC_VIEWER_STDOUT_SELF); */
+
   MatMult(gate_mat,rho,tmp_answer);
   VecCopy(tmp_answer,rho); //Copy our tmp_answer array into rho
 
@@ -279,6 +430,7 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   free(op_vals);
   free(these_js);
   PetscLogEventEnd(_apply_gate_event,0,0,0,0);
+  return;
 }
 
 
@@ -1001,6 +1153,107 @@ void CZX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_
   return;
 }
 
+void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                  PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[4],js_i2[4];
+  PetscInt control,i_tmp,my_levels,j_sub,moved_system,j1;
+  PetscScalar vals_i1[4],vals_i2[4],tmp_val;
+
+  /*
+   * Expand a custom 2q gate
+   */
+
+  if (tensor_control!= 0) {
+    /* 4 is hardcoded because 2 qubits with 2 levels each */
+    my_levels   = 4;
+    // Get the correct hilbert space information
+    i_tmp = i;
+    _get_n_after_2qbit_sys(sys,&i_tmp,gate.qubit_numbers,tensor_control,&n_after,&control,&moved_system,&i_sub);
+
+    *num_js = 4;
+
+    tmp_int = i_tmp - i_sub * n_after;
+    k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+    k1      = tmp_int%(my_levels*n_after);
+
+
+    j_sub   = 0;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+    vals[0] = tmp_val;
+    js[0] = j1;
+
+    j_sub   = 1;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+
+    vals[1] = tmp_val;
+    js[1] = j1;
+
+    j_sub   = 2;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+
+    vals[2] = tmp_val;
+    js[2] = j1;
+
+    j_sub   = 3;
+    j1   = (j_sub) * n_after + k1 + k2*my_levels*n_after;
+    /* Permute back to computational basis */
+    _change_basis_ij_pair_sys(sys,&i_tmp,&j1,moved_system,gate.qubit_numbers[control]+1); // i_tmp useless here
+    gate.custom_func(&tmp_val,i_sub,j_sub,gate.gate_ctx);
+
+    vals[3] = tmp_val;
+    js[3] = j1;
+
+  } else {
+        /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/sys->total_levels;
+    i2 = i%sys->total_levels;
+
+    /* Now, get js for U* (i1) by calling this function */
+    CUSTOM2Q_get_val_j_from_global_i_sys(sys,i1,gate,&num_js_i1,js_i1,vals_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    CUSTOM2Q_get_val_j_from_global_i_sys(sys,i2,gate,&num_js_i2,js_i2,vals_i2,-1);
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *num_js = 0;
+    for(k1=0;k1<num_js_i1;k1++){
+      for(k2=0;k2<num_js_i2;k2++){
+        js[*num_js] = sys->total_levels * js_i1[k1] + js_i2[k2];
+        //Need to take complex conjugate to get true U*
+        vals[*num_js] = PetscConjComplex(vals_i1[k1])*vals_i2[k2];
+
+        *num_js = *num_js + 1;
+      }
+    }
+
+  }
+
+  return;
+}
+
 
 void HADAMARD_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                       PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
@@ -1091,6 +1344,119 @@ void HADAMARD_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_
   return;
 }
 
+void U1_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                    PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  /*
+   * The U1 gate is a just a simpler U3, so we call U3 instead
+   */
+  U3_get_val_j_from_global_i_sys(sys,i,gate,num_js,js,vals,tensor_control);
+  return;
+}
+
+void U2_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                    PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  /*
+   * The U2 gate is a just a simpler U3, so we call U3 instead
+   */
+  U3_get_val_j_from_global_i_sys(sys,i,gate,num_js,js,vals,tensor_control);
+  return;
+}
+
+
+void U3_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                      PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  PetscInt n_after,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],my_levels;
+  PetscScalar vals_i1[2],vals_i2[2];
+  PetscReal theta,lambda,phi;
+  /*
+   * u3 gate
+   *
+   * u3(theta,phi,lambda)  = | cos(theta/2)              -e^(i lambda) * sin(theta/2)    |
+   *                         | e^(i phi) sin(theta/2)    e^(i (lambda+phi)) cos(theta/2) |
+   * the u3 gate is a general one qubit transformation.
+   * the u2 gate is u3(pi/2,phi,lambda)
+   * the u1 gate is u3(0,0,lambda)
+   * The u3 gate has two elements per row,
+   * with both diagonal anad off diagonal elements
+   *
+   */
+  theta = gate.theta;
+  phi = gate.phi;
+  lambda = gate.lambda;
+  if (tensor_control!= 0) {
+    my_levels = 2; //Hardcoded becase single qubit gate
+    _get_n_after_1qbit_sys(sys,i,gate.qubit_numbers[0],tensor_control,&n_after,&i_sub);
+    *num_js = 2;
+    if (i_sub==0) {
+      // Diagonal element
+      js[0]   = i;
+      vals[0] = PetscCosReal(theta/2);
+
+      // Off diagonal element
+      tmp_int = i - 0 * n_after;
+      k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(my_levels*n_after);
+      js[1]   = (0 + 1) * n_after + k1 + k2*my_levels*n_after;
+      vals[1] = -PetscExpComplex(PETSC_i*lambda)*PetscSinReal(theta/2);
+
+    } else if (i_sub==1){
+      // Diagonal element
+      js[0]   = i;
+      vals[0] = PetscExpComplex(PETSC_i*(lambda+phi))*PetscCosReal(theta/2);
+      // Off diagonal element
+      tmp_int = i - (0+1) * n_after;
+      k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
+      k1      = tmp_int%(my_levels*n_after);
+      js[1]   = 0 * n_after + k1 + k2*my_levels*n_after;
+      vals[1] = PetscExpComplex(PETSC_i*phi)*PetscSinReal(theta/2);
+
+    } else {
+      if (nid==0){
+        printf("ERROR! u3 gate is only defined for qubits\n");
+        exit(0);
+      }
+    }
+  } else {
+    /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/sys->total_levels;
+    i2 = i%sys->total_levels;
+
+    /* Now, get js for U* (pi1) by calling this function */
+    U3_get_val_j_from_global_i_sys(sys,i1,gate,&num_js_i1,js_i1,vals_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    U3_get_val_j_from_global_i_sys(sys,i2,gate,&num_js_i2,js_i2,vals_i2,-1);
+
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *num_js = 0;
+    for(k1=0;k1<num_js_i1;k1++){
+      for(k2=0;k2<num_js_i2;k2++){
+        js[*num_js] = sys->total_levels * js_i1[k1] + js_i2[k2];
+        //Need to take complex conjugate to get true U*
+        vals[*num_js] = PetscConjComplex(vals_i1[k1])*vals_i2[k2];
+
+        *num_js = *num_js + 1;
+      }
+    }
+  }
+
+  return;
+}
 
 void EYE_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                       PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
@@ -1232,8 +1598,8 @@ void RZ_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
   /*
    * RZ gate
    *
-   *   | exp(i*theta/2)   0               |
-   *   | 0                -exp(i*theta/2) |
+   *   | 1   0            |
+   *   | 0   exp(i*theta) |
    *
    */
 
@@ -1245,12 +1611,14 @@ void RZ_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
     if (i_sub==0) {
       // Diagonal element
       js[0] = i;
-      vals[0] = PetscExpComplex(PETSC_i*theta/2);
+      //      vals[0] = PetscExpComplex(PETSC_i*theta/2);
+      vals[0] = 1;//PetscExpComplex(PETSC_i*theta/2);
 
     } else if (i_sub==1){
       // Diagonal element
       js[0] = i;
-      vals[0] = PetscExpComplex(-PETSC_i*theta/2);
+      //vals[0] = PetscExpComplex(-PETSC_i*theta/2);
+      vals[0] = PetscExpComplex(PETSC_i*theta);
 
     } else {
       if (nid==0){
@@ -1306,8 +1674,8 @@ void RY_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
   /*
    * RY gate
    *
-   *   | cos(theta/2)   sin(theta/2)  |
-   *   | -sin(theta/2)  cos(theta/2)  |
+   *   | cos(theta/2)   -sin(theta/2)  |
+   *   | sin(theta/2)    cos(theta/2)  |
    *
    */
 
@@ -1325,7 +1693,7 @@ void RY_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]     = (0 + 1) * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = PetscSinReal(theta/2);
+      vals[1]   = -PetscSinReal(theta/2);
 
 
     } else if (i_sub==1){
@@ -1338,7 +1706,7 @@ void RY_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]   = 0 * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = -PetscSinReal(theta/2);
+      vals[1]   = PetscSinReal(theta/2);
 
 
     } else {
@@ -1396,8 +1764,8 @@ void RX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
   /*
    * RX gate
    *
-   *   | cos(theta/2)    i*sin(theta/2) |
-   *   | i*sin(theta/2)  cos(theta/2)   |
+   *   | cos(theta/2)    -i*sin(theta/2) |
+   *   | -i*sin(theta/2)  cos(theta/2)   |
    *
    */
 
@@ -1416,7 +1784,7 @@ void RX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]     = (0 + 1) * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = PETSC_i * PetscSinReal(theta/2);
+      vals[1]   = -PETSC_i * PetscSinReal(theta/2);
 
 
     } else if (i_sub==1){
@@ -1429,7 +1797,7 @@ void RX_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
       k2      = tmp_int/(my_levels*n_after);//Use integer arithmetic to get floor function
       k1      = tmp_int%(my_levels*n_after);
       js[1]   = 0 * n_after + k1 + k2*my_levels*n_after;
-      vals[1]   = PETSC_i * PetscSinReal(theta/2);
+      vals[1]   = -PETSC_i * PetscSinReal(theta/2);
 
 
     } else {
@@ -1720,6 +2088,7 @@ void _get_n_after_1qbit_sys(qsystem sys,PetscInt i,int qubit_number,PetscInt ten
  * Put the gate function pointers into an array
  */
 void _initialize_gate_function_array_sys(){
+  _get_val_j_functions_gates_sys[CUSTOM2QGATE+_min_gate_enum] = CUSTOM2Q_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CZX+_min_gate_enum] = CZX_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CmZ+_min_gate_enum] = CmZ_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CZ+_min_gate_enum] = CZ_get_val_j_from_global_i_sys;
@@ -1733,4 +2102,7 @@ void _initialize_gate_function_array_sys(){
   _get_val_j_functions_gates_sys[RX+_min_gate_enum] = RX_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[RY+_min_gate_enum] = RY_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[RZ+_min_gate_enum] = RZ_get_val_j_from_global_i_sys;
+  _get_val_j_functions_gates_sys[U1+_min_gate_enum] = U1_get_val_j_from_global_i_sys;
+  _get_val_j_functions_gates_sys[U2+_min_gate_enum] = U2_get_val_j_from_global_i_sys;
+  _get_val_j_functions_gates_sys[U3+_min_gate_enum] = U3_get_val_j_from_global_i_sys;
 }

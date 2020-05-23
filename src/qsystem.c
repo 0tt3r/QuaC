@@ -13,7 +13,7 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS,PetscReal,Vec,Mat,Mat,void*); // Move to
 
 void initialize_system(qsystem *qsys){
   qsystem temp = NULL;
-  PetscInt num_init_alloc = 25;
+  PetscInt num_init_alloc = 50;
   int tmp_nid,tmp_np;
   if (!petsc_initialized){
     if (nid==0){
@@ -33,7 +33,7 @@ void initialize_system(qsystem *qsys){
   temp->alloc_subsystems = num_init_alloc;
   temp->subsystem_list = malloc(num_init_alloc*sizeof(struct operator));
   //temp->stiff_solver could go here if we used it
-
+  temp->mat_allocated = 0;
   //Alloc some space for the mat terms initially
   temp->num_time_indep = 0;
   temp->num_time_dep = 0;
@@ -66,16 +66,16 @@ void initialize_system(qsystem *qsys){
 
 void destroy_system(qsystem *qsys){
   PetscInt i;
-  free((*qsys)->subsystem_list);
+  /* free((*qsys)->subsystem_list); */
   for(i=0;i<(*qsys)->num_time_dep;i++){
     free((*qsys)->time_dep[i].ops);
   }
-  free((*qsys)->time_dep);
+  /* free((*qsys)->time_dep); */
 
   for(i=0;i<(*qsys)->num_time_indep;i++){
     free((*qsys)->time_indep[i].ops);
   }
-  free((*qsys)->time_indep);
+  /* free((*qsys)->time_indep); */
   free((*qsys)->o_nnz);
   free((*qsys)->d_nnz);
   if ((*qsys)->mat_allocated) MatDestroy(&((*qsys)->mat_A));
@@ -186,6 +186,11 @@ void add_ham_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
 
+  if(sys->num_time_indep>sys->alloc_time_indep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_ham_term!\n");
+    exit(9);
+  }
+
   sys->time_indep[sys->num_time_indep].my_term_type = HAM;
   sys->time_indep[sys->num_time_indep].a = a;
   sys->time_indep[sys->num_time_indep].num_ops = num_ops;
@@ -209,6 +214,10 @@ void add_lin_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
 
+  if(sys->num_time_indep>sys->alloc_time_indep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_lin_term!\n");
+    exit(9);
+  }
   sys->dm_equations = 1;//Lindblad equation
   sys->time_indep[sys->num_time_indep].my_term_type = LINDBLAD;
   sys->time_indep[sys->num_time_indep].a = a;
@@ -233,6 +242,10 @@ void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   int      i;
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
+  if(sys->num_time_dep>sys->alloc_time_dep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_ham_term_time_dep!\n");
+    exit(9);
+  }
 
   sys->time_dep[sys->num_time_dep].my_term_type = TD_HAM;
   sys->time_dep[sys->num_time_dep].a = a;
@@ -259,6 +272,11 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   //FIXME This gives a segfault for some reason?
   /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
 
+  if(sys->num_time_dep>sys->alloc_time_dep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_lin_term_time_dep!\n");
+    exit(9);
+  }
+
   sys->dm_equations = 1;//Lindblad equation
   sys->time_dep[sys->num_time_dep].my_term_type = TD_LINDBLAD;
   sys->time_dep[sys->num_time_dep].a = a;
@@ -275,6 +293,37 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
 
   sys->num_time_dep = sys->num_time_dep+1;
   /* PetscLogEventEnd(add_to_ham_event,0,0,0,0); */
+  return;
+}
+
+/*
+ * Clear the mat_terms so that the system can be reused with a different H / L
+ */
+void clear_mat_terms_sys(qsystem sys){
+  PetscInt i;
+
+  if (sys->mat_allocated){
+    //Free the matrix
+    MatDestroy(&(sys->mat_A));
+    sys->mat_allocated = 0; //
+  }
+
+  if(sys->num_time_indep!=0){
+    for(i=0;i<sys->num_time_dep;i++){
+      free(sys->time_dep[i].ops);
+    }
+  }
+
+  if(sys->num_time_dep!=0){
+    for(i=0;i<sys->num_time_indep;i++){
+      free(sys->time_indep[i].ops);
+    }
+  }
+
+  //Reset our counters
+  sys->num_time_indep = 0;
+  sys->num_time_dep = 0;
+
   return;
 }
 
@@ -415,10 +464,11 @@ void _preallocate_matrix(qsystem sys){
  *
  * Inputs:
  *      PetscErrorCode *monitor - function pointer for user ts_monitor function
- *
+ *      void           *ctx     - user-defined struct to store data used in tsmonitor
  */
-void set_ts_monitor_sys(qsystem sys,PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*)){
+void set_ts_monitor_sys(qsystem sys,PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*),void *ctx){
   sys->ts_monitor = (*monitor);
+  sys->ts_ctx     = ctx;
   return;
 }
 
@@ -467,7 +517,7 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
    * Set function to get information at every timestep
    */
   if (sys->ts_monitor!=NULL){
-    TSMonitorSet(ts,sys->ts_monitor,NULL,NULL);
+    TSMonitorSet(ts,sys->ts_monitor,sys->ts_ctx,NULL);
   }
 
   /*
@@ -487,12 +537,12 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
     TSSetRHSJacobian(ts,sys->mat_A,sys->mat_A,TSComputeRHSJacobianConstant,sys);
   }
   /* Print information about the matrix. */
-  PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view);
-  PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO);
-  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); */
-  MatView(sys->mat_A,mat_view);
-  PetscViewerPopFormat(mat_view);
-  PetscViewerDestroy(&mat_view);
+  /* PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view); */
+  /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO); */
+  /* /\* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); *\/ */
+  /* MatView(sys->mat_A,mat_view); */
+  /* PetscViewerPopFormat(mat_view); */
+  /* PetscViewerDestroy(&mat_view); */
 
 
 
@@ -503,7 +553,7 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
   TSSetMaxSteps(ts,steps_max);
   TSSetMaxTime(ts,time_max);
   TSSetTime(ts,init_time);
-  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_STEPOVER);
+  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_MATCHSTEP);
 
   TSSetType(ts,TSRK);
   TSRKSetType(ts,TSRK3BS);
@@ -518,7 +568,6 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
      */
     TSSetEventHandler(ts,nevents,&direction,&terminate,_sys_QC_EventFunction,_sys_QC_PostEventFunction,sys);
   }
-
 
 
   TSSetFromOptions(ts);

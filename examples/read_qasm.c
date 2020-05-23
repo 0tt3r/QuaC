@@ -21,17 +21,25 @@ int main(int argc,char **args){
   PetscReal *gamma_1,*gamma_2,gamma_base,dt,time_max;
   PetscInt num_qubits,num_stpes,steps_max,i;
   PetscScalar mat_val;
+  char filename[256],outfile[256];
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
   num_qubits = 2;
+  strcpy(filename,"NULL");
+  strcpy(outfile,"wf_out.dat");
+  PetscOptionsGetString(NULL,NULL,"-file_circ",filename,sizeof(filename),NULL);
+  PetscOptionsGetString(NULL,NULL,"-file_out",outfile,sizeof(outfile),NULL);
+  qiskit_qasm_read(filename,&num_qubits,&circ);
+  printf("Num_qubits: %d\n",num_qubits);
+  printf("gates: %d\n",circ.num_gates);
 
   qubits  = malloc(num_qubits*sizeof(struct operator)); //Allocate structure to store qubits
   gamma_1 = malloc(num_qubits*sizeof(PetscReal)); //Allocate array for qubit error rates
   gamma_2 = malloc(num_qubits*sizeof(PetscReal));
 
   initialize_system(&system);
-  gamma_base = 1*0;
+  gamma_base = 0;
   for (i=0;i<num_qubits;i++){
     create_op_sys(system,2,&qubits[i]); //create qubit
     gamma_1[i] = gamma_base;
@@ -39,25 +47,18 @@ int main(int argc,char **args){
   }
 
 
-  //Add errors to lindblad term
-  for (i=0;i<num_qubits;i++){
-    add_lin_term(system,gamma_1[i],1,qubits[i]);
-    add_lin_term(system,gamma_2[i]*2,1,qubits[i]->n);
-  }
-  //Construct the matrix now that we are done adding to it
-  construct_matrix(system);
-
-  create_circuit(&circ,5);
-  //Add some gates
-  add_gate_to_circuit_sys(&circ,0.1,SIGMAX,0);
-  add_gate_to_circuit_sys(&circ,0.5,RZ,0,0.447);
-  add_gate_to_circuit_sys(&circ,2.5,SIGMAY,1);
-  add_gate_to_circuit_sys(&circ,3.0,CNOT,0,1);
-
+  //add errors to lindblad term
+  /* for (i=0;i<num_qubits;i++){ */
+  /*   add_lin_term(system,gamma_1[i],1,qubits[i]); */
+  /*   add_lin_term(system,gamma_2[i]*2,1,qubits[i]->n); */
+  /* } */
+  /* add_ham_term(system,gamma_1[0],1,qubits[0]->n); */
+  /* //Construct the matrix now that we are done adding to it */
+  /* construct_matrix(system); */
 
   //Time step until 1 after the last gate; gates are applied every 1.0 time unit
-  time_max  = 4;
-  dt        = 0.1;
+  time_max  = circ.num_gates+1;
+  dt        = 1;
   steps_max = 100000;
 
   /* Set the ts_monitor to print results at each time step, if desired */
@@ -68,16 +69,25 @@ int main(int argc,char **args){
   add_to_qvec_loc(rho,mat_val,0);
   assemble_qvec(rho);
 
+  Mat circ_mat;
+  Vec result;
+  combine_circuit_to_mat_sys(system,&circ_mat,circ);
+  qvec_mat_mult(circ_mat,rho);
   //Start out circuit at time 0.0, first gate will be at 0
-  apply_circuit_to_sys(system,&circ,0.0);
+  //  apply_circuit_to_sys(system,&circ,0.0);
 
   //Run the evolution, with error and with the circuit
-  time_step_sys(system,rho,0.0,time_max,dt,steps_max);
+  //  time_step_sys(system,rho,0.0,time_max,dt,steps_max);
 
-  print_qvec(rho);
-
+  print_qvec_file(rho,outfile);
   //Clean up memory
-  PetscScalar pop;
+  /* PetscScalar pop; */
+  /* printf("Pops: \n"); */
+  /* for (i=0;i<num_qubits;i++){ */
+  /*   get_expectation_value_qvec(rho,&pop,1,qubits[i]->n); */
+  /*   printf(" %f ",PetscRealPart(pop)); */
+  /* } */
+  /* printf("\n"); */
   for (i=0;i<num_qubits;i++){
     destroy_op(&qubits[i]);
   }

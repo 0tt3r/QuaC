@@ -10,8 +10,13 @@
 void create_qvec_sys(qsystem,qvec*);
 void create_dm_sys(qsystem,qvec*);
 void create_wf_sys(qsystem,qvec*);
-
+void create_arb_qvec(qvec *,PetscInt,qvec_type);
 void _create_vec(Vec*,PetscInt,PetscInt);
+
+void read_qvec_dm_binary(qvec*,const char[]);
+void read_qvec_wf_binary(qvec*,const char[]);
+
+
 
 void assemble_qvec(qvec);
 void destroy_qvec(qvec*);
@@ -29,11 +34,42 @@ void get_expectation_value_qvec_list(qvec,PetscScalar*,PetscInt,operator*);
 void _get_expectation_value_wf(qvec,PetscScalar*,PetscInt,operator*);
 void _get_expectation_value_dm(qvec,PetscScalar*,PetscInt,operator*);
 
+void qvec_mat_mult(Mat,qvec);
+void loqd_sparse_mat_qvec(char[],Mat*,qvec);
+void get_fidelity_qvec(qvec,qvec,PetscReal*);
+void _get_fidelity_wf_wf(Vec,Vec,PetscReal*);
+void _get_fidelity_dm_dm(Vec,Vec,PetscReal*);
+void _get_fidelity_dm_wf(Vec,Vec,PetscReal*);
+
+void get_superfidelity_qvec(qvec,qvec,PetscReal*);
+void  _get_superfidelity_dm_dm(Vec,Vec,PetscReal*);
+
+void print_qvec_file(qvec,char[]);
+void print_dm_qvec_file(qvec,char[]);
+void print_wf_qvec_file(qvec,char[]);
+
+void get_log_xeb_fidelity(qvec,qvec,PetscReal*);
+void get_linear_xeb_fidelity(qvec,qvec,PetscReal*);
+void get_log_xeb_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_linear_xeb_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_bitstring_probs(qvec,PetscInt*,PetscReal**);
+void get_hog_score_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_hog_score_fidelity(qvec,qvec,PetscReal*);
+void get_hog_score_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
+void get_hog_score(qvec,qvec,PetscReal*);
+void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
+void _get_bitstring_probs_dm(qvec,PetscInt*,PetscReal**);
+
 void print_qvec(qvec);
 void print_dm_qvec(qvec);
 void print_wf_qvec(qvec);
 void get_wf_element_qvec(qvec,PetscInt,PetscScalar*);
+void get_wf_element_qvec_local(qvec,PetscInt,PetscScalar*);
 void get_dm_element_qvec(qvec,PetscInt,PetscInt,PetscScalar*);
 void get_dm_element_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
 
+void check_qvec_consistent(qvec,qvec);
+void copy_qvec(qvec,qvec);
+void copy_qvec_wf_to_dm(qvec,qvec);
+void get_hilbert_schmidt_dist_qvec(qvec,qvec,PetscReal*);
 #endif

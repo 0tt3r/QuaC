@@ -1,6 +1,9 @@
 #ifndef QSYSTEM_P_H_
 #define QSYSTEM_P_H_
 
+#define MAX_GATES 100 // Consider not making this a define
+
+
 struct qsystem;
 struct mat_term;
 
@@ -21,9 +24,10 @@ typedef struct {
 
 
 typedef struct circuit{
-  PetscInt num_gates,gate_list_size,current_gate;
+  PetscInt num_gates,gate_list_size,current_gate,num_layers,current_layer;
   PetscReal start_time;
   struct quantum_gate_struct *gate_list;
+  struct gate_layer_struct *layer_list;
 } circuit;
 
 
@@ -48,7 +52,9 @@ typedef struct qsystem{
   PetscInt np,nid;
   PetscInt Istart,Iend,my_num;
 
+  //TS monitor related
   PetscErrorCode (*ts_monitor)(TS,PetscInt,PetscReal,Vec,void*);
+  void *ts_ctx;
 
   //Circuit related
   PetscInt num_circuits,circuit_list_size,current_circuit;
@@ -66,7 +72,7 @@ typedef enum {
 
 typedef struct qvec{
   qvec_type my_type;
-  PetscInt n,Istart,Iend;
+  PetscInt n,Istart,Iend,total_levels;
   Vec data;
 } *qvec;
 
