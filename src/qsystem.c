@@ -235,8 +235,8 @@ void add_lin_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   return;
 }
 
-void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func)(double),
-                           PetscInt num_ops,...){
+void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func)(double,void*),
+                           void *ctx, PetscInt num_ops,...){
   va_list  ap;
   operator *ops;
   int      i;
@@ -252,6 +252,7 @@ void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   sys->time_dep[sys->num_time_dep].num_ops = num_ops;
   sys->time_dep[sys->num_time_dep].ops = malloc(num_ops*sizeof(struct operator));
   sys->time_dep[sys->num_time_dep].time_dep_func = time_dep_func;
+  sys->time_dep[sys->num_time_dep].ctx = ctx;
 
   va_start(ap,num_ops);
   //Loop through operators, store them
@@ -264,8 +265,8 @@ void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   return;
 }
 
-void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func)(double),
-                           PetscInt num_ops,...){
+void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func)(double,void*),
+                           void *ctx, PetscInt num_ops,...){
   va_list  ap;
   operator *ops;
   int      i;
@@ -283,6 +284,7 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   sys->time_dep[sys->num_time_dep].num_ops = num_ops;
   sys->time_dep[sys->num_time_dep].ops = malloc(num_ops*sizeof(struct operator));
   sys->time_dep[sys->num_time_dep].time_dep_func = time_dep_func;
+  sys->time_dep[sys->num_time_dep].ctx = ctx;
 
   va_start(ap,num_ops);
   //Loop through operators, store them
@@ -603,7 +605,7 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
   MatCopy(sys->mat_A,AA,SAME_NONZERO_PATTERN);
 
   for(i=0;i<sys->num_time_dep;i++){
-    time_dep_scalar = sys->time_dep[i].a*sys->time_dep[i].time_dep_func(t);
+    time_dep_scalar = sys->time_dep[i].a*sys->time_dep[i].time_dep_func(t,sys->time_dep[i].ctx);
     _add_ops_to_mat(time_dep_scalar,AA,sys->time_dep[i].my_term_type,
                     sys->dm_equations,sys->time_dep[i].num_ops,sys->time_dep[i].ops);
   }

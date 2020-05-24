@@ -12,8 +12,10 @@
 #include <error_correction.h>
 #include <solver.h>
 #include <dm_utilities.h>
+#include <quantum_circuits.h>
 #include <quantum_gates.h>
 #include <qasm_parser.h>
+#include <qsystem.h>
 
 static int quac_initialized = 0;
 
@@ -72,12 +74,14 @@ static double time_dep_cb(double, void*);
 typedef struct {
   PyObject_HEAD
 
+  qsystem system;
+
   int nid, np;
 
   PetscInt num_qubits;
   int num_levels;
   operator *qubits;
-  Vec rho;
+  qvec rho;
 
   PyObject *ts_monitor_callback;
 } QuaCInstance;
@@ -223,9 +227,9 @@ QuaCCircuit_add_gate(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
      Py_RETURN_NONE;
     }
 
-    add_gate_to_circuit(&self->c, time, gate, qubit1, qubit2);
+    add_gate_to_circuit_sys(&self->c, time, gate, qubit1, qubit2);
   } else {
-    add_gate_to_circuit(&self->c, time, gate, qubit1, angle);
+    add_gate_to_circuit_sys(&self->c, time, gate, qubit1, angle);
   }
 
   Py_RETURN_NONE;
@@ -274,7 +278,7 @@ QuaCInstance_dealloc(QuaCInstance *self) {
   }
 
   if (self->rho)
-    destroy_dm(self->rho);
+    destroy_qvec(&self->rho);
 
   Py_XDECREF(self->ts_monitor_callback);
   Py_TYPE(self)->tp_free((PyObject *) self);
@@ -295,6 +299,8 @@ QuaCInstance_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 
   self->nid = nid;
   self->np = np;
+
+  initialize_system(&self->system);
 
   self->num_qubits = 0;
   self->num_levels = 0;
@@ -362,7 +368,7 @@ QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   } else if (self->num_qubits) {
     self->qubits = (operator *) malloc(sizeof(operator)*self->num_qubits);
     for (int i = 0; i < self->num_qubits; ++i)
-      create_op(self->num_levels, &self->qubits[i]);
+      create_op_sys(self->system, self->num_levels, &self->qubits[i]);
   }
 
     Py_RETURN_NONE;
@@ -379,7 +385,7 @@ QuaCInstance_add_lindblad_emission(QuaCInstance *self, PyObject *args, PyObject 
                                    &qubit, &gamma_1))
     Py_RETURN_NONE;
 
-  add_lin(gamma_1, self->qubits[qubit]);
+  add_lin_term(self->system, gamma_1, 1, self->qubits[qubit]);
 
   Py_RETURN_NONE;
 }
@@ -395,7 +401,7 @@ QuaCInstance_add_lindblad_dephasing(QuaCInstance *self, PyObject *args, PyObject
                                    &qubit, &gamma_2))
     Py_RETURN_NONE;
 
-  add_lin(gamma_2, self->qubits[qubit]->n);
+  add_lin_term(self->system, gamma_2, 1, self->qubits[qubit]->n);
 
   Py_RETURN_NONE;
 }
@@ -411,8 +417,8 @@ QuaCInstance_add_lindblad_thermal_coupling(QuaCInstance *self, PyObject *args, P
                                    &qubit, &therm_1, &n_therm))
    Py_RETURN_NONE;
 
-  add_lin(therm_1*(n_therm + 1), self->qubits[qubit]);
-  add_lin(therm_1*(n_therm), self->qubits[qubit]->dag);
+  add_lin_term(self->system, therm_1*(n_therm + 1), 1, self->qubits[qubit]);
+  add_lin_term(self->system, therm_1*(n_therm), 1, self->qubits[qubit]->dag);
 
   Py_RETURN_NONE;
 }
@@ -428,8 +434,8 @@ QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyO
                                    &qubit1, &qubit2, &coup_1))
    Py_RETURN_NONE;
 
-  add_lin_mult2(coup_1, self->qubits[qubit1]->dag, self->qubits[qubit2]);
-  add_lin_mult2(coup_1, self->qubits[qubit1], self->qubits[qubit2]->dag);
+  add_lin_term(self->system, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
+  add_lin_term(self->system, coup_1, 2, self->qubits[qubit1], self->qubits[qubit2]->dag);
 
   Py_RETURN_NONE;
 }
@@ -445,7 +451,7 @@ QuaCInstance_add_ham_num(QuaCInstance *self, PyObject *args, PyObject *kwds) {
                                    &qubit, &coeff))
    Py_RETURN_NONE;
 
-  add_to_ham(coeff, self->qubits[qubit]->n);
+  add_ham_term(self->system, coeff, 1, self->qubits[qubit]->n);
 
   Py_RETURN_NONE;
 }
@@ -461,8 +467,8 @@ QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject
                                    &qubit1, &qubit2, &coup_1))
    Py_RETURN_NONE;
 
-  add_to_ham_mult2(coup_1, self->qubits[qubit1]->dag, self->qubits[qubit2]);
-  add_to_ham_mult2(coup_1, self->qubits[qubit1], self->qubits[qubit2]->dag);
+  add_ham_term(self->system, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
+  add_ham_term(self->system, coup_1, 2, self->qubits[qubit1], self->qubits[qubit2]->dag);
 
   Py_RETURN_NONE;
 }
@@ -479,7 +485,7 @@ QuaCInstance_add_ham_num_time_dep(QuaCInstance *self, PyObject *args, PyObject *
    Py_RETURN_NONE;
 
   Py_INCREF(coeff);
-  add_to_ham_time_dep(time_dep_cb, coeff, 1, self->qubits[qubit]->n);
+  add_ham_term_time_dep(self->system, 1.0, time_dep_cb, coeff, 1, self->qubits[qubit]->n);
 
   Py_RETURN_NONE;
 }
@@ -496,8 +502,8 @@ QuaCInstance_add_ham_cross_coupling_time_dep(QuaCInstance *self, PyObject *args,
    Py_RETURN_NONE;
 
   Py_INCREF(coup_1);
-  add_to_ham_time_dep(time_dep_cb, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
-  add_to_ham_time_dep(time_dep_cb, coup_1, 2, self->qubits[qubit1], self->qubits[qubit2]->dag);
+  add_ham_term_time_dep(self->system, 1.0, time_dep_cb, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
+  add_ham_term_time_dep(self->system, 1.0, time_dep_cb, coup_1, 2, self->qubits[qubit1], self->qubits[qubit2]->dag);
 
   Py_RETURN_NONE;
 }
@@ -509,9 +515,9 @@ QuaCInstance_create_dm(QuaCInstance *self, PyObject *args, PyObject *kwds) {
    Py_RETURN_NONE;
   }
 
-  create_full_dm(&self->rho);
-  add_value_to_dm(self->rho, 0, 0, 1.0);
-  assemble_dm(self->rho);
+  create_qvec_sys(self->system, &self->rho);
+  add_to_qvec_loc(self->rho, 1.0, 0);
+  assemble_qvec(self->rho);
 
   Py_RETURN_NONE;
 }
@@ -532,7 +538,7 @@ QuaCInstance_start_circuit_at(QuaCInstance *self, PyObject *args, PyObject *kwds
    Py_RETURN_NONE;
   }
 
-  start_circuit_at_time(&((QuaCCircuit *) cir)->c, time);
+  apply_circuit_to_sys(self->system, &((QuaCCircuit *) cir)->c, time);
 
   Py_RETURN_NONE;
 }
@@ -540,18 +546,17 @@ QuaCInstance_start_circuit_at(QuaCInstance *self, PyObject *args, PyObject *kwds
 static int
 QuaCInstance_print_density_matrix(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   char *filename = NULL;
-  int num_print_qubits = self->num_qubits;
 
-  static char *kwlist[] = {"filename", "num_qubits", NULL};
+  static char *kwlist[] = {"filename", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "|sd", kwlist,
-                                   &filename, &num_print_qubits))
+                                   &filename))
    Py_RETURN_NONE;
 
   if (filename) {
-    print_dm_sparse_to_file(self->rho, pow(self->num_levels, num_print_qubits), filename);
+    print_qvec_file(self->rho, filename);
   } else {
-    print_dm_sparse(self->rho, pow(self->num_levels, num_print_qubits));
+    print_qvec(self->rho);
   }
 
   Py_RETURN_NONE;
@@ -568,9 +573,11 @@ QuaCInstance_run(QuaCInstance *self, PyObject *args, PyObject *kwds) {
                                    &end_time, &dt, &start_time, &max_steps))
    Py_RETURN_NONE;
 
+  construct_matrix(self->system);
+
   set_ts_monitor_ctx(ts_monitor, (void *) self);
 
-  time_step(self->rho, start_time, end_time, dt, max_steps);
+  time_step_sys(self->system, self->rho, start_time, end_time, dt, max_steps);
 
   Py_RETURN_NONE;
 }
