@@ -72,7 +72,7 @@ typedef enum {
 
 typedef struct qvec{
   qvec_type my_type;
-  PetscInt n,Istart,Iend,total_levels;
+  PetscInt n,Istart,Iend,total_levels,*hspace_dims,ndims_hspace;
   Vec data;
 } *qvec;
 

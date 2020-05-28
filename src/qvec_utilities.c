@@ -360,7 +360,7 @@ void get_wf_element_qvec_local(qvec state,PetscInt i,PetscScalar *val){
 }
 
 /*
- * create a qvec object with arbitrary dimensions
+ * create a qvec object with arbitrary dimension
  */
 void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
   qvec temp = NULL;
@@ -394,6 +394,70 @@ void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
   }
   temp->Istart = Istart;
   temp->Iend = Iend;
+  temp->ndims_hspace = 1;
+  //Assume one big hspace for now
+  temp->hspace_dims = malloc(sizeof(PetscInt));
+  temp->hspace_dims[0] = temp->total_levels;
+
+  *new_qvec = temp;
+
+  return;
+
+}
+
+/*
+ * create a qvec object with arbitrary dimensions
+ */
+void create_arb_qvec_dims(qvec *new_qvec,PetscInt ndims,PetscInt *dims,qvec_type my_type){
+  qvec temp = NULL;
+  PetscInt n,Istart,Iend,nstates,i;
+
+  //Calculate the total nstates from the dims array
+  nstates=1;
+  for(i=0;i<ndims;i++){
+    nstates = nstates * dims[i];
+  }
+
+  temp = malloc(sizeof(struct qvec));
+
+  if(my_type==WAVEFUNCTION){
+
+    _create_vec(&(temp->data),nstates,-1);
+    VecGetSize(temp->data,&n);
+    VecGetOwnershipRange(temp->data,&Istart,&Iend);
+    temp->total_levels = n;
+
+    temp->ndims_hspace = ndims;
+    temp->hspace_dims = malloc(ndims*sizeof(PetscInt));
+
+    for(i=0;i<ndims;i++){
+      temp->hspace_dims[i] = dims[i];
+    }
+
+  } else if(my_type==DENSITY_MATRIX){
+
+    _create_vec(&(temp->data),pow(nstates,2),-1);
+    VecGetSize(temp->data,&n);
+    VecGetOwnershipRange(temp->data,&Istart,&Iend);
+    temp->total_levels = nstates;
+    temp->ndims_hspace = ndims*2;
+    temp->hspace_dims = malloc(2*ndims*sizeof(PetscInt));
+
+    for(i=0;i<ndims;i++){
+      temp->hspace_dims[i] = dims[i];
+      temp->hspace_dims[i+ndims] = dims[i];
+    }
+
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Type not understood in create_arb_qvec_dims.\n");
+    exit(9);
+  }
+
+  temp->my_type = my_type;
+  temp->n = n;
+  temp->Istart = Istart;
+  temp->Iend = Iend;
+
 
   *new_qvec = temp;
 
@@ -423,7 +487,7 @@ void create_qvec_sys(qsystem sys,qvec *new_qvec){
  */
 void create_dm_sys(qsystem sys,qvec *new_dm){
   qvec temp = NULL;
-  PetscInt n,Istart,Iend;
+  PetscInt n,Istart,Iend,i;
 
   /* Check to make sure some operators were created */
   if (sys->num_subsystems==0){
@@ -452,7 +516,16 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
   temp->total_levels = sqrt(n);
   temp->Istart = Istart;
   temp->Iend = Iend;
+  //The density matrix is N_tot by N_tot, so we treat it as having double the number of subsystems
+  temp->ndims_hspace = sys->num_subsystems*2;
+  temp->hspace_dims = malloc(2*sys->num_subsystems*sizeof(PetscInt));
 
+  //For a density matrix with 3 subsystems with L_i levels, we store the :
+  //[L_1 L_2 L_3 L_1 L_2 L_3]
+  for(i=0;i<sys->num_subsystems;i++){
+    temp->hspace_dims[i] = sys->subsystem_list[i]->my_levels;
+    temp->hspace_dims[i+sys->num_subsystems] = sys->subsystem_list[i]->my_levels;
+  }
   *new_dm = temp;
   return;
 }
@@ -462,7 +535,7 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
  */
 void create_wf_sys(qsystem sys,qvec *new_wf){
   qvec temp = NULL;
-  PetscInt n,Istart,Iend;
+  PetscInt n,Istart,Iend,i;
 
   /* Check to make sure some operators were created */
   if (sys->num_subsystems==0){
@@ -496,6 +569,12 @@ void create_wf_sys(qsystem sys,qvec *new_wf){
   temp->total_levels = n;
   temp->Istart = Istart;
   temp->Iend = Iend;
+  temp->ndims_hspace = sys->num_subsystems;
+  temp->hspace_dims = malloc(sys->num_subsystems*sizeof(PetscInt));
+
+  for(i=0;i<sys->num_subsystems;i++){
+    temp->hspace_dims[i] = sys->subsystem_list[i]->my_levels;
+  }
 
   *new_wf = temp;
 
@@ -701,6 +780,7 @@ void assemble_qvec(qvec state){
  */
 
 void destroy_qvec(qvec *state){
+  /* free(((*state)->hspace_dims)); */
   VecDestroy(&((*state)->data));
   free(*state);
 }
@@ -938,6 +1018,79 @@ void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,
   return;
 }
 
+void get_qvec_local_idxs(qvec state,PetscInt global_idx,PetscInt *local_idxs){
+  PetscInt i,this_global_idx;
+
+  this_global_idx = global_idx;
+
+  for(i=0;i<state->ndims_hspace;i++){
+    local_idxs[i] = this_global_idx % state->hspace_dims[i];
+    this_global_idx = this_global_idx/state->hspace_dims[i];
+  }
+
+  return;
+}
+
+
+
+void ptrace_over_list_qvec(PetscInt *op_loc_list,PetscInt n_ops,qvec full_dm,qvec *new_dm){
+  PetscInt op_loc,i,i2,j,ndims_new,*hspace_dims_new,i_h,found=0,*local_idxs,keep_val,new_idx;
+  PetscScalar this_val;
+
+  local_idxs = malloc(full_dm->ndims_hspace*sizeof(PetscInt));
+
+  ndims_new = full_dm->ndims_hspace-n_ops;
+  hspace_dims_new = malloc(ndims_new*sizeof(PetscInt));
+  i_h = 0;
+  found=0;
+  for(i=0;i<full_dm->ndims_hspace;i++){
+    //Find if i is to be kept or traced over
+    //There is no guarantee that op_loc_list is ordered, so we search through it
+    //It will be size <50 almost always, so it is OK to do this extra work
+    for(j=0;j<n_ops;j++){
+      if(i==op_loc_list[j]){
+        found = 1;
+      }
+    }
+
+    //Save the hspace_dims of the subsytems we want to keep
+    if(found==0){
+      hspace_dims_new[i_h] = full_dm->hspace_dims[i];
+      i_h = i_h+1;
+    }
+  }
+
+  //Create new DM with correct sizes
+  //Always a DM when partial tracing
+  create_arb_qvec_dims(new_dm,ndims_new,hspace_dims_new,DENSITY_MATRIX);
+
+  //Loop through local elements of the full_dm
+  for(i=full_dm->Istart;i<full_dm->Iend;i++){
+    //Get the array of i1,i2,...,j1,j2... values for this global i
+    get_qvec_local_idxs(full_dm,i,local_idxs);
+    //Assume we will keep this value
+    keep_val = 1;
+    //Loop over the operators to ptrace away
+    for(i2=0;i2<n_ops;i2++){
+      //Check if the two indices for this op do not match
+      //If they do not match for any of the ops, we will not keep
+      //This does n^2 work instead of n
+      if(local_idxs[op_loc_list[i]]!=local_idxs[op_loc_list[i2]]){
+        keep_val = 0;
+      }
+    }
+    if(keep_val==1){
+      //All the trace_over ops idx matched, so we keep this one
+      //new_idx = get_global_idx(full_dm,new_dm,i);
+      add_to_qvec_loc(new_dm,this_val,new_idx);
+    }
+  }
+
+  assemble_qvec(*new_dm);
+  free(hspace_dims_new);
+  free(local_idxs);
+  return;
+}
 
 
 void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
@@ -1181,7 +1334,7 @@ void _get_bitstring_probs_dm(qvec q1,PetscInt *num_loc,PetscReal **probs){
       num_loc_t = num_loc_t+1;
     }
   }
-  *num_loc = num_loc_t-1; //Don't forget to subtract one?
+  *num_loc = num_loc_t; //Don't forget to subtract one?
   //Allocate array
   (*probs) = malloc(num_loc_t*sizeof(PetscReal));
   num_loc_t=0;
