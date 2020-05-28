@@ -156,7 +156,7 @@ QuaCCircuit_read_qasm(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
     qiskit_qasm_read(filename, &num_qubits, &self->c);
   } else {
     PyErr_SetString(PyExc_RuntimeError, "Unknown qasm format!");
-   Py_RETURN_NONE;
+    Py_RETURN_NONE;
   }
 
   return PyLong_FromLong(num_qubits);
@@ -401,6 +401,11 @@ QuaCInstance_add_lindblad_dephasing(QuaCInstance *self, PyObject *args, PyObject
                                    &qubit, &gamma_2))
     Py_RETURN_NONE;
 
+  if (qubit >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit index is out of range");
+    Py_RETURN_NONE;
+  }
+
   add_lin_term(self->system, gamma_2, 1, self->qubits[qubit]->n);
 
   Py_RETURN_NONE;
@@ -416,6 +421,11 @@ QuaCInstance_add_lindblad_thermal_coupling(QuaCInstance *self, PyObject *args, P
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "id|d", kwlist,
                                    &qubit, &therm_1, &n_therm))
     Py_RETURN_NONE;
+
+  if (qubit >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit index is out of range");
+    Py_RETURN_NONE;
+  }
 
   add_lin_term(self->system, therm_1*(n_therm + 1), 1, self->qubits[qubit]);
   add_lin_term(self->system, therm_1*(n_therm), 1, self->qubits[qubit]->dag);
@@ -434,6 +444,16 @@ QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyO
                                    &qubit1, &qubit2, &coup_1))
     Py_RETURN_NONE;
 
+  if (qubit1 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit1 index is out of range");
+    Py_RETURN_NONE;
+  }
+
+  if (qubit2 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit2 index is out of range");
+    Py_RETURN_NONE;
+  }
+
   add_lin_term(self->system, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
   add_lin_term(self->system, coup_1, 2, self->qubits[qubit1], self->qubits[qubit2]->dag);
 
@@ -451,6 +471,11 @@ QuaCInstance_add_ham_num(QuaCInstance *self, PyObject *args, PyObject *kwds) {
                                    &qubit, &coeff))
     Py_RETURN_NONE;
 
+  if (qubit >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit index is out of range");
+    Py_RETURN_NONE;
+  }
+
   add_ham_term(self->system, coeff, 1, self->qubits[qubit]->n);
 
   Py_RETURN_NONE;
@@ -466,6 +491,16 @@ QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "iid", kwlist,
                                    &qubit1, &qubit2, &coup_1))
     Py_RETURN_NONE;
+
+  if (qubit1 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit1 index is out of range");
+    Py_RETURN_NONE;
+  }
+
+  if (qubit2 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit2 index is out of range");
+    Py_RETURN_NONE;
+  }
 
   add_ham_term(self->system, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
   add_ham_term(self->system, coup_1, 2, self->qubits[qubit1], self->qubits[qubit2]->dag);
@@ -484,6 +519,11 @@ QuaCInstance_add_ham_num_time_dep(QuaCInstance *self, PyObject *args, PyObject *
                                    &qubit, &coeff))
     Py_RETURN_NONE;
 
+  if (qubit >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit index is out of range");
+    Py_RETURN_NONE;
+  }
+
   Py_INCREF(coeff);
   add_ham_term_time_dep(self->system, 1.0, time_dep_cb, coeff, 1, self->qubits[qubit]->n);
 
@@ -500,6 +540,16 @@ QuaCInstance_add_ham_cross_coupling_time_dep(QuaCInstance *self, PyObject *args,
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "iiO", kwlist,
                                    &qubit1, &qubit2, &coup_1))
     Py_RETURN_NONE;
+
+  if (qubit1 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit1 index is out of range");
+    Py_RETURN_NONE;
+  }
+
+  if (qubit2 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit2 index is out of range");
+    Py_RETURN_NONE;
+  }
 
   Py_INCREF(coup_1);
   add_ham_term_time_dep(self->system, 1.0, time_dep_cb, coup_1, 2, self->qubits[qubit1]->dag, self->qubits[qubit2]);
