@@ -623,6 +623,11 @@ QuaCInstance_run(QuaCInstance *self, PyObject *args, PyObject *kwds) {
                                    &end_time, &dt, &start_time, &max_steps))
     Py_RETURN_NONE;
 
+  if (!self->rho) {
+    PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has not been created!");
+    Py_RETURN_NONE;
+  }
+
   construct_matrix(self->system);
 
   set_ts_monitor_ctx(ts_monitor, (void *) self);
