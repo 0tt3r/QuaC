@@ -15,12 +15,15 @@ PetscErrorCode ts_monitor(TS,PetscInt,PetscReal,Vec,void*);
 
 int main(int argc,char **args){
   qvec rho;
+  PetscReal single_qubit_gate_time=1,two_qubit_gate_time=1;
   circuit circ;
   qsystem system;
   operator *qubits;
   PetscReal *gamma_1,*gamma_2,gamma_base,dt,time_max;
   PetscInt num_qubits,num_stpes,steps_max,i;
   PetscScalar mat_val;
+  PetscInt nloc;
+  PetscReal *probs;
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -31,7 +34,7 @@ int main(int argc,char **args){
   gamma_2 = malloc(num_qubits*sizeof(PetscReal));
 
   initialize_system(&system);
-  gamma_base = 1*0;
+  gamma_base = 0*0.000001;
   for (i=0;i<num_qubits;i++){
     create_op_sys(system,2,&qubits[i]); //create qubit
     gamma_1[i] = gamma_base;
@@ -49,16 +52,15 @@ int main(int argc,char **args){
 
   create_circuit(&circ,5);
   //Add some gates
-  add_gate_to_circuit_sys(&circ,0.1,SIGMAX,0);
-  add_gate_to_circuit_sys(&circ,0.5,RZ,0,0.447);
-  add_gate_to_circuit_sys(&circ,2.5,SIGMAY,1);
-  add_gate_to_circuit_sys(&circ,3.0,CNOT,0,1);
+  add_gate_to_circuit_sys(&circ,0.0,SIGMAX,0);
+  add_gate_to_circuit_sys(&circ,3.0,RY,0.43,1);
+  add_gate_to_circuit_sys(&circ,4.0,CNOT,0,1);
 
 
   //Time step until 1 after the last gate; gates are applied every 1.0 time unit
-  time_max  = 4;
-  dt        = 0.1;
-  steps_max = 100000;
+  time_max  = 10000;
+  dt        = 0.01;
+  steps_max = 100;
 
   /* Set the ts_monitor to print results at each time step, if desired */
   set_ts_monitor_sys(system,ts_monitor,NULL);
@@ -68,12 +70,33 @@ int main(int argc,char **args){
   add_to_qvec_loc(rho,mat_val,0);
   assemble_qvec(rho);
 
+  /*
+   * Set gate run_times
+   */
+  time_max = 0;
+  single_qubit_gate_time = 20;
+  two_qubit_gate_time = 100;
+  for (i=0;i<circ.num_gates;i++){
+    if (circ.gate_list[i].num_qubits==1){
+      circ.gate_list[i].run_time = single_qubit_gate_time;
+      time_max += single_qubit_gate_time;
+    } else if (circ.gate_list[i].num_qubits==2){
+      circ.gate_list[i].run_time = two_qubit_gate_time;
+      time_max += two_qubit_gate_time;
+    }
+  }
+  schedule_circuit_layers(system,&circ);
+
   //Start out circuit at time 0.0, first gate will be at 0
   apply_circuit_to_sys(system,&circ,0.0);
 
   //Run the evolution, with error and with the circuit
   time_step_sys(system,rho,0.0,time_max,dt,steps_max);
 
+  get_bitstring_probs(rho,&nloc,&probs);
+  for (i=0;i<nloc;i++){
+    printf("probs[%d] = %f\n",i,probs[i]);
+  }
   print_qvec(rho);
 
   //Clean up memory
