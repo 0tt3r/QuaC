@@ -66,4 +66,5 @@ q.ts_monitor = mon
 
 q.run(4*us, dt=ns)
 q.print_density_matrix()
+print(q.get_bitstring_probs())
 

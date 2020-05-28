@@ -350,7 +350,7 @@ QuaCInstance_repr(QuaCInstance * self) {
                               self->num_qubits, self->num_levels, self->nid, self->np);
 }
 
-static int
+static PyObject *
 QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   self->num_levels = 2;
 
@@ -374,7 +374,7 @@ QuaCInstance_create_qubits(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_lindblad_emission(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit;
   double gamma_1;
@@ -390,7 +390,7 @@ QuaCInstance_add_lindblad_emission(QuaCInstance *self, PyObject *args, PyObject 
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_lindblad_dephasing(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit;
   double gamma_2;
@@ -411,7 +411,7 @@ QuaCInstance_add_lindblad_dephasing(QuaCInstance *self, PyObject *args, PyObject
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_lindblad_thermal_coupling(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit;
   double therm_1, n_therm = 0.5;
@@ -433,7 +433,7 @@ QuaCInstance_add_lindblad_thermal_coupling(QuaCInstance *self, PyObject *args, P
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit1, qubit2;
   double coup_1;
@@ -460,7 +460,7 @@ QuaCInstance_add_lindblad_cross_coupling(QuaCInstance *self, PyObject *args, PyO
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_ham_num(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit;
   double coeff;
@@ -481,7 +481,7 @@ QuaCInstance_add_ham_num(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit1, qubit2;
   double coup_1;
@@ -508,7 +508,7 @@ QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_ham_num_time_dep(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit;
   PyObject *coeff;
@@ -530,7 +530,7 @@ QuaCInstance_add_ham_num_time_dep(QuaCInstance *self, PyObject *args, PyObject *
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_add_ham_cross_coupling_time_dep(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit1, qubit2;
   PyObject *coup_1;
@@ -558,7 +558,7 @@ QuaCInstance_add_ham_cross_coupling_time_dep(QuaCInstance *self, PyObject *args,
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_create_dm(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   if (self->rho) {
     PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has already been created!");
@@ -572,7 +572,7 @@ QuaCInstance_create_dm(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_start_circuit_at(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   double time = 0.0;
   PyObject *cir;
@@ -593,7 +593,7 @@ QuaCInstance_start_circuit_at(QuaCInstance *self, PyObject *args, PyObject *kwds
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
 QuaCInstance_print_density_matrix(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   char *filename = NULL;
 
@@ -602,6 +602,11 @@ QuaCInstance_print_density_matrix(QuaCInstance *self, PyObject *args, PyObject *
   if (!PyArg_ParseTupleAndKeywords(args, kwds, "|sd", kwlist,
                                    &filename))
     Py_RETURN_NONE;
+
+  if (!self->rho) {
+    PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has not been created!");
+    Py_RETURN_NONE;
+  }
 
   if (filename) {
     print_qvec_file(self->rho, filename);
@@ -612,7 +617,31 @@ QuaCInstance_print_density_matrix(QuaCInstance *self, PyObject *args, PyObject *
   Py_RETURN_NONE;
 }
 
-static int
+static PyObject *
+QuaCInstance_get_bitstring_probs(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  PetscReal *probs;
+  PetscInt nloc, i;
+
+  PyListObject *r;
+
+  if (!self->rho) {
+    PyErr_SetString(PyExc_RuntimeError, "The density matrix for this QuaC instance has not been created!");
+    Py_RETURN_NONE;
+  }
+
+  get_bitstring_probs(self->rho, &nloc, &probs);
+
+  r = PyList_New(nloc);
+
+  for (i=0; i<nloc; ++i)
+    PyList_SetItem(r, i, PyFloat_FromDouble(probs[i]));
+
+  free(probs);
+
+  return r;
+}
+
+static PyObject *
 QuaCInstance_run(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   PetscReal dt = 1.0, start_time = 0.0, end_time;
   PetscInt max_steps = INT_MAX-1;
@@ -689,6 +718,10 @@ static PyMethodDef QuaCInstance_methods[] = {
     {"print_density_matrix",
      (PyCFunction) QuaCInstance_print_density_matrix, METH_VARARGS | METH_KEYWORDS,
      "Print the density matrix."
+    },
+    {"get_bitstring_probs",
+     (PyCFunction) QuaCInstance_get_bitstring_probs, METH_VARARGS | METH_KEYWORDS,
+     "Get the bit-string probabilities."
     },
     {NULL}  /* Sentinel */
 };
