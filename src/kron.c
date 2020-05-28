@@ -589,9 +589,9 @@ void _count_ops_in_mat(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt 
                        PetscInt dm_equations, PetscInt num_ops,operator *ops){
   if (dm_equations){
     //Use lindblad terms
-    if (my_term_type==LINDBLAD){
+    if (my_term_type==LINDBLAD||my_term_type==TD_LINDBLAD){
       _count_ops_in_mat_lin(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
-    } else if (my_term_type==HAM){
+    } else if (my_term_type==HAM||my_term_type==TD_HAM){
       _count_ops_in_mat_ham(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
     } else {
       if (nid==0){
@@ -600,7 +600,7 @@ void _count_ops_in_mat(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt 
       }
     }
   } else {
-    if (my_term_type==HAM){
+    if (my_term_type==HAM||my_term_type==TD_HAM){
       _count_ops_in_mat_ham_only(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
     } else {
       if (nid==0){
@@ -749,9 +749,9 @@ void _add_ops_to_mat(PetscScalar a,Mat A,mat_term_type my_term_type,PetscInt dm_
                      PetscInt num_ops,operator *ops){
   if (dm_equations){
     //Use lindblad terms
-    if (my_term_type==LINDBLAD){
+    if (my_term_type==LINDBLAD||my_term_type==TD_LINDBLAD){
       _add_ops_to_mat_lin(a,A,num_ops,ops);
-    } else if (my_term_type==HAM){
+    } else if (my_term_type==HAM||my_term_type==TD_HAM){
       _add_ops_to_mat_ham(a,A,num_ops,ops);
     } else {
       if (nid==0){

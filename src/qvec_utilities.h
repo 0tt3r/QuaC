@@ -10,7 +10,8 @@
 void create_qvec_sys(qsystem,qvec*);
 void create_dm_sys(qsystem,qvec*);
 void create_wf_sys(qsystem,qvec*);
-void create_arb_qvec(qvec *,PetscInt,qvec_type);
+void create_arb_qvec(qvec*,PetscInt,qvec_type);
+void create_arb_qvec_dims(qvec*,PetscInt,PetscInt*,qvec_type);
 void _create_vec(Vec*,PetscInt,PetscInt);
 
 void read_qvec_dm_binary(qvec*,const char[]);
@@ -28,6 +29,8 @@ void add_to_qvec(qvec,PetscScalar,...);
 void add_to_qvec_loc(qvec,PetscScalar,PetscInt);
 void get_qvec_loc_fock_op(qvec,PetscInt*,PetscInt,...);
 void get_qvec_loc_fock_op_list(qvec,PetscInt*,PetscInt,operator[],PetscInt[]);
+
+void get_qvec_local_idxs(qvec,PetscInt,PetscInt*);
 
 void get_expectation_value_qvec(qvec,PetscScalar*,PetscInt,...);
 void get_expectation_value_qvec_list(qvec,PetscScalar*,PetscInt,operator*);

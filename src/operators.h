@@ -9,6 +9,7 @@ typedef struct operator{
   int     n_before;
   int     my_levels;
   op_type my_op_type;
+  PetscInt pos_in_sys_hspace; //Position in Hilbert space
   /* For ladder operators only */
   struct operator *dag;
   struct operator *n;

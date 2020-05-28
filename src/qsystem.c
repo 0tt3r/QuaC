@@ -13,7 +13,7 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS,PetscReal,Vec,Mat,Mat,void*); // Move to
 
 void initialize_system(qsystem *qsys){
   qsystem temp = NULL;
-  PetscInt num_init_alloc = 50;
+  PetscInt num_init_alloc = 150;
   int tmp_nid,tmp_np;
   if (!petsc_initialized){
     if (nid==0){
@@ -76,9 +76,11 @@ void destroy_system(qsystem *qsys){
     free((*qsys)->time_indep[i].ops);
   }
   /* free((*qsys)->time_indep); */
-  free((*qsys)->o_nnz);
-  free((*qsys)->d_nnz);
-  if ((*qsys)->mat_allocated) MatDestroy(&((*qsys)->mat_A));
+  if ((*qsys)->mat_allocated){
+    MatDestroy(&((*qsys)->mat_A));
+    free((*qsys)->o_nnz);
+    free((*qsys)->d_nnz);
+  }
   free((*qsys));
 }
 
@@ -159,6 +161,9 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
     free(tmp_list);
   }
 
+  /* Save position in hilbert space */
+  (*new_op)->pos_in_sys_hspace = sys->num_subsystems;
+
   sys->subsystem_list[sys->num_subsystems] = (*new_op);
   sys->num_subsystems++;
 
@@ -230,6 +235,33 @@ void add_lin_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
     sys->time_indep[sys->num_time_indep].ops[i] = va_arg(ap,operator);
   }
   va_end(ap);
+  sys->num_time_indep = sys->num_time_indep+1;
+  /* PetscLogEventEnd(add_to_ham_event,0,0,0,0); */
+  return;
+}
+
+void add_lin_term_list(qsystem sys,PetscScalar a,PetscInt num_ops,operator *in_ops){
+  va_list  ap;
+  operator *ops;
+  int      i;
+  //FIXME This gives a segfault for some reason?
+  /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
+
+  if(sys->num_time_indep>sys->alloc_time_indep){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Asking for more terms than were allocated in add_lin_term_list!\n");
+    exit(9);
+  }
+  sys->dm_equations = 1;//Lindblad equation
+  sys->time_indep[sys->num_time_indep].my_term_type = LINDBLAD;
+  sys->time_indep[sys->num_time_indep].a = a;
+  sys->time_indep[sys->num_time_indep].num_ops = num_ops;
+  sys->time_indep[sys->num_time_indep].ops = malloc(num_ops*sizeof(struct operator));
+
+  //Loop through operators, store them
+  for (i=0;i<num_ops;i++){
+    sys->time_indep[sys->num_time_indep].ops[i] = in_ops[i];
+  }
+
   sys->num_time_indep = sys->num_time_indep+1;
   /* PetscLogEventEnd(add_to_ham_event,0,0,0,0); */
   return;
@@ -525,7 +557,7 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
   /*
    * Set up ODE system
    */
-  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,sys);
   if (sys->num_time_dep>0){
 
     //Duplicate matrix for time dependent runs
