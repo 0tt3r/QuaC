@@ -69,7 +69,7 @@ quac_clear(PyObject *self, PyObject *args) {
 
 static PetscErrorCode ts_monitor(TS, PetscInt, PetscReal, Vec, void*);
 
-static double time_dep_cb(double, void*);
+static _Complex double time_dep_cb(double, void*);
 
 typedef struct {
   PyObject_HEAD
@@ -759,7 +759,7 @@ PetscErrorCode ts_monitor(TS ts, PetscInt step, PetscReal time, Vec rho, void *c
   PetscFunctionReturn(0);
 }
 
-double time_dep_cb(double t, void *ctx) {
+_Complex double time_dep_cb(double t, void *ctx) {
   PyObject *tdf = (PyObject *) ctx;
   PyObject *arglist;
   PyObject *result;
@@ -772,7 +772,10 @@ double time_dep_cb(double t, void *ctx) {
   Py_DECREF(arglist);
 
   if (result) {
-    double v = PyFloat_AsDouble(result);
+    _Complex double v;
+    Py_complex vs = PyComplex_AsCComplex(result);
+    memcpy(&v, &vs, sizeof(v));
+
     Py_DECREF(result);
     return v;
   }
