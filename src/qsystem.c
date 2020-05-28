@@ -555,7 +555,7 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
   /*
    * Set up ODE system
    */
-  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,NULL);
+  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,sys);
   if (sys->num_time_dep>0){
 
     //Duplicate matrix for time dependent runs
