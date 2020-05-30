@@ -5,6 +5,7 @@
 #include "operators_p.h"
 #include "operators.h"
 #include "kron_p.h"
+#include "qvec_utilities.h"
 #include <stdarg.h>
 
 void create_dm(Vec*,PetscInt);
@@ -23,7 +24,6 @@ void get_populations(Vec,double**);
 void get_expectation_value(Vec,PetscScalar*,int,...);
 int get_num_populations();
 void get_bipartite_concurrence(Vec,double*);
-void sqrt_mat(Mat);
 void get_fidelity(Vec,Vec,double*);
 void print_psi(Vec,int);
 void print_dm(Vec,int);

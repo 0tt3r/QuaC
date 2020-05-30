@@ -28,6 +28,13 @@ void check_qvec_consistent(qvec state1,qvec state2){
   return;
 }
 
+void check_qvec_equal(qvec state1,qvec state2,PetscBool *flag){
+  check_qvec_consistent(state1,state2);
+  VecEqual(state1->data,state2->data,flag);
+  return;
+}
+
+
 void copy_qvec(qvec source,qvec destination){
 
   //check that the qvecs are consistent
@@ -53,7 +60,7 @@ void copy_qvec(qvec source,qvec destination){
 
 // Done in serial for now, inefficient
 void copy_qvec_wf_to_dm(qvec source,qvec destination){
-  VecScatter        ctx_wf;
+  VecScatter        scatter_ctx;
   Vec wf_local;
   PetscScalar       *wf_a,this_val;
   PetscInt          n,i,j,this_row;
@@ -63,10 +70,10 @@ void copy_qvec_wf_to_dm(qvec source,qvec destination){
   }
 
   //Collect all data for the wf on one core
-  VecScatterCreateToZero(source->data,&ctx_wf,&wf_local);
+  VecScatterCreateToZero(source->data,&scatter_ctx,&wf_local);
 
-  VecScatterBegin(ctx_wf,source->data,wf_local,INSERT_VALUES,SCATTER_FORWARD);
-  VecScatterEnd(ctx_wf,source->data,wf_local,INSERT_VALUES,SCATTER_FORWARD);
+  VecScatterBegin(scatter_ctx,source->data,wf_local,INSERT_VALUES,SCATTER_FORWARD);
+  VecScatterEnd(scatter_ctx,source->data,wf_local,INSERT_VALUES,SCATTER_FORWARD);
 
   /* Rank 0 now has a local copy of the wf, it will do the calculation */
   if (nid==0){
@@ -84,12 +91,13 @@ void copy_qvec_wf_to_dm(qvec source,qvec destination){
   VecAssemblyBegin(destination->data);
   VecAssemblyEnd(destination->data);
   VecDestroy(&wf_local);
+  VecScatterDestroy(&scatter_ctx);
   return;
 }
 
 
 
-//Read in a qvec from a qutip generated file with function file_data_store
+//Read in a qvec from a PetscBinary format
 //Not recommended for large vectors
 void read_qvec_wf_binary(qvec *newvec,const char filename[]){
   qvec temp = NULL;
@@ -109,16 +117,25 @@ void read_qvec_wf_binary(qvec *newvec,const char filename[]){
   temp->Istart = Istart;
   temp->Iend = Iend;
 
+  temp->total_levels = n;
+  //Assume one big hspace for now
+  temp->n_ops = 1;
+  temp->hspace_dims = malloc(sizeof(PetscInt));
+  temp->hspace_dims[0] = temp->total_levels;
+
   *newvec = temp;
+
+  PetscViewerDestroy(&viewer);
   return;
 }
 
-//Read in a qvec from a qutip generated file with function file_data_store
+//Read in a qvec from a from a PetscBinary format
 //Not recommended for large vectors
 void read_qvec_dm_binary(qvec *newvec,const char filename[]){
   qvec temp = NULL;
   PetscViewer viewer;
-  PetscInt n,Istart,Iend;
+  PetscInt n,Istart,Iend,iVar;
+  PetscReal fVar;
 
   temp = malloc(sizeof(struct qvec));
   VecCreate(PETSC_COMM_WORLD,&(temp->data));
@@ -133,7 +150,23 @@ void read_qvec_dm_binary(qvec *newvec,const char filename[]){
   temp->Istart = Istart;
   temp->Iend = Iend;
 
+  fVar = sqrt((double)(n));
+  iVar = fVar;
+  if(iVar==fVar){
+    temp->total_levels = iVar;
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! n for DENSITY_MATRIX must be perfect square!\n");
+    exit(9);
+  }
+
+  temp->n_ops = 1;
+  temp->hspace_dims = malloc(2*sizeof(PetscInt));
+  temp->hspace_dims[0] = temp->total_levels;
+  temp->hspace_dims[1] = temp->total_levels;
+
   *newvec = temp;
+
+  PetscViewerDestroy(&viewer);
   return;
 }
 
@@ -293,24 +326,31 @@ void get_dm_element_qvec(qvec dm,PetscInt row,PetscInt col,PetscScalar *val){
  *
  */
 void get_dm_element_qvec_local(qvec dm,PetscInt row,PetscInt col,PetscScalar *val){
-  PetscInt location[1],dm_size,my_start,my_end;
-  PetscScalar val_array[1];
+  PetscInt loc;
 
-  location[0] = sqrt(dm->n)*col + row;
+  loc = sqrt(dm->n)*col + row;
 
-  if (location[0]>=dm->Istart&&location[0]<dm->Iend) {
-    VecGetValues(dm->data,1,location,val_array);
-  } else{
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Can only get elements local to a core in !\n");
-    PetscPrintf(PETSC_COMM_WORLD,"       get_dm_element_qvec_local.\n");
-    exit(0);
-  }
+  _get_qvec_element_local(dm,loc,val);
 
-  *val = val_array[0];
   return;
 }
 
+void _get_qvec_element_local(qvec state,PetscInt loc,PetscScalar *val){
+  PetscInt location[1],dm_size,my_start,my_end;
+  PetscScalar val_array[1];
 
+  location[0] = loc;
+
+  if (location[0]>=state->Istart&&location[0]<state->Iend) {
+    VecGetValues(state->data,1,location,val_array);
+  } else{
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Can only get elements local to a core in !\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       _get_qvec_element_local.\n");
+    exit(0);
+  }
+  *val = val_array[0];
+  return;
+}
 /*
  * Print the dense wf
  */
@@ -326,19 +366,10 @@ void print_wf_qvec(qvec state){
   return;
 }
 
-void get_wf_element_qvec(qvec state,PetscInt i,PetscScalar *val){
-  PetscInt location[1];
-  PetscScalar val_array[1];
+void get_wf_element_qvec(qvec state,PetscInt loc,PetscScalar *val){
 
-  location[0] = i;
-  if (location[0]>=state->Istart&&location[0]<state->Iend) {
-    VecGetValues(state->data,1,location,val_array);
-  } else{
-    val_array[0] = 0.0 + 0.0*PETSC_i;
-  }
-  MPI_Allreduce(MPI_IN_PLACE,val_array,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
+  _get_qvec_element_local(state,loc,val);
 
-  *val = val_array[0];
   return;
 }
 
@@ -378,6 +409,11 @@ void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
   temp->n = n;
   if(my_type==WAVEFUNCTION){
     temp->total_levels = n;
+    //Assume one big hspace for now
+    temp->n_ops = 1;
+    temp->hspace_dims = malloc(sizeof(PetscInt));
+    temp->hspace_dims[0] = temp->total_levels;
+
   } else if(my_type==DENSITY_MATRIX){
     //Perhaps check that n in a true square?
     fVar = sqrt((double)(n));
@@ -388,6 +424,10 @@ void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
       PetscPrintf(PETSC_COMM_WORLD,"ERROR! n for DENSITY_MATRIX must be perfect square!\n");
       exit(9);
     }
+    temp->n_ops = 1;
+    temp->hspace_dims = malloc(2*sizeof(PetscInt));
+    temp->hspace_dims[0] = temp->total_levels;
+    temp->hspace_dims[1] = temp->total_levels;
   } else {
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! Type not understood in create_arb_qvec.\n");
     exit(9);
@@ -395,9 +435,6 @@ void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
   temp->Istart = Istart;
   temp->Iend = Iend;
   temp->ndims_hspace = 1;
-  //Assume one big hspace for now
-  temp->hspace_dims = malloc(sizeof(PetscInt));
-  temp->hspace_dims[0] = temp->total_levels;
 
   *new_qvec = temp;
 
@@ -426,7 +463,7 @@ void create_arb_qvec_dims(qvec *new_qvec,PetscInt ndims,PetscInt *dims,qvec_type
     VecGetSize(temp->data,&n);
     VecGetOwnershipRange(temp->data,&Istart,&Iend);
     temp->total_levels = n;
-
+    temp->n_ops = ndims;
     temp->ndims_hspace = ndims;
     temp->hspace_dims = malloc(ndims*sizeof(PetscInt));
 
@@ -436,16 +473,15 @@ void create_arb_qvec_dims(qvec *new_qvec,PetscInt ndims,PetscInt *dims,qvec_type
 
   } else if(my_type==DENSITY_MATRIX){
 
-    _create_vec(&(temp->data),pow(nstates,2),-1);
+    _create_vec(&(temp->data),nstates,-1);
     VecGetSize(temp->data,&n);
     VecGetOwnershipRange(temp->data,&Istart,&Iend);
-    temp->total_levels = nstates;
-    temp->ndims_hspace = ndims*2;
-    temp->hspace_dims = malloc(2*ndims*sizeof(PetscInt));
-
+    temp->total_levels = pow(nstates,0.5);
+    temp->n_ops = ndims/2;
+    temp->ndims_hspace = ndims;
+    temp->hspace_dims = malloc(ndims*sizeof(PetscInt));
     for(i=0;i<ndims;i++){
       temp->hspace_dims[i] = dims[i];
-      temp->hspace_dims[i+ndims] = dims[i];
     }
 
   } else {
@@ -463,6 +499,56 @@ void create_arb_qvec_dims(qvec *new_qvec,PetscInt ndims,PetscInt *dims,qvec_type
 
   return;
 
+}
+
+
+/*
+ * change a qvec object's with arbitrary dimensions
+ */
+void change_qvec_dims(qvec state,PetscInt ndims,PetscInt *dims){
+  PetscInt i, nstates;
+
+  //Calculate the total nstates from the dims array
+  nstates=1;
+  for(i=0;i<ndims;i++){
+    nstates = nstates * dims[i];
+  }
+
+
+  //Check for consistency
+  if(nstates!=state->n){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvec dims not consistent in change_qvec_dims!\n");
+    exit(9);
+  }
+
+
+  if(state->my_type==WAVEFUNCTION){
+
+    state->n_ops = ndims;
+    state->ndims_hspace = ndims;
+    free(state->hspace_dims);
+    state->hspace_dims = malloc(ndims*sizeof(PetscInt));
+
+    for(i=0;i<ndims;i++){
+      state->hspace_dims[i] = dims[i];
+    }
+
+  } else if(state->my_type==DENSITY_MATRIX){
+
+    state->n_ops = ndims/2;
+    state->ndims_hspace = ndims;
+    free(state->hspace_dims);
+    state->hspace_dims = malloc(ndims*sizeof(PetscInt));
+    for(i=0;i<ndims;i++){
+      state->hspace_dims[i] = dims[i];
+    }
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Type not understood in change_qvec_dims.\n");
+    exit(9);
+  }
+
+
+  return;
 }
 
 
@@ -516,7 +602,8 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
   temp->total_levels = sqrt(n);
   temp->Istart = Istart;
   temp->Iend = Iend;
-  //The density matrix is N_tot by N_tot, so we treat it as having double the number of subsystems
+  temp->n_ops = sys->num_subsystems;
+  //The density matrix is N_tot by N_tot, so we treat it as having double the number of dimensinons
   temp->ndims_hspace = sys->num_subsystems*2;
   temp->hspace_dims = malloc(2*sys->num_subsystems*sizeof(PetscInt));
 
@@ -569,6 +656,7 @@ void create_wf_sys(qsystem sys,qvec *new_wf){
   temp->total_levels = n;
   temp->Istart = Istart;
   temp->Iend = Iend;
+  temp->n_ops = sys->num_subsystems;
   temp->ndims_hspace = sys->num_subsystems;
   temp->hspace_dims = malloc(sys->num_subsystems*sizeof(PetscInt));
 
@@ -780,7 +868,7 @@ void assemble_qvec(qvec state){
  */
 
 void destroy_qvec(qvec *state){
-  /* free(((*state)->hspace_dims)); */
+  free(((*state)->hspace_dims));
   VecDestroy(&((*state)->data));
   free(*state);
 }
@@ -843,6 +931,7 @@ void get_expectation_value_qvec(qvec state,PetscScalar *trace_val,PetscInt num_o
 
   get_expectation_value_qvec_list(state,trace_val,num_ops,ops);
 
+  free(ops);
   return;
 }
 
@@ -1032,20 +1121,152 @@ void get_qvec_local_idxs(qvec state,PetscInt global_idx,PetscInt *local_idxs){
 }
 
 
-
-void ptrace_over_list_qvec(PetscInt *op_loc_list,PetscInt n_ops,qvec full_dm,qvec *new_dm){
-  PetscInt op_loc,i,i2,j,ndims_new,*hspace_dims_new,i_h,found=0,*local_idxs,keep_val,new_idx;
+void _ptrace_over_list_qvec_dm(qvec full_dm,PetscInt n_ops,PetscInt *op_loc_list,PetscInt n_ops_keep, PetscInt *ops_keep_list,qvec *new_dm){
+  PetscInt i,j1;
+  PetscInt *local_idxs,keep_val,new_idx,this_n_bef;
   PetscScalar this_val;
 
   local_idxs = malloc(full_dm->ndims_hspace*sizeof(PetscInt));
 
-  ndims_new = full_dm->ndims_hspace-n_ops;
+  //Loop through local elements of the full_dm
+  for(i=full_dm->Istart;i<full_dm->Iend;i++){
+    //Get the array of i1,i2,...,j1,j2... values for this global i
+    get_qvec_local_idxs(full_dm,i,local_idxs);
+    //Assume we will keep this value
+    keep_val = 1;
+    //Loop over the operators to ptrace away
+    for(j1=0;j1<n_ops;j1++){
+      //Check if the two indices for this op do not match
+      //If they do not match for any of the ops, we will not keep
+      //This does n^2 work instead of n
+      if(local_idxs[op_loc_list[j1]]!=local_idxs[op_loc_list[j1]+full_dm->n_ops]){
+          keep_val = 0;
+      }
+    }
+    if(keep_val==1){
+      //All the trace_over ops idx matched, so we keep this one
+      new_idx = 0;
+      this_n_bef = 1;
+      // new_idx = \sum_i_k n_bef * local_idx[i_k]
+      for(j1=0;j1<n_ops_keep;j1++){
+        new_idx = new_idx + this_n_bef*local_idxs[ops_keep_list[j1]]; // i position
+        new_idx = new_idx + this_n_bef*(*new_dm)->total_levels*local_idxs[ops_keep_list[j1]+full_dm->n_ops]; // j position - it is always total_levels later
+        this_n_bef = this_n_bef * (*new_dm)->hspace_dims[j1];
+      }
+      _get_qvec_element_local(full_dm,i,&this_val);
+      add_to_qvec_loc((*new_dm),this_val,new_idx);
+    }
+  }
+
+    free(local_idxs);
+
+  return;
+}
+
+
+void _ptrace_over_list_qvec_wf(qvec full_wf,PetscInt n_ops,PetscInt *op_loc_list,PetscInt n_ops_keep, PetscInt *ops_keep_list,qvec *new_dm){
+  PetscInt *local_idxs,*local_idxsj,keep_val,new_idx,this_n_bef,i,j,j1;
+  PetscScalar this_val,this_valj;
+  VecScatter        scatter_ctx;
+  qvec wf_local;
+
+  local_idxs = malloc(full_wf->ndims_hspace*sizeof(PetscInt));
+  local_idxsj = malloc(full_wf->ndims_hspace*sizeof(PetscInt));
+  //Gather WF to one core - inefficient! Serial
+  //Other option is to write complicated MPI_GET, since PETSc only allows local VecGetValues?
+
+  //Collect all data for the wf on one core - not necessary for single core examples
+  //Can be sped up by not doing this on one core
+  wf_local = malloc(sizeof(struct qvec));
+  VecScatterCreateToZero(full_wf->data,&scatter_ctx,&(wf_local->data));
+  VecScatterBegin(scatter_ctx,full_wf->data,wf_local->data,INSERT_VALUES,SCATTER_FORWARD);
+  VecScatterEnd(scatter_ctx,full_wf->data,wf_local->data,INSERT_VALUES,SCATTER_FORWARD);
+
+  wf_local->Istart = 0;
+  wf_local->Iend   = full_wf->total_levels;
+  wf_local->total_levels = full_wf->total_levels;
+  wf_local->ndims_hspace = full_wf->ndims_hspace;
+  wf_local->hspace_dims = malloc(full_wf->ndims_hspace*sizeof(PetscInt));
+  for(i=0;i<full_wf->ndims_hspace;i++){
+    wf_local->hspace_dims[i] = full_wf->hspace_dims[i];
+  }
+
+
+  //Loop through local elements of the full_wf
+  for(i=0;i<wf_local->total_levels;i++){
+    for(j=0;j<wf_local->total_levels;j++){
+      //Get the array of i1,i2,...,j1,j2... values for this global i
+      get_qvec_local_idxs(wf_local,i,local_idxs);
+      get_qvec_local_idxs(wf_local,j,local_idxsj);
+      //Assume we will keep this value
+      keep_val = 1;
+      //Loop over the operators to ptrace away
+      for(j1=0;j1<n_ops;j1++){
+        //Check if the two indices for this op do not match
+        //If they do not match for any of the ops, we will not keep
+        if(local_idxs[op_loc_list[j1]]!=local_idxsj[op_loc_list[j1]]){
+          keep_val = 0;
+        }
+      }
+      if(keep_val==1){
+        //All the trace_over ops idx matched, so we keep this one
+        new_idx = 0;
+        this_n_bef = 1;
+        // new_idx = \sum_i_k n_bef * local_idx[i_k]
+        for(j1=0;j1<n_ops_keep;j1++){
+          new_idx = new_idx + this_n_bef*local_idxs[ops_keep_list[j1]]; // i position
+          new_idx = new_idx + this_n_bef*(*new_dm)->total_levels*local_idxsj[ops_keep_list[j1]]; // j position
+          this_n_bef = this_n_bef * (*new_dm)->hspace_dims[j1];
+        }
+        _get_qvec_element_local(wf_local,i,&this_val);
+        _get_qvec_element_local(wf_local,j,&this_valj);
+        add_to_qvec_loc((*new_dm),this_val*PetscConjComplex(this_valj),new_idx);
+      }
+    }
+  }
+
+  VecScatterDestroy(&scatter_ctx);
+  free(local_idxs);
+  free(local_idxsj);
+  destroy_qvec(&wf_local);
+
+  return;
+}
+
+void ptrace_over_list_qvec(qvec full_state,PetscInt n_ops,PetscInt *op_loc_list,qvec *new_dm){
+  PetscInt i,j,ndims_new,*hspace_dims_new,i_h,found=0;
+  PetscInt n_ops_keep,*ops_keep_list;
+
+
+  if(n_ops>full_state->n_ops){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Trying to ptrace more ops than are in the state!\n");
+    exit(9);
+  }
+
+  for(i=0;i<n_ops;i++){
+    if(op_loc_list[i]>(full_state->n_ops-1)){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! op_loc_list has an index greater than nops in state!\n");
+      exit(9);
+    }
+  }
+
+  //2 * ndims_hspace because the wf is implicitly turned into a DM
+  //2 * nops because we are removing 2 of the ndims per n_op
+  if(full_state->my_type==WAVEFUNCTION){
+    ndims_new = 2*full_state->ndims_hspace - 2*n_ops; //WF specific
+  } else{
+    ndims_new = full_state->ndims_hspace - 2*n_ops; //WF specific
+  }
+
+  n_ops_keep = full_state->n_ops - n_ops;
+  ops_keep_list = malloc(n_ops_keep*sizeof(PetscInt));
   hspace_dims_new = malloc(ndims_new*sizeof(PetscInt));
   i_h = 0;
-  found=0;
-  for(i=0;i<full_dm->ndims_hspace;i++){
+
+  for(i=0;i<full_state->n_ops;i++){
+    found=0;
     //Find if i is to be kept or traced over
-    //There is no guarantee that op_loc_list is ordered, so we search through it
+    //There is no guarantee that op_list is ordered, so we search through it
     //It will be size <50 almost always, so it is OK to do this extra work
     for(j=0;j<n_ops;j++){
       if(i==op_loc_list[j]){
@@ -1055,7 +1276,9 @@ void ptrace_over_list_qvec(PetscInt *op_loc_list,PetscInt n_ops,qvec full_dm,qve
 
     //Save the hspace_dims of the subsytems we want to keep
     if(found==0){
-      hspace_dims_new[i_h] = full_dm->hspace_dims[i];
+      ops_keep_list[i_h] = i;
+      hspace_dims_new[i_h] = full_state->hspace_dims[i];
+      hspace_dims_new[i_h+n_ops_keep] = full_state->hspace_dims[i];
       i_h = i_h+1;
     }
   }
@@ -1064,31 +1287,16 @@ void ptrace_over_list_qvec(PetscInt *op_loc_list,PetscInt n_ops,qvec full_dm,qve
   //Always a DM when partial tracing
   create_arb_qvec_dims(new_dm,ndims_new,hspace_dims_new,DENSITY_MATRIX);
 
-  //Loop through local elements of the full_dm
-  for(i=full_dm->Istart;i<full_dm->Iend;i++){
-    //Get the array of i1,i2,...,j1,j2... values for this global i
-    get_qvec_local_idxs(full_dm,i,local_idxs);
-    //Assume we will keep this value
-    keep_val = 1;
-    //Loop over the operators to ptrace away
-    for(i2=0;i2<n_ops;i2++){
-      //Check if the two indices for this op do not match
-      //If they do not match for any of the ops, we will not keep
-      //This does n^2 work instead of n
-      if(local_idxs[op_loc_list[i]]!=local_idxs[op_loc_list[i2]]){
-        keep_val = 0;
-      }
-    }
-    if(keep_val==1){
-      //All the trace_over ops idx matched, so we keep this one
-      //new_idx = get_global_idx(full_dm,new_dm,i);
-      add_to_qvec_loc(new_dm,this_val,new_idx);
-    }
+  if(full_state->my_type==WAVEFUNCTION){
+    _ptrace_over_list_qvec_wf(full_state,n_ops,op_loc_list,n_ops_keep,ops_keep_list,new_dm);
+  } else {
+    _ptrace_over_list_qvec_dm(full_state,n_ops,op_loc_list,n_ops_keep,ops_keep_list,new_dm);
   }
 
   assemble_qvec(*new_dm);
   free(hspace_dims_new);
-  free(local_idxs);
+  free(ops_keep_list);
+
   return;
 }
 
@@ -1665,5 +1873,81 @@ void load_sparse_mat_qvec(char filename[],Mat *write_mat,qvec rho){
   MatCreate(PETSC_COMM_WORLD,write_mat);
   MatLoad(*write_mat,fd);
   PetscViewerDestroy(&fd);
+  return;
+}
+
+
+/*
+ * void sqrt_mat takes the square root of square, hermitian matrix
+ *
+ * Inputs:
+ *         Mat dm_mat - matrix to take square root of
+ * Outpus:
+ *         None, but does square root in place
+ *
+ */
+void sqrt_mat(Mat dm_mat){
+  Mat V,sqrt_D,result_mat;
+  PetscInt rows,columns,i;
+  PetscScalar  *array,*work,*eigs,*evec,sdummy;
+  PetscReal    *rwork;
+  PetscBLASInt idummy,lwork,lierr,nb;
+
+  MatGetSize(dm_mat,&rows,&columns);
+
+  if (rows!=columns){
+    if (nid==0){
+      printf("ERROR! The input matrix in sqrt_mat is not square!\n");
+      exit(0);
+    }
+  }
+
+
+  /* We need the actual array so that we can pass it to lapack */
+  MatDenseGetArray(dm_mat,&array);
+
+  /* Lots of setup for LAPACK stuff */
+  idummy = rows;
+  lwork  = 5*rows;
+  PetscMalloc1(5*rows,&work);
+  PetscMalloc1(2*rows,&rwork);
+  PetscMalloc1(rows*rows,&evec);
+  PetscMalloc1(rows,&eigs);
+  PetscBLASIntCast(rows,&nb);
+
+  /* Call LAPACK through PETSc to ensure portability */
+  LAPACKgeev_("N","V",&nb,array,&nb,eigs,&sdummy,&idummy,evec,&nb,work,&lwork,rwork,&lierr);
+  /* Create matrices to store eigenvectors / values */
+  MatCreateSeqDense(PETSC_COMM_SELF,rows,rows,evec,&V);
+  MatCreateSeqDense(PETSC_COMM_SELF,rows,rows,NULL,&sqrt_D);
+
+  MatSetUp(V);
+  MatSetUp(sqrt_D);
+
+  for (i=0;i<rows;i++){
+    /* Stop NaN's from roundoff error by checking that eigs be positive */
+    if (PetscRealPart(eigs[i])>0){
+      MatSetValue(sqrt_D,i,i,sqrt(PetscRealPart(eigs[i])),INSERT_VALUES);
+    }
+  }
+
+  MatAssemblyBegin(sqrt_D,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(sqrt_D,MAT_FINAL_ASSEMBLY);
+  /* Calculate V*sqrt(D) */
+  MatMatMult(V,sqrt_D,MAT_INITIAL_MATRIX,PETSC_DEFAULT,&result_mat);
+  /* Calculate V^\dagger */
+  MatHermitianTranspose(V,MAT_INPLACE_MATRIX,&V);
+  MatDenseRestoreArray(dm_mat,&array);
+  /* Calculate (V*sqrt(D))*V^\dagger, store in dm_mat */
+  MatMatMult(result_mat,V,MAT_REUSE_MATRIX,PETSC_DEFAULT,&dm_mat);
+
+
+  MatDestroy(&V);
+  MatDestroy(&sqrt_D);
+  MatDestroy(&result_mat);
+  PetscFree(work);
+  PetscFree(rwork);
+  PetscFree(evec);
+  PetscFree(eigs);
   return;
 }

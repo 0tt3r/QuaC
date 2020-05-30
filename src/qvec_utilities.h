@@ -13,11 +13,14 @@ void create_wf_sys(qsystem,qvec*);
 void create_arb_qvec(qvec*,PetscInt,qvec_type);
 void create_arb_qvec_dims(qvec*,PetscInt,PetscInt*,qvec_type);
 void _create_vec(Vec*,PetscInt,PetscInt);
+void change_qvec_dims(qvec,PetscInt,PetscInt*);
 
 void read_qvec_dm_binary(qvec*,const char[]);
 void read_qvec_wf_binary(qvec*,const char[]);
 
-
+void ptrace_over_list_qvec(qvec,PetscInt,PetscInt*,qvec*);
+void _ptrace_over_list_qvec_wf(qvec,PetscInt,PetscInt*,PetscInt,PetscInt*,qvec*);
+void _ptrace_over_list_qvec_dm(qvec,PetscInt,PetscInt*,PetscInt,PetscInt*,qvec*);
 
 void assemble_qvec(qvec);
 void destroy_qvec(qvec*);
@@ -70,9 +73,13 @@ void get_wf_element_qvec(qvec,PetscInt,PetscScalar*);
 void get_wf_element_qvec_local(qvec,PetscInt,PetscScalar*);
 void get_dm_element_qvec(qvec,PetscInt,PetscInt,PetscScalar*);
 void get_dm_element_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
+void _get_qvec_element_local(qvec,PetscInt,PetscScalar*);
 
 void check_qvec_consistent(qvec,qvec);
+void check_qvec_equal(qvec,qvec,PetscBool*);
 void copy_qvec(qvec,qvec);
 void copy_qvec_wf_to_dm(qvec,qvec);
 void get_hilbert_schmidt_dist_qvec(qvec,qvec,PetscReal*);
+void sqrt_mat(Mat);
+
 #endif
