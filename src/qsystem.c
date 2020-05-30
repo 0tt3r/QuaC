@@ -66,16 +66,16 @@ void initialize_system(qsystem *qsys){
 
 void destroy_system(qsystem *qsys){
   PetscInt i;
-  /* free((*qsys)->subsystem_list); */
+  free((*qsys)->subsystem_list);
   for(i=0;i<(*qsys)->num_time_dep;i++){
     free((*qsys)->time_dep[i].ops);
   }
-  /* free((*qsys)->time_dep); */
+  free((*qsys)->time_dep);
 
   for(i=0;i<(*qsys)->num_time_indep;i++){
     free((*qsys)->time_indep[i].ops);
   }
-  /* free((*qsys)->time_indep); */
+  free((*qsys)->time_indep);
   if ((*qsys)->mat_allocated){
     MatDestroy(&((*qsys)->mat_A));
     free((*qsys)->o_nnz);
