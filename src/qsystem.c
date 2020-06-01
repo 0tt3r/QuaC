@@ -125,22 +125,27 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
   /* Make number operator */
   _create_single_op(sys->total_levels,number_of_levels,NUMBER,&temp);
   (*new_op)->n      = temp;
+  temp->dag         = temp; //NUMBER operator is hermitian
 
   /* Make identity operator */
   _create_single_op(sys->total_levels,number_of_levels,IDENTITY,&temp);
   (*new_op)->eye    = temp;
+  temp->dag         = temp; //IDENTITY operator is hermitian
 
   /* Make SIGMA_X operator (only valid for qubits, made for every system) */
   _create_single_op(sys->total_levels,number_of_levels,SIGMA_X,&temp);
   (*new_op)->sig_x      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
 
   /* Make SIGMA_Z operator (only valid for qubits, made for every system) */
   _create_single_op(sys->total_levels,number_of_levels,SIGMA_Z,&temp);
   (*new_op)->sig_z      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
 
   /* Make SIGMA_Y operator (only valid for qubits, made for every system) */
   _create_single_op(sys->total_levels,number_of_levels,SIGMA_Y,&temp);
   (*new_op)->sig_y      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
 
   /* Increase total_levels */
   sys->total_levels = sys->total_levels*number_of_levels;
@@ -337,19 +342,17 @@ void clear_mat_terms_sys(qsystem sys){
   if (sys->mat_allocated){
     //Free the matrix
     MatDestroy(&(sys->mat_A));
+    free(sys->o_nnz);
+    free(sys->d_nnz);
     sys->mat_allocated = 0; //
   }
 
-  if(sys->num_time_indep!=0){
-    for(i=0;i<sys->num_time_dep;i++){
-      free(sys->time_dep[i].ops);
-    }
+  for(i=0;i<sys->num_time_indep;i++){
+    free(sys->time_indep[i].ops);
   }
 
-  if(sys->num_time_dep!=0){
-    for(i=0;i<sys->num_time_indep;i++){
-      free(sys->time_indep[i].ops);
-    }
+  for(i=0;i<sys->num_time_dep;i++){
+    free(sys->time_dep[i].ops);
   }
 
   //Reset our counters
