@@ -37,11 +37,6 @@ typedef struct time_dep_struct{
 void create_op(int,operator*);
 void create_vec(int,vec_op*);
 
-void add_to_ham_p(PetscScalar,PetscInt,...);
-void add_lin_p(PetscScalar,PetscInt,...);
-void add_to_ham_time_dep_p(double (*)(double),int,...);
-void add_lin_time_dep_p(double (*)(double),int,...);
-
 void no_lindblad_terms();
 
 void add_to_ham(PetscScalar,operator);

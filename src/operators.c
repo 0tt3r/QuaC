@@ -91,7 +91,7 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->my_op_type  = NUMBER;
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
-
+  temp->dag         = temp; //The number operator is hermitian
   (*new_op)->n      = temp;
 
   /* Make identity operator */
@@ -100,6 +100,7 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = IDENTITY;
+  temp->dag         = temp; //The identity operator is hermitian
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
 
@@ -111,6 +112,7 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = SIGMA_X;
+  temp->dag         = temp; //The pauli operators are hermitian
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
 
@@ -122,6 +124,7 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = SIGMA_Z;
+  temp->dag         = temp; //The pauli operators are hermitian
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
 
@@ -133,12 +136,11 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = SIGMA_Y;
+  temp->dag         = temp; //The pauli operators are hermitian
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
 
   (*new_op)->sig_y      = temp;
-
-
 
   /* Increase total_levels */
   total_levels = total_levels*number_of_levels;
@@ -227,104 +229,9 @@ void add_to_ham_time_dep(double (*time_dep_func)(double),int num_ops,...){
   return;
 }
 
-/*
- * add_to_ham_time_dep_p adds a(t)*op to the time dependent hamiltonian list
- * Inputs:
- *        double (*time_dep_func)(double): time dependent function to multiply op
- *        PetscInt    num_ops:    number of ops in the list (can be vecs)
- *        operator op1...: operators to multiply together and add
- * Outputs:
- *        none
- */
-void add_to_ham_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
-  PetscInt    i;
-  operator    op;
-  va_list     ap;
-  _check_initialized_A();
-
-  /*
-   * Create the new PETSc matrix.
-   * These matrices are incredibly sparse (1 to 2 per row)
-   */
-
-  _time_dep_list[_num_time_dep].time_dep_func = time_dep_func;
-  _time_dep_list[_num_time_dep].num_ops       = num_ops;
-  _time_dep_list[_num_time_dep].ops = malloc(num_ops*sizeof(operator));
-
-  //Add the expanded op to the matrix
-  va_start(ap,num_ops);
-  for (i=0;i<num_ops;i++){
-    op = va_arg(ap,operator);
-    _time_dep_list[_num_time_dep].ops[i] = op;
-  }
-  _num_time_dep = _num_time_dep + 1;
-  return;
-}
-
-void add_lin_time_dep_p(double (*time_dep_func)(double),int num_ops,...){
-  PetscInt    i;
-  operator    op;
-  va_list     ap;
-  _check_initialized_A();
-  _lindblad_terms = 1;
-  /*
-   * Create the new PETSc matrix.
-   * These matrices are incredibly sparse (1 to 2 per row)
-   */
-
-  _time_dep_list_lin[_num_time_dep_lin].time_dep_func = time_dep_func;
-  _time_dep_list_lin[_num_time_dep_lin].num_ops       = num_ops;
-  _time_dep_list_lin[_num_time_dep_lin].ops = malloc(num_ops*sizeof(operator));
-
-  //Add the expanded op to the matrix
-  va_start(ap,num_ops);
-  for (i=0;i<num_ops;i++){
-    op = va_arg(ap,operator);
-    _time_dep_list_lin[_num_time_dep_lin].ops[i] = op;
-  }
-  _num_time_dep_lin = _num_time_dep_lin + 1;
-  return;
-}
-
 void no_lindblad_terms(){
   _no_lindblad = 1;
 }
-/*
- * add_to_ham_p adds a*op1*op2*...*opn to the hamiltonian
- * Inputs:
- *        PetscScalar a:    scalar to multiply op(s)
- *        PetscInt    num_ops:    number of ops in the list (can be vecs)
- *        operator op1...: operators to multiply together and add
- * Outputs:
- *        none
- */
-void add_to_ham_p(PetscScalar a,PetscInt num_ops,...){
-  va_list  ap;
-  operator *ops;
-  int      i;
-  //FIXME This gives a segfault for some reason?
-  /* PetscLogEventBegin(add_to_ham_event,0,0,0,0); */
-  _check_initialized_A();
-
-  if (PetscAbsComplex(a)!=0) { //Don't add zero numbers to the hamiltonian
-     ops = malloc(num_ops*sizeof(struct operator));
-
-     va_start(ap,num_ops);
-    //Loop through operators, store them
-    for (i=0;i<num_ops;i++){
-      ops[i] = va_arg(ap,operator);
-    }
-    va_end(ap);
-    _add_ops_to_mat_ham_only(a,ham_A,num_ops,ops);
-    if(_no_lindblad==0){
-      _add_ops_to_mat_ham(a,full_A,num_ops,ops);
-    }
-    free(ops);
-  }
-  /* PetscLogEventEnd(add_to_ham_event,0,0,0,0); */
-  return;
-}
-
 
 /*
  * add_to_ham adds a*op to the hamiltonian
@@ -706,53 +613,6 @@ void add_to_ham_mult3(PetscScalar a,operator op1,operator op2,operator op3){
                                 op2->position,op3->position,1,1,total_levels,1);
   }
 
-  return;
-}
-
-
-/*
- * add_lin adds a Lindblad L(C) term to the system of equations, where
- * L(C)p = C p C^t - 1/2 (C^t C p + p C^t C)
- * Or, in superoperator space (t = conjugate transpose, T = transpose, * = conjugate)
- * Lp    = C* cross C - 1/2(C^T C* cross I + I cross C^t C) p
- * And C = op1 op2 ... opn
- * Inputs:
- *        PetscScalar a:    scalar to multiply L term (note: Full term, not sqrt())
- *        PetscInt    num_ops: number of operators to combine
- *        operator op1 ...: ops to make L(C) of
- * Outputs:
- *        none
- */
-
-void add_lin_p(PetscScalar a,PetscInt num_ops,...){
-  va_list  ap;
-  operator *ops;
-  int      i;
-
-  /* va_list     ap; */
-  /* PetscInt i,j,j_ig,j_gi,j_gg,this_j_ig,this_j_gi,Istart,Iend,this_j_gg; */
-  /* PetscScalar    val_ig,val_gi,val_gg,tmp_val; */
-  /* PetscScalar add_to_mat; */
-  /* operator    this_op1,this_op2; */
-  PetscLogEventBegin(add_lin_event,0,0,0,0);
-  _check_initialized_A();
-  _lindblad_terms = 1;
-
-  if (PetscAbsComplex(a)!=0){
-
-    ops = malloc(num_ops*sizeof(struct operator));
-    va_start(ap,num_ops);
-    //Loop through operators, store them
-    for (i=0;i<num_ops;i++){
-      ops[i] = va_arg(ap,operator);
-    }
-    va_end(ap);
-
-    _add_ops_to_mat_lin(a,full_A,num_ops,ops);
-    free(ops);
-
-  }
-  PetscLogEventEnd(add_lin_event,0,0,0,0);
   return;
 }
 
