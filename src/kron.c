@@ -172,7 +172,7 @@ void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt num_ops,
       this_op2 = ops[j+1];
       if (this_op2->my_op_type!=VEC){
         if (nid==0){
-          printf("ERROR! VEC operators must come in pairs in _add_ops_to_mat_ham\n");
+          printf("ERROR! VEC operators must come in pairs in _get_val_j_ops\n");
           exit(0);
         }
       }
