@@ -180,15 +180,15 @@ QuaCCircuit_init2(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
 static PyObject *
 QuaCCircuit_add_gate(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
   int qubit1 = -1, qubit2 = -1;
-  PetscReal angle = 0, time = 0;
+  PetscReal theta = 0, phi = 0, lambda = 0, time = 0;
   gate_type gate;
   char *gate_name;
 
-  static char *kwlist[] = {"gate", "qubit1", "qubit2", "angle", "time", NULL};
+  static char *kwlist[] = {"gate", "qubit1", "qubit2", "theta", "phi", "lam", "time", NULL};
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "si|idd", kwlist,
-                                   &gate_name, &qubit1, &qubit2, &angle, &time))
-    Py_RETURN_NONE;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "si|idddd", kwlist,
+                                   &gate_name, &qubit1, &qubit2, &theta, &phi, &lambda, &time))
+   Py_RETURN_NONE;
 
   if (!strcasecmp(gate_name, "CZX")) {
     gate = CZX;
@@ -216,6 +216,12 @@ QuaCCircuit_add_gate(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
     gate = RY;
   } else if (!strcasecmp(gate_name, "RZ")) {
     gate = RZ;
+  } else if (!strcasecmp(gate_name, "U1")) {
+    gate = U1;
+  } else if (!strcasecmp(gate_name, "U2")) {
+    gate = U2;
+  } else if (!strcasecmp(gate_name, "U3")) {
+    gate = U3;
   } else {
     PyErr_SetString(PyExc_RuntimeError, "Unknown gate type!");
     Py_RETURN_NONE;
@@ -228,8 +234,17 @@ QuaCCircuit_add_gate(QuaCCircuit *self, PyObject *args, PyObject *kwds) {
     }
 
     add_gate_to_circuit_sys(&self->c, time, gate, qubit1, qubit2);
+  } else if (gate == U3){
+    add_gate_to_circuit_sys(&self->c, time, gate, qubit1, theta, phi, lambda);
+  } else if (gate == U2){
+    theta = M_PI / 2;
+    add_gate_to_circuit_sys(&self->c, time, gate, qubit1, theta, phi, lambda);
+  } else if (gate == U1) {
+    theta = 0.0;
+    phi = 0.0;
+    add_gate_to_circuit_sys(&self->c, time, gate, qubit1, theta, phi, lambda);
   } else {
-    add_gate_to_circuit_sys(&self->c, time, gate, qubit1, angle);
+    add_gate_to_circuit_sys(&self->c, time, gate, qubit1, theta);
   }
 
   Py_RETURN_NONE;
@@ -842,4 +857,3 @@ initquac(void)
 }
 
 #undef INITERROR
-
