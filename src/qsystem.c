@@ -420,7 +420,7 @@ void add_lin_term_list(qsystem sys,PetscScalar a,PetscInt num_ops,operator *in_o
   return;
 }
 
-void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func)(double),
+void add_ham_term_time_dep(qsystem sys,PetscScalar a,void *ctx,PetscScalar (*time_dep_func)(double),
                            PetscInt num_ops,...){
   va_list  ap;
   operator *ops;
@@ -437,6 +437,7 @@ void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   sys->time_dep[sys->num_time_dep].num_ops = num_ops;
   sys->time_dep[sys->num_time_dep].ops = malloc(num_ops*sizeof(struct operator));
   sys->time_dep[sys->num_time_dep].time_dep_func = time_dep_func;
+  sys->time_dep[sys->num_time_dep].ctx = ctx;
 
   va_start(ap,num_ops);
   //Loop through operators, store them
@@ -449,7 +450,7 @@ void add_ham_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   return;
 }
 
-void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func)(double),
+void add_lin_term_time_dep(qsystem sys,PetscScalar a,void *ctx,PetscScalar (*time_dep_func)(double),
                            PetscInt num_ops,...){
   va_list  ap;
   operator *ops;
@@ -468,6 +469,7 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,PetscScalar (*time_dep_func
   sys->time_dep[sys->num_time_dep].num_ops = num_ops;
   sys->time_dep[sys->num_time_dep].ops = malloc(num_ops*sizeof(struct operator));
   sys->time_dep[sys->num_time_dep].time_dep_func = time_dep_func;
+  sys->time_dep[sys->num_time_dep].ctx = ctx;
 
   va_start(ap,num_ops);
   //Loop through operators, store them
@@ -1098,7 +1100,7 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
   MatCopy(qsys->mat_A,AA,SAME_NONZERO_PATTERN);
 
   for(i=0;i<qsys->num_time_dep;i++){
-    time_dep_scalar = qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t);
+    time_dep_scalar = qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t,qsys->time_dep[i].ctx);
     _add_ops_to_mat(time_dep_scalar,AA,qsys->time_dep[i].my_term_type,qsys->total_levels,
                     qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
   }

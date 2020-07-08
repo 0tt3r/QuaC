@@ -30,8 +30,9 @@ typedef struct {
   PetscInt num_ops;
   mat_term_type my_term_type;
   PetscScalar a;
+  void* ctx;
   Mat mat_A;
-  PetscScalar (*time_dep_func)(PetscReal);
+  PetscScalar (*time_dep_func)(PetscReal,void*);
   operator *ops;
 } mat_term;
 

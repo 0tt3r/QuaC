@@ -26,8 +26,8 @@ void _create_single_vec(PetscInt,PetscInt,PetscInt,operator*);
 void add_ham_term(qsystem,PetscScalar,PetscInt,...);
 void add_lin_term(qsystem,PetscScalar,PetscInt,...);
 void add_lin_term_list(qsystem,PetscScalar,PetscInt,operator*);
-void add_ham_term_time_dep(qsystem,PetscScalar,PetscScalar(*)(PetscReal),PetscInt,...);
-void add_lin_term_time_dep(qsystem,PetscScalar,PetscScalar(*)(PetscReal),PetscInt,...);
+void add_ham_term_time_dep(qsystem,PetscScalar,void*,PetscScalar(*)(PetscReal),PetscInt,...);
+void add_lin_term_time_dep(qsystem,PetscScalar,void*,PetscScalar(*)(PetscReal),PetscInt,...);
 
 void time_step_sys(qsystem,qvec,PetscReal,PetscReal,PetscReal,PetscInt);
 void set_ts_monitor_sys(qsystem,PetscErrorCode (*monitor)(TS,PetscInt,PetscReal,Vec,void*),void*);
