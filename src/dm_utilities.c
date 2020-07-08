@@ -281,7 +281,7 @@ void measure_dm(Vec dm,operator op){
   VecDuplicate(dm,&tmp_dm);
   //Construct U* cross U
   for (i=Istart;i<Iend;i++){
-    _get_val_j_from_global_i(i,op,&j,&val,0); // Get the corresponding j and val
+    _get_val_j_from_global_i(total_levels,i,op,&j,&val,0); // Get the corresponding j and val
     MatSetValue(tmp_op_mat,i,j,val,INSERT_VALUES);
   }
   MatAssemblyBegin(tmp_op_mat,MAT_FINAL_ASSEMBLY);
@@ -363,13 +363,13 @@ void vadd_ops_to_mat(Mat A,PetscInt tensor_control,PetscInt number_of_ops,va_lis
 
       //Now we have our two vec operators, get the matrix values
       for (i=Istart;i<Iend;i++){
-        _get_val_j_from_global_i_vec_vec(i,op,op2,&j,&val,tensor_control);
+        _get_val_j_from_global_i_vec_vec(total_levels,i,op,op2,&j,&val,tensor_control);
         MatSetValue(A,i,j,val,ADD_VALUES);
       }
     } else {
       //Regular operator
       for (i=Istart;i<Iend;i++){
-        _get_val_j_from_global_i(i,op,&j,&val,tensor_control); // Get the corresponding j and val
+        _get_val_j_from_global_i(total_levels,i,op,&j,&val,tensor_control); // Get the corresponding j and val
         MatSetValue(A,i,j,val,ADD_VALUES);
       }
     }
@@ -403,7 +403,7 @@ void mult_dm_left_right(Vec dm,operator op_A,operator op_B){
   VecDuplicate(dm,&tmp_dm2);
   //Construct I cross A
   for (i=Istart;i<Iend;i++){
-    _get_val_j_from_global_i(i,op_A,&j,&val,-1); // Get the corresponding j and val
+    _get_val_j_from_global_i(total_levels,i,op_A,&j,&val,-1); // Get the corresponding j and val
     MatSetValue(tmp_op_mat,i,j,val,INSERT_VALUES);
   }
   MatAssemblyBegin(tmp_op_mat,MAT_FINAL_ASSEMBLY);
@@ -422,7 +422,7 @@ void mult_dm_left_right(Vec dm,operator op_A,operator op_B){
 
   //Construct B* cross I
   for (i=Istart;i<Iend;i++){
-    _get_val_j_from_global_i(i,op_B,&j,&val,1); // Get the corresponding j and val
+    _get_val_j_from_global_i(total_levels,i,op_B,&j,&val,1); // Get the corresponding j and val
     MatSetValue(tmp_op_mat,i,j,val,INSERT_VALUES);
   }
   MatAssemblyBegin(tmp_op_mat,MAT_FINAL_ASSEMBLY);
@@ -1426,12 +1426,12 @@ void get_expectation_value(Vec rho,PetscScalar *trace_val,int number_of_ops,...)
             exit(0);
           }
         }
-        _get_val_j_from_global_i_vec_vec(this_i,op[j],op[j+1],&this_j,&val,-1);
+        _get_val_j_from_global_i_vec_vec(total_levels,this_i,op[j],op[j+1],&this_j,&val,-1);
         //Increment j
         j=j+1;
       } else {
         //Standard operator
-        _get_val_j_from_global_i(this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
+        _get_val_j_from_global_i(total_levels,this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
       }
       if (this_j<0) {
         /*
@@ -1732,7 +1732,7 @@ void _get_expectation_value_psi(Vec psi,PetscScalar *trace_val,int number_of_ops
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<number_of_ops;j++){
-      _get_val_j_from_global_i(this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+      _get_val_j_from_global_i(total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i

@@ -154,7 +154,11 @@ PetscScalar _get_val_in_subspace(long i,op_type my_op_type,int position,long *i_
   return val;
 }
 
-void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt num_ops,
+/*
+ * Given a list of operators, row index j, and tensor_control variable, unroil
+ * the operators to get the column index and value. -1 means the value is 0.
+ */
+void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt tot_levels,PetscInt num_ops,
                     operator *ops,tensor_control_enum tensor_control){
   PetscInt this_j,j,j2;
   PetscScalar val,tmp_val;
@@ -182,14 +186,14 @@ void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt num_ops,
       //-1 means that it was 0 on a past operator multiplication, so we skip it if it is -1
       if (this_j!=-1){
         //Get val
-        _get_val_j_from_global_i_vec_vec(this_j,this_op1,this_op2,&j2,&tmp_val,tensor_control);
+        _get_val_j_from_global_i_vec_vec(tot_levels,this_j,this_op1,this_op2,&j2,&tmp_val,tensor_control);
         this_j = j2;
         val = tmp_val * val;
       }
     } else {
       //Normal operator
       if (this_j!=-1){
-        _get_val_j_from_global_i(this_j,this_op1,&j2,&tmp_val,tensor_control);
+        _get_val_j_from_global_i(tot_levels,this_j,this_op1,&j2,&tmp_val,tensor_control);
         this_j = j2;
         val = tmp_val * val;
       }
@@ -206,6 +210,7 @@ void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt num_ops,
  * _get_val_j_from_global_i returns the val and global j for a given global i.
  * If there is no nonzero value for a given i, it returns a negative j
  * Inputs:
+ *      PetscInt tot_levels total hilbert space size
  *      long i:             global i
  *      operator:           operator to get
  *      tensor_control - switch on which superoperator to compute
@@ -218,7 +223,7 @@ void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt num_ops,
  *      double *val:        value of op for global i,j
   */
 
-void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScalar *val,tensor_control_enum tensor_control){
+void _get_val_j_from_global_i(PetscInt tot_levels,PetscInt i,operator this_op,PetscInt *j,PetscScalar *val,tensor_control_enum tensor_control){
   PetscInt i_sub,n_after,tmp_int,k1,k2,extra_after,j_i1,j_i2,i1,i2;
   PetscScalar val_i1,val_i2;
 
@@ -234,12 +239,12 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
 
   if (tensor_control!=TENSOR_GG) {
     if (tensor_control==TENSOR_GI) {
-      extra_after = total_levels;
+      extra_after = tot_levels;
     } else {
       extra_after = 1;
     }
 
-    n_after = total_levels/(this_op->my_levels*this_op->n_before)*extra_after;
+    n_after = tot_levels/(this_op->my_levels*this_op->n_before)*extra_after;
     i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
 
     if (this_op->my_op_type==LOWER) {
@@ -335,7 +340,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
         *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
         *val   = PETSC_i;
       } else {
-        if (nid==0){
+        if (nid==0){ 
           printf("ERROR! Pauli Operators are only defined for qubits\n");
           exit(0);
         }
@@ -411,14 +416,14 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
      */
 
     /* Calculate i1, i2 */
-    i1 = i/total_levels;
-    i2 = i%total_levels;
+    i1 = i/tot_levels;
+    i2 = i%tot_levels;
 
     /* Now, get js for U* (i1) by calling this function */
-    _get_val_j_from_global_i(i1,this_op,&j_i1,&val_i1,TENSOR_IG);
+    _get_val_j_from_global_i(tot_levels,i1,this_op,&j_i1,&val_i1,TENSOR_IG);
 
     /* Now, get js for U (i2) by calling this function */
-    _get_val_j_from_global_i(i2,this_op,&j_i2,&val_i2,TENSOR_IG);
+    _get_val_j_from_global_i(tot_levels,i2,this_op,&j_i2,&val_i2,TENSOR_IG);
 
     /*
      * Combine j's to get U* cross U
@@ -428,7 +433,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
       *j = -1;
       *val = 0;
     } else {
-      *j = total_levels * j_i1 + j_i2;
+      *j = tot_levels * j_i1 + j_i2;
       *val = PetscConjComplex(val_i1)*val_i2;
     }
 
@@ -436,7 +441,7 @@ void _get_val_j_from_global_i(PetscInt i,operator this_op,PetscInt *j,PetscScala
   return;
 }
 
-void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this_op2,PetscInt *j,PetscScalar *val,tensor_control_enum tensor_control){
+void _get_val_j_from_global_i_vec_vec(PetscInt tot_levels,PetscInt i,operator this_op1,operator this_op2,PetscInt *j,PetscScalar *val,tensor_control_enum tensor_control){
   PetscInt i_sub,n_after,tmp_int,k1,k2,extra_after,j_i1,j_i2,i1,i2;
   PetscScalar val_i1,val_i2;
 
@@ -465,7 +470,7 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
 
   if (tensor_control!=TENSOR_GG) {
     if (tensor_control==TENSOR_GI) {
-      extra_after = total_levels;
+      extra_after = tot_levels;
     } else {
       extra_after = 1;
     }
@@ -479,7 +484,7 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
      * not, we return -1.
      */
 
-    n_after = total_levels/(this_op1->my_levels*this_op1->n_before)*extra_after;
+    n_after = tot_levels/(this_op1->my_levels*this_op1->n_before)*extra_after;
     i_sub = i/n_after%this_op1->my_levels; //Use integer arithmetic to get floor function
     if (i_sub==this_op1->position){
       tmp_int = i - i_sub * n_after;
@@ -509,14 +514,14 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
      */
 
     /* Calculate i1, i2 */
-    i1 = i/total_levels;
-    i2 = i%total_levels;
+    i1 = i/tot_levels;
+    i2 = i%tot_levels;
 
     /* Now, get js for U* (i1) by calling this function */
-    _get_val_j_from_global_i_vec_vec(i1,this_op1,this_op2,&j_i1,&val_i1,TENSOR_IG);
+    _get_val_j_from_global_i_vec_vec(tot_levels,i1,this_op1,this_op2,&j_i1,&val_i1,TENSOR_IG);
 
     /* Now, get js for U (i2) by calling this function */
-    _get_val_j_from_global_i_vec_vec(i2,this_op1,this_op2,&j_i2,&val_i2,TENSOR_IG);
+    _get_val_j_from_global_i_vec_vec(tot_levels,i2,this_op1,this_op2,&j_i2,&val_i2,TENSOR_IG);
 
     /*
      * Combine j's to get U* cross U
@@ -526,7 +531,7 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
       *j = -1;
       *val = 0;
     } else {
-      *j = total_levels * j_i1 + j_i2;
+      *j = tot_levels * j_i1 + j_i2;
       *val = PetscConjComplex(val_i1)*val_i2;
     }
   }
@@ -534,7 +539,7 @@ void _get_val_j_from_global_i_vec_vec(PetscInt i,operator this_op1,operator this
 }
 
 
-void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
+void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt tot_levels,PetscInt num_ops,operator *ops){
   PetscInt i,j_ig,this_j_ig,Istart,Iend;
   PetscScalar    val_ig;
   PetscScalar add_to_mat;
@@ -542,7 +547,7 @@ void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops
 
   for (i=Istart;i<Iend;i++){
     this_j_ig = i;
-    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_ig,&this_j_ig,tot_levels,num_ops,ops,TENSOR_IG);
 
     //Add G_1 G_2 ... G_n
     if (this_j_ig!=-1){
@@ -555,7 +560,44 @@ void _add_ops_to_mat_ham_only(PetscScalar a,Mat A,PetscInt num_ops,operator *ops
   return;
 }
 
-void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
+/*
+ * Add the non-hermitian part of the Lindblad to the Hamiltonian for the MCWF solver.
+ * For some Lindblad $L$, this terms is:
+ *         -i/2 a  L^\dag L
+ */
+void _add_ops_to_mat_lin_mcwf(PetscScalar a,Mat A,PetscInt tot_levels,PetscInt num_ops,operator *ops){
+  PetscInt i,j_ig,this_j_ig,Istart,Iend;
+  operator *tmp_ops;
+  PetscScalar    val_ig;
+  PetscScalar add_to_mat;
+  MatGetOwnershipRange(A,&Istart,&Iend);
+
+  /*
+   * We double the number of ops and add each ops complex conjugate to the list
+   */
+  tmp_ops = malloc(2*num_ops*sizeof(operator));
+  for(i=0;i<num_ops;i++){
+    tmp_ops[num_ops-i-1] = ops[i]->dag; //take reverse order of ops because (ab)^\dag = b^\dag a^\dag
+    tmp_ops[num_ops+i] = ops[i];
+  }
+
+  for (i=Istart;i<Iend;i++){
+    this_j_ig = i;
+
+    _get_val_j_ops(&val_ig,&this_j_ig,tot_levels,2*num_ops,tmp_ops,TENSOR_IG);
+
+    //Add G_1 G_2 ... G_n
+    if (this_j_ig!=-1){
+      add_to_mat = -PETSC_i*a/2*val_ig;
+      MatSetValue(A,i,this_j_ig,add_to_mat,ADD_VALUES);
+    }
+  }
+
+  free(tmp_ops);
+  return;
+}
+
+void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt tot_levels,PetscInt num_ops,operator *ops){
   PetscInt i,j_ig,j_gi,this_j_ig,this_j_gi,Istart,Iend;
   PetscScalar    val_ig,val_gi;
   PetscScalar add_to_mat;
@@ -566,8 +608,8 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
     this_j_ig = i;
     this_j_gi = i;
 
-    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
-    _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
+    _get_val_j_ops(&val_ig,&this_j_ig,tot_levels,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_gi,&this_j_gi,tot_levels,num_ops,ops,TENSOR_GI);
     //Add -i * I cross G_1 G_2 ... G_n
     if (this_j_ig!=-1){
       add_to_mat = -a*PETSC_i*val_ig;
@@ -584,15 +626,25 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
   return;
 }
 
-void _count_ops_in_mat(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
-                       Mat A,mat_term_type my_term_type,
-                       PetscInt dm_equations, PetscInt num_ops,operator *ops){
-  if (dm_equations){
+void _count_ops_in_mat(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt tot_levels,PetscInt Istart,PetscInt Iend,
+                       Mat A,mat_term_type my_term_type,PetscBool dm_equations,PetscBool mcwf_solver,
+                       PetscInt num_ops,operator *ops){
+  if (dm_equations==PETSC_TRUE){
     //Use lindblad terms
     if (my_term_type==LINDBLAD||my_term_type==TD_LINDBLAD){
-      _count_ops_in_mat_lin(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
+      if(mcwf_solver==PETSC_TRUE){
+        //count only non-Hermitian part
+        _count_ops_in_mat_lin_mcwf(d_nnz,o_nnz,tot_levels,Istart,Iend,A,num_ops,ops);
+      } else {
+        _count_ops_in_mat_lin(d_nnz,o_nnz,tot_levels,Istart,Iend,A,num_ops,ops);
+      }
     } else if (my_term_type==HAM||my_term_type==TD_HAM){
-      _count_ops_in_mat_ham(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
+      if(mcwf_solver==PETSC_TRUE){
+        //count only the smaller vector space size
+        _count_ops_in_mat_ham_only(d_nnz,o_nnz,tot_levels,Istart,Iend,A,num_ops,ops);
+      } else {
+        _count_ops_in_mat_ham(d_nnz,o_nnz,tot_levels,Istart,Iend,A,num_ops,ops);
+      }
     } else {
       if (nid==0){
         printf("ERROR! Wrong mat_term_type in _count_ops_in_mat - dm!\n");
@@ -601,7 +653,7 @@ void _count_ops_in_mat(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt 
     }
   } else {
     if (my_term_type==HAM||my_term_type==TD_HAM){
-      _count_ops_in_mat_ham_only(d_nnz,o_nnz,Istart,Iend,A,num_ops,ops);
+      _count_ops_in_mat_ham_only(d_nnz,o_nnz,tot_levels,Istart,Iend,A,num_ops,ops);
     } else {
       if (nid==0){
         printf("ERROR! Wrong mat_term_type in _count_ops_in_mat - ham!\n");
@@ -612,8 +664,8 @@ void _count_ops_in_mat(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt 
   return;
 }
 
-void _count_ops_in_mat_ham(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
-                           Mat A,PetscInt num_ops,operator *ops){
+void _count_ops_in_mat_ham(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt tot_levels,
+                           PetscInt Istart,PetscInt Iend,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,this_j_ig,this_j_gi,n;
   PetscScalar    val_ig,val_gi;
 
@@ -623,8 +675,8 @@ void _count_ops_in_mat_ham(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,Petsc
     this_j_ig = i;
     this_j_gi = i;
 
-    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
-    _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
+    _get_val_j_ops(&val_ig,&this_j_ig,tot_levels,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_gi,&this_j_gi,tot_levels,num_ops,ops,TENSOR_GI);
 
     //Count -i * I cross G_1 G_2 ... G_n
     if (this_j_ig!=-1){
@@ -668,8 +720,8 @@ void _count_ops_in_mat_ham(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,Petsc
   return;
 }
 
-void _count_ops_in_mat_ham_only(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
-                                Mat A,PetscInt num_ops,operator *ops){
+void _count_ops_in_mat_ham_only(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt tot_levels,
+                                PetscInt Istart,PetscInt Iend,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,this_j_ig,n;
   PetscScalar    val_ig;
 
@@ -677,7 +729,7 @@ void _count_ops_in_mat_ham_only(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,
   for (i=Istart;i<Iend;i++){
     this_j_ig = i;
 
-    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_ig,&this_j_ig,tot_levels,num_ops,ops,TENSOR_IG);
 
     //Count -i * G_1 G_2 ... G_n
     if (this_j_ig!=-1){
@@ -703,8 +755,54 @@ void _count_ops_in_mat_ham_only(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,
   return;
 }
 
-void _count_ops_in_mat_lin(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,PetscInt Iend,
-                           Mat A,PetscInt num_ops,operator *ops){
+void _count_ops_in_mat_lin_mcwf(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt tot_levels,
+                                PetscInt Istart,PetscInt Iend,Mat A,PetscInt num_ops,operator *ops){
+  PetscInt i,this_j_ig,n;
+  PetscScalar    val_ig;
+  operator *tmp_ops;
+
+  /*
+   * We double the number of ops and add each ops complex conjugate to the list
+   */
+  tmp_ops = malloc(2*num_ops*sizeof(operator));
+  for(i=0;i<num_ops;i++){
+    tmp_ops[2*i] = ops[i];
+    tmp_ops[2*i+1] = ops[i]->dag;
+  }
+
+  MatGetSize(A,&n,NULL);
+  for (i=Istart;i<Iend;i++){
+    this_j_ig = i;
+
+    _get_val_j_ops(&val_ig,&this_j_ig,tot_levels,2*num_ops,tmp_ops,TENSOR_IG);
+
+    //Count -i * G_1 G_2 ... G_n
+    if (this_j_ig!=-1){
+      if(this_j_ig==i){
+        //Diagonal element, already accounted for
+      } else if(this_j_ig>=Istart && this_j_ig < Iend){
+        //Diagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (d_nnz[i - Istart] < Iend-Istart){
+          d_nnz[i - Istart] += 1;
+        }
+      } else {
+        //Offdiagonal block
+        //Check so that we do not double count and end up with allocation larger than the row
+        if (o_nnz[i - Istart] < n - (Iend-Istart)){
+          o_nnz[i - Istart] += 1;
+        }
+      }
+    }
+
+  }
+
+  free(tmp_ops);
+  return;
+}
+
+void _count_ops_in_mat_lin(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt tot_levels,
+                           PetscInt Istart,PetscInt Iend,Mat A,PetscInt num_ops,operator *ops){
   PetscInt i,this_j_ig,this_j_gi,this_j_gg,n;
   PetscScalar    val_ig,val_gi,val_gg;
 
@@ -718,7 +816,7 @@ void _count_ops_in_mat_lin(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,Petsc
 
     this_j_gg = i;
 
-    _get_val_j_ops(&val_gg,&this_j_gg,num_ops,ops,TENSOR_GG);
+    _get_val_j_ops(&val_gg,&this_j_gg,tot_levels,num_ops,ops,TENSOR_GG);
 
     /*
      * Count (G* cross G)
@@ -745,23 +843,38 @@ void _count_ops_in_mat_lin(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt Istart,Petsc
   return;
 }
 
-void _add_ops_to_mat(PetscScalar a,Mat A,mat_term_type my_term_type,PetscInt dm_equations,
-                     PetscInt num_ops,operator *ops){
-  if (dm_equations){
+void _add_ops_to_mat(PetscScalar a,Mat A,mat_term_type my_term_type,PetscInt tot_levels,PetscBool dm_equations,
+                     PetscBool mcwf_solver,PetscInt num_ops,operator *ops){
+
+  if (dm_equations==PETSC_TRUE){
     //Use lindblad terms
-    if (my_term_type==LINDBLAD||my_term_type==TD_LINDBLAD){
-      _add_ops_to_mat_lin(a,A,num_ops,ops);
-    } else if (my_term_type==HAM||my_term_type==TD_HAM){
-      _add_ops_to_mat_ham(a,A,num_ops,ops);
+    if(mcwf_solver==PETSC_TRUE){
+      //Use mcwf_solver, which only adds nonhermitian part of the Lindblad and only the vector sized Ham
+      if (my_term_type==LINDBLAD||my_term_type==TD_LINDBLAD){
+        _add_ops_to_mat_lin_mcwf(a,A,tot_levels,num_ops,ops);
+      } else if (my_term_type==HAM||my_term_type==TD_HAM){
+        _add_ops_to_mat_ham_only(a,A,tot_levels,num_ops,ops);
+      } else {
+        if (nid==0){
+          printf("ERROR! Wrong mat_term_type in construct_matrix - dm mcwf!\n");
+          exit(0);
+        }
+      }
     } else {
-      if (nid==0){
-        printf("ERROR! Wrong mat_term_type in construct_matrix - dm!\n");
-        exit(0);
+      if (my_term_type==LINDBLAD||my_term_type==TD_LINDBLAD){
+        _add_ops_to_mat_lin(a,A,tot_levels,num_ops,ops);
+      } else if (my_term_type==HAM||my_term_type==TD_HAM){
+        _add_ops_to_mat_ham(a,A,tot_levels,num_ops,ops);
+      } else {
+        if (nid==0){
+          printf("ERROR! Wrong mat_term_type in construct_matrix - dm!\n");
+          exit(0);
+        }
       }
     }
   } else {
     if (my_term_type==HAM){
-      _add_ops_to_mat_ham_only(a,A,num_ops,ops);
+      _add_ops_to_mat_ham_only(a,A,tot_levels,num_ops,ops);
     } else {
       if (nid==0){
         printf("ERROR! Wrong mat_term_type in construct_matrix - ham!\n");
@@ -772,7 +885,7 @@ void _add_ops_to_mat(PetscScalar a,Mat A,mat_term_type my_term_type,PetscInt dm_
   return;
 }
 
-void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
+void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt tot_levels,PetscInt num_ops,operator *ops){
   PetscInt i,j,j_ig,j_gi,j_gg,this_j_ig,this_j_gi,Istart,Iend,this_j_gg;
   PetscScalar    val_ig,val_gi,val_gg,tmp_val;
   PetscScalar add_to_mat;
@@ -783,9 +896,9 @@ void _add_ops_to_mat_lin(PetscScalar a,Mat A,PetscInt num_ops,operator *ops){
     this_j_gi = i;
     this_j_gg = i;
 
-    _get_val_j_ops(&val_ig,&this_j_ig,num_ops,ops,TENSOR_IG);
-    _get_val_j_ops(&val_gi,&this_j_gi,num_ops,ops,TENSOR_GI);
-    _get_val_j_ops(&val_gg,&this_j_gg,num_ops,ops,TENSOR_GG);
+    _get_val_j_ops(&val_ig,&this_j_ig,tot_levels,num_ops,ops,TENSOR_IG);
+    _get_val_j_ops(&val_gi,&this_j_gi,tot_levels,num_ops,ops,TENSOR_GI);
+    _get_val_j_ops(&val_gg,&this_j_gg,tot_levels,num_ops,ops,TENSOR_GG);
     /*
      * Add (I cross G^t G)
      */
@@ -1645,19 +1758,19 @@ void _add_to_PETSc_kron_lin2(Mat matrix,PetscScalar a,operator op1,operator op2)
     op_val = -0.5*a;
 
     // b^t
-    _get_val_j_from_global_i(this_i,op2->dag,&this_j,&val,-1); // Get the corresponding j and val for op1
+    _get_val_j_from_global_i(total_levels,this_i,op2->dag,&this_j,&val,-1); // Get the corresponding j and val for op1
     op_val = val*op_val;
     this_i = this_j;
     // a^t
-    _get_val_j_from_global_i(this_i,op1->dag,&this_j,&val,-1); // Get the corresponding j and val for op2
+    _get_val_j_from_global_i(total_levels,this_i,op1->dag,&this_j,&val,-1); // Get the corresponding j and val for op2
     op_val = val*op_val;
     this_i = this_j;
     // a
-    _get_val_j_from_global_i(this_i,op1,&this_j,&val,-1); // Get the corresponding j and val for op2
+    _get_val_j_from_global_i(total_levels,this_i,op1,&this_j,&val,-1); // Get the corresponding j and val for op2
     op_val = val*op_val;
     this_i = this_j;
     // b
-    _get_val_j_from_global_i(this_i,op2,&this_j,&val,-1); // Get the corresponding j and val for op2
+    _get_val_j_from_global_i(total_levels,this_i,op2,&this_j,&val,-1); // Get the corresponding j and val for op2
     op_val = val*op_val;
     this_i = this_j;
 
@@ -1674,19 +1787,19 @@ void _add_to_PETSc_kron_lin2(Mat matrix,PetscScalar a,operator op1,operator op2)
     op_val = -0.5*a;
 
     // b^t
-    _get_val_j_from_global_i(this_i,op2->dag,&this_j,&val,1); // Get the corresponding j and val for op1
+    _get_val_j_from_global_i(total_levels,this_i,op2->dag,&this_j,&val,1); // Get the corresponding j and val for op1
     op_val = val*op_val;
     this_i = this_j;
     // a^t
-    _get_val_j_from_global_i(this_i,op1->dag,&this_j,&val,1); // Get the corresponding j and val for op2
+    _get_val_j_from_global_i(total_levels,this_i,op1->dag,&this_j,&val,1); // Get the corresponding j and val for op2
     op_val = val*op_val;
     this_i = this_j;
     // a
-    _get_val_j_from_global_i(this_i,op1,&this_j,&val,1); // Get the corresponding j and val for op2
+    _get_val_j_from_global_i(total_levels,this_i,op1,&this_j,&val,1); // Get the corresponding j and val for op2
     op_val = val*op_val;
     this_i = this_j;
     // b
-    _get_val_j_from_global_i(this_i,op2,&this_j,&val,1); // Get the corresponding j and val for op2
+    _get_val_j_from_global_i(total_levels,this_i,op2,&this_j,&val,1); // Get the corresponding j and val for op2
     op_val = val*op_val;
     op_val = PetscConjComplex(op_val);
     this_i = this_j;
@@ -1703,11 +1816,11 @@ void _add_to_PETSc_kron_lin2(Mat matrix,PetscScalar a,operator op1,operator op2)
     op_val = a;//Is this correct? FIXME
 
     // a* cross a
-    _get_val_j_from_global_i(this_i,op1,&this_j,&val,0); // Get the corresponding j and val for op1
+    _get_val_j_from_global_i(total_levels,this_i,op1,&this_j,&val,0); // Get the corresponding j and val for op1
     op_val = val*op_val;
     this_i = this_j;
     // b* cross b
-    _get_val_j_from_global_i(this_i,op2,&this_j,&val,0); // Get the corresponding j and val for op2
+    _get_val_j_from_global_i(total_levels,this_i,op2,&this_j,&val,0); // Get the corresponding j and val for op2
     op_val = val*op_val;
     this_i = this_j;
 

@@ -26,7 +26,7 @@ void build_recovery_lin(Mat *recovery_mat,operator error,char commutation_string
    */
 
   /* Construct our error matrix */
-  combine_ops_to_mat(&temp_op_mat,1,error);
+  combine_ops_to_mat(&temp_op_mat,total_levels,1,error);
 
   /*
    * Copy the error matrix into our recovery matrix
@@ -454,7 +454,7 @@ void _get_this_i_and_val_from_stab(PetscInt *this_i, PetscScalar *op_val,stabili
 
 
   for (j=0;j<stab.n_ops;j++){
-    _get_val_j_from_global_i(*this_i,stab.ops[j],&this_j,&val,tensor_control); // Get the corresponding j and val
+    _get_val_j_from_global_i(total_levels,*this_i,stab.ops[j],&this_j,&val,tensor_control); // Get the corresponding j and val
     if (this_j<0) {
       /*
        * Negative j says there is no nonzero value for a given this_i
@@ -485,7 +485,7 @@ void _get_row_nonzeros(PetscScalar this_row[],PetscInt row_nonzeros[],PetscInt *
   PetscScalar error_val,op_val;
   PetscInt j,this_i,error_i,i_stab,j_stab,k_stab,l_stab,found;
   /* Get the error terms nonzero for this i */
-  _get_val_j_from_global_i(i,error,&error_i,&error_val,-1); // Get the corresponding j and val
+  _get_val_j_from_global_i(total_levels,i,error,&error_i,&error_val,-1); // Get the corresponding j and val
   this_i = error_i; // The leading index which we check
   op_val = error_val;
 
