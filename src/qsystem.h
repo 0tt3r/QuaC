@@ -4,10 +4,13 @@
 #include <petsc.h>
 #include "qvec_utilities.h"
 #include "qsystem_p.h"
+#include "sprng.h"
 
 void construct_matrix(qsystem);
+void construct_op_matrix_wf_list(qsystem,PetscScalar,Mat*,PetscInt,operator*);
 void initialize_system(qsystem*);
 void destroy_system(qsystem*);
+void use_mcwf_solver(qsystem,PetscInt,PetscInt);
 
 void create_op_sys(qsystem,PetscInt,operator*);
 void destroy_op_sys(operator*);

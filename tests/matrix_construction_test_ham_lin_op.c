@@ -106,7 +106,7 @@ void test_add_ham_lin_1op_pauli_real(void)
 
 }
 
-
+//It does not make sense to have an imaginary number as a Lindblad coefficient?
 void test_add_ham_lin_1op_basic_complex(void)
 {
   PetscScalar omega2,omega3,omega4;
@@ -642,5 +642,3 @@ int main(int argc, char** argv)
   QuaC_finalize();
   return UNITY_END();
 }
-
- 

@@ -81,6 +81,38 @@ void test_create_qvec_sys_wf(void){
 
 }
 
+void test_create_qvec_sys_wf_ens(void){
+  qsystem qsys;
+  operator op2,op3,op4;
+  qvec test_wf;
+  PetscInt n=24,n_samples=10;
+  PetscScalar alpha=1.0;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,3,&op3);
+  create_op_sys(qsys,4,&op4);
+
+  add_lin_term(qsys,alpha,1,op3);
+
+  use_mcwf_solver(qsys,n_samples,NULL);
+
+  create_qvec_sys(qsys,&test_wf);
+
+  TEST_ASSERT_EQUAL(n,test_wf->n);
+  TEST_ASSERT_EQUAL(n,test_wf->total_levels);
+  TEST_ASSERT_EQUAL(WF_ENSEMBLE,test_wf->my_type);
+  TEST_ASSERT_EQUAL(n_samples,test_wf->n_ensemble);
+
+  destroy_op_sys(&op2);
+  destroy_op_sys(&op3);
+  destroy_op_sys(&op4);
+  destroy_qvec(&test_wf);
+  destroy_system(&qsys);
+
+}
+
 void test_create_wf_sys(void){
   qsystem qsys;
   operator op2,op3,op4;
@@ -1011,6 +1043,395 @@ void test_read_wf_binary(void){
   return;
 }
 
+void test_get_bitstring_probs_wf(void){
+    qvec test_wf;
+    qsystem qsys;
+    operator op0,op1,op2;
+    PetscInt i,nloc;
+    PetscScalar val=1/sqrt(8);
+    PetscReal *probs,*vars,exp_prob=1./8.;
+    char message[255];
+    initialize_system(&qsys);
+    //Create some operators
+    create_op_sys(qsys,2,&op0);
+    create_op_sys(qsys,2,&op1);
+    create_op_sys(qsys,2,&op2);
+
+    create_qvec_sys(qsys,&test_wf);
+
+    for(i=0;i<8;i++){
+      add_to_qvec(test_wf,val,i);
+    }
+
+    assemble_qvec(test_wf);
+
+    get_bitstring_probs(test_wf,&nloc,&probs,&vars);
+
+    for(i=0;i<8;i++){
+      sprintf(message,"Index %d\n",i);
+      TEST_ASSERT_EQUAL_FLOAT_MESSAGE(exp_prob,probs[i],message);
+    }
+
+    free(probs);
+    free(vars);
+    destroy_op_sys(&op0);
+    destroy_op_sys(&op1);
+    destroy_op_sys(&op2);
+    destroy_system(&qsys);
+    return;
+}
+
+
+void test_get_bitstring_probs_dm(void){
+  qvec test_dm;
+  qsystem qsys;
+  operator op0,op1,op2;
+  PetscInt i,nloc;
+  PetscScalar val=1./8.;
+  PetscReal *probs,*vars,exp_prob=1./8.;
+  char message[255];
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op0);
+  create_op_sys(qsys,2,&op1);
+  create_op_sys(qsys,2,&op2);
+
+  add_lin_term(qsys,val,1,op0);
+
+  create_qvec_sys(qsys,&test_dm);
+
+  for(i=0;i<8;i++){
+    add_to_qvec(test_dm,val,i,i);
+  }
+
+  assemble_qvec(test_dm);
+
+  get_bitstring_probs(test_dm,&nloc,&probs,&vars);
+
+  for(i=0;i<8;i++){
+    sprintf(message,"Index %d\n",i);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(exp_prob,probs[i],message);
+  }
+
+  free(probs);
+  free(vars);
+  destroy_op_sys(&op0);
+  destroy_op_sys(&op1);
+  destroy_op_sys(&op2);
+  destroy_system(&qsys);
+  return;
+}
+
+
+void test_get_bitstring_probs_wf_ens(void){
+  qvec test_wf;
+  qsystem qsys;
+  operator op0,op1,op2;
+  PetscInt i,nloc;
+  PetscScalar val=1.0;
+  PetscReal *probs,*vars,exp_prob=1./8.;
+  char message[255];
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op0);
+  create_op_sys(qsys,2,&op1);
+  create_op_sys(qsys,2,&op2);
+
+  add_lin_term(qsys,val,1,op0);
+  use_mcwf_solver(qsys,8,NULL);
+  create_qvec_sys(qsys,&test_wf);
+
+  for(i=0;i<8;i++){
+    add_to_wf_ens_loc(test_wf,i,val,i);
+  }
+
+  assemble_qvec(test_wf);
+
+  get_bitstring_probs(test_wf,&nloc,&probs,&vars);
+
+  for(i=0;i<8;i++){
+    sprintf(message,"Index %d",i);
+    TEST_ASSERT_EQUAL_FLOAT_MESSAGE(exp_prob,probs[i],message);
+  }
+
+  free(probs);
+  free(vars);
+  destroy_op_sys(&op0);
+  destroy_op_sys(&op1);
+  destroy_op_sys(&op2);
+  destroy_system(&qsys);
+  return;
+}
+
+
+void test_get_fidelity_qvec_wf_wf(void){
+  qvec wf1,wf2;
+  PetscInt nstates = 4;
+  PetscScalar val = 1/sqrt(2);
+  PetscReal fid,var;
+
+  create_arb_qvec(&wf1,nstates,WAVEFUNCTION);
+  create_arb_qvec(&wf2,nstates,WAVEFUNCTION);
+
+  add_to_qvec_loc(wf1,val,0);
+  add_to_qvec_loc(wf1,val,3);
+
+  add_to_qvec_loc(wf2,1.0,0);
+
+  get_fidelity_qvec(wf1,wf2,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&wf1);
+  destroy_qvec(&wf2);
+
+  return;
+}
+
+void test_get_fidelity_qvec_wf_dm(void){
+  qvec wf1,dm;
+  PetscInt nstates = 4;
+  PetscScalar val = 1/sqrt(2);
+  PetscReal fid,var;
+
+  create_arb_qvec(&wf1,nstates,WAVEFUNCTION);
+  create_arb_qvec(&dm,nstates*nstates,DENSITY_MATRIX);
+
+  add_to_qvec_loc(wf1,val,0);
+  add_to_qvec_loc(wf1,val,3);
+
+  add_to_qvec_loc(dm,1.0,0);
+
+  get_fidelity_qvec(wf1,dm,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&wf1);
+  destroy_qvec(&dm);
+
+  return;
+}
+
+void test_get_fidelity_qvec_dm_wf(void){
+  qvec dm1,wf2;
+  PetscInt nstates = 4;
+  PetscScalar val = 0.5;
+  PetscReal fid,var;
+
+  create_arb_qvec(&dm1,nstates*nstates,DENSITY_MATRIX);
+  create_arb_qvec(&wf2,nstates,WAVEFUNCTION);
+
+  add_to_qvec(dm1,val,0,0);
+  add_to_qvec(dm1,val,0,3);
+  add_to_qvec(dm1,val,3,0);
+  add_to_qvec(dm1,val,3,3);
+
+  add_to_qvec_loc(wf2,1.0,0);
+
+  get_fidelity_qvec(dm1,wf2,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&dm1);
+  destroy_qvec(&wf2);
+
+  return;
+}
+
+void test_get_fidelity_qvec_dm_dm(void){
+  qvec dm1,dm2;
+  PetscInt nstates = 4;
+  PetscScalar val = 0.5;
+  PetscReal fid,var;
+
+  create_arb_qvec(&dm1,nstates*nstates,DENSITY_MATRIX);
+  create_arb_qvec(&dm2,nstates*nstates,DENSITY_MATRIX);
+
+  add_to_qvec(dm1,val,0,0);
+  add_to_qvec(dm1,val,0,3);
+  add_to_qvec(dm1,val,3,0);
+  add_to_qvec(dm1,val,3,3);
+
+  add_to_qvec(dm2,1.0,0,0);
+
+  get_fidelity_qvec(dm1,dm2,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&dm1);
+  destroy_qvec(&dm2);
+
+  return;
+}
+
+void test_get_fidelity_qvec_wf_wf_ens(void){
+  qvec wf1,wf_ens2;
+  PetscInt nstates = 4,n_ens = 4,i;
+  PetscScalar val = 1/sqrt(2);
+  PetscReal fid,var;
+  operator op0,op1;
+  qsystem qsys;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op0);
+  create_op_sys(qsys,2,&op1);
+
+  add_lin_term(qsys,val,1,op0);
+  use_mcwf_solver(qsys,n_ens,NULL);
+
+
+  create_arb_qvec(&wf1,nstates,WAVEFUNCTION);
+  create_qvec_sys(qsys,&wf_ens2);
+
+  add_to_qvec(wf1,val,0);
+  add_to_qvec(wf1,val,3);
+
+  for(i=0;i<n_ens;i++){
+    add_to_wf_ens_loc(wf_ens2,i,1.0,0);
+  }
+  get_fidelity_qvec(wf1,wf_ens2,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&wf1);
+  destroy_qvec(&wf_ens2);
+
+  destroy_op_sys(&op0);
+  destroy_op_sys(&op1);
+  destroy_system(&qsys);
+
+  return;
+}
+
+void test_get_fidelity_qvec_wf_ens_wf(void){
+  qvec wf_ens1,wf2;
+  PetscInt nstates = 4,n_ens = 2;
+  PetscScalar val = 1;
+  PetscReal fid,var;
+  operator op0,op1;
+  qsystem qsys;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op0);
+  create_op_sys(qsys,2,&op1);
+
+  add_lin_term(qsys,val,1,op0);
+  use_mcwf_solver(qsys,n_ens,NULL);
+
+  create_qvec_sys(qsys,&wf_ens1);
+  create_arb_qvec(&wf2,nstates,WAVEFUNCTION);
+
+
+  add_to_qvec(wf2,val,0);
+
+  add_to_wf_ens_loc(wf_ens1,0,val,0);
+  add_to_wf_ens_loc(wf_ens1,1,val,3);
+
+  get_fidelity_qvec(wf_ens1,wf2,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&wf_ens1);
+  destroy_qvec(&wf2);
+
+
+  destroy_op_sys(&op0);
+  destroy_op_sys(&op1);
+  destroy_system(&qsys);
+
+  return;
+}
+
+//Not a valid test at the moment
+void test_get_fidelity_qvec_wf_ens_dm(void){
+  qvec wf_ens1,dm2;
+  PetscInt nstates = 4,n_ens = 2;
+  PetscScalar val = 1;
+  PetscReal fid,var;
+  operator op0,op1;
+  qsystem qsys;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op0);
+  create_op_sys(qsys,2,&op1);
+
+  add_lin_term(qsys,val,1,op0);
+  use_mcwf_solver(qsys,n_ens,NULL);
+
+  create_qvec_sys(qsys,&wf_ens1);
+  create_arb_qvec(&dm2,nstates*nstates,DENSITY_MATRIX);
+
+
+  add_to_qvec(dm2,val,0,0);
+
+  add_to_wf_ens_loc(wf_ens1,0,val,0);
+  add_to_wf_ens_loc(wf_ens1,1,val,3);
+
+  get_fidelity_qvec(wf_ens1,dm2,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&wf_ens1);
+  destroy_qvec(&dm2);
+
+
+  destroy_op_sys(&op0);
+  destroy_op_sys(&op1);
+  destroy_system(&qsys);
+
+  return;
+}
+
+//Not a valid test at the moment
+void test_get_fidelity_qvec_dm_wf_ens(void){
+  qvec wf_ens2,dm1;
+  PetscInt nstates = 4,n_ens = 2;
+  PetscScalar val = 1;
+  PetscReal fid,var;
+  operator op0,op1;
+  qsystem qsys;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op0);
+  create_op_sys(qsys,2,&op1);
+
+  add_lin_term(qsys,val,1,op0);
+  use_mcwf_solver(qsys,n_ens,NULL);
+
+  create_qvec_sys(qsys,&wf_ens2);
+  create_arb_qvec(&dm1,nstates*nstates,DENSITY_MATRIX);
+
+  val=0.5;
+  add_to_qvec(dm1,val,0,0);
+  add_to_qvec(dm1,val,0,3);
+  add_to_qvec(dm1,val,3,0);
+  add_to_qvec(dm1,val,3,3);
+
+  val=1.0;
+  add_to_wf_ens_loc(wf_ens2,0,val,0);
+  add_to_wf_ens_loc(wf_ens2,1,val,0);
+
+  get_fidelity_qvec(dm1,wf_ens2,&fid,&var);
+
+  TEST_ASSERT_EQUAL_FLOAT(0.5,fid);
+
+  destroy_qvec(&wf_ens2);
+  destroy_qvec(&dm1);
+
+
+  destroy_op_sys(&op0);
+  destroy_op_sys(&op1);
+  destroy_system(&qsys);
+
+  return;
+}
+
+
 int main(int argc, char** argv)
 {
   UNITY_BEGIN();
@@ -1023,6 +1444,7 @@ int main(int argc, char** argv)
   RUN_TEST(test_create_arb_qvec_dims);
   RUN_TEST(test_change_qvec_dims);
   RUN_TEST(test_create_qvec_sys_wf);
+  RUN_TEST(test_create_qvec_sys_wf_ens);
   RUN_TEST(test_create_qvec_sys_dm);
 
   RUN_TEST(test_create_wf_sys);
@@ -1042,6 +1464,21 @@ int main(int argc, char** argv)
 
   RUN_TEST(test_ptrace_dm_read);
 
+  RUN_TEST(test_get_bitstring_probs_wf);
+  RUN_TEST(test_get_bitstring_probs_wf_ens);
+  RUN_TEST(test_get_bitstring_probs_dm);
+
+  RUN_TEST(test_get_fidelity_qvec_wf_wf);
+  RUN_TEST(test_get_fidelity_qvec_wf_dm);
+  RUN_TEST(test_get_fidelity_qvec_dm_wf);
+  RUN_TEST(test_get_fidelity_qvec_dm_dm);
+  RUN_TEST(test_get_fidelity_qvec_wf_wf_ens);
+  RUN_TEST(test_get_fidelity_qvec_wf_ens_wf);
+
+  //Below two are not good tests, but are kept because the
+  //code might be used to make a good test
+  /* RUN_TEST(test_get_fidelity_qvec_wf_ens_dm); */
+  /* RUN_TEST(test_get_fidelity_qvec_dm_wf_ens); */
 
   QuaC_finalize();
   return UNITY_END();

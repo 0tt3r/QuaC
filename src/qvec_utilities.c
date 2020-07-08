@@ -170,6 +170,7 @@ void read_qvec_dm_binary(qvec *newvec,const char filename[]){
   return;
 }
 
+//A*state - be careful with use, might not be intuitive behavior for DM
 void qvec_mat_mult(Mat circ_mat,qvec state){
   Vec tmp;
   VecDuplicate(state->data,&tmp);
@@ -178,6 +179,7 @@ void qvec_mat_mult(Mat circ_mat,qvec state){
   VecDestroy(&tmp);
   return;
 }
+
 /*
  * Print the qvec densely
  * Not recommended for large matrices.
@@ -260,7 +262,11 @@ void print_qvec(qvec state){
   if(state->my_type==DENSITY_MATRIX){
     print_dm_qvec(state);
   } else {
-    print_wf_qvec(state);
+    if(state->my_type==WF_ENSEMBLE && state->ens_spawned==PETSC_TRUE){
+      print_wf_ens_i_qvec(state);
+    } else {
+      print_wf_qvec(state);
+    }
   }
 
 }
@@ -351,6 +357,7 @@ void _get_qvec_element_local(qvec state,PetscInt loc,PetscScalar *val){
   *val = val_array[0];
   return;
 }
+
 /*
  * Print the dense wf
  */
@@ -387,6 +394,41 @@ void get_wf_element_qvec_local(qvec state,PetscInt i,PetscScalar *val){
   }
 
   *val = val_array[0];
+  return;
+}
+
+
+void get_wf_element_ens_i_qvec_local(qvec state,PetscInt ens_idx,PetscInt i,PetscScalar *val){
+  PetscInt location[1];
+  PetscScalar val_array[1];
+
+  location[0] = i;
+  if (location[0]>=state->Istart&&location[0]<state->Iend) {
+    VecGetValues(state->ens_datas[ens_idx],1,location,val_array);
+  } else{
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Can only get elements local to a core in !\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       get_wf_element_qvec_local.\n");
+    exit(0);
+  }
+
+  *val = val_array[0];
+  return;
+}
+
+
+
+/*
+ * Print the dense wf_ens[ens_i]
+ */
+void print_wf_ens_i_qvec(qvec state){
+  PetscScalar val;
+  PetscInt i;
+
+  for(i=0;i<state->n;i++){
+    get_wf_element_ens_i_qvec_local(state,state->ens_i,i,&val);
+    PetscPrintf(PETSC_COMM_WORLD,"%e + %ei\n",PetscRealPart(val),
+                PetscImaginaryPart(val));
+  }
   return;
 }
 
@@ -435,7 +477,7 @@ void create_arb_qvec(qvec *new_qvec,PetscInt nstates,qvec_type my_type){
   temp->Istart = Istart;
   temp->Iend = Iend;
   temp->ndims_hspace = 1;
-
+  temp->ens_spawned=PETSC_FALSE;
   *new_qvec = temp;
 
   return;
@@ -556,12 +598,14 @@ void change_qvec_dims(qvec state,PetscInt ndims,PetscInt *dims){
  * create a qvec object as a dm or wf based on
  * the operators added thus far
  */
-void create_qvec_sys(qsystem sys,qvec *new_qvec){
+void create_qvec_sys(qsystem qsys,qvec *new_qvec){
   //Automatically decide whether to make a DM or WF
-  if (sys->dm_equations){
-    create_dm_sys(sys,new_qvec);
+  if (qsys->dm_equations==PETSC_TRUE && qsys->mcwf_solver==PETSC_FALSE){
+    create_dm_sys(qsys,new_qvec);
+  } else if(qsys->dm_equations==PETSC_TRUE && qsys->mcwf_solver==PETSC_TRUE){
+    create_wf_ensemble_sys(qsys,new_qvec);
   } else {
-    create_wf_sys(sys,new_qvec);
+    create_wf_sys(qsys,new_qvec);
   }
 
   return;
@@ -571,12 +615,12 @@ void create_qvec_sys(qsystem sys,qvec *new_qvec){
  * create a dm that is correctly sized for the qsystem
  * and set to solve DM equations? FIXME
  */
-void create_dm_sys(qsystem sys,qvec *new_dm){
+void create_dm_sys(qsystem qsys,qvec *new_dm){
   qvec temp = NULL;
   PetscInt n,Istart,Iend,i;
 
   /* Check to make sure some operators were created */
-  if (sys->num_subsystems==0){
+  if (qsys->num_subsystems==0){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to create operators before you construct\n");
     PetscPrintf(PETSC_COMM_WORLD,"       a density matrix!\n");
     exit(0);
@@ -584,15 +628,18 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
 
 
   //Even if we had no lindblad terms, maybe we start in a density matrix
-  sys->dm_equations = 1;
-  sys->dim = sys->total_levels*sys->total_levels;
-  _setup_distribution(sys);
-  sys->hspace_frozen = 1;
+  qsys->dm_equations = 1;
+  qsys->dim = qsys->total_levels*qsys->total_levels;
+  if(qsys->my_num<0){//Only setup the distribution once. Could be created otherwise
+    _setup_distribution(qsys->nid,qsys->np,qsys->dim,&(qsys->my_num),&(qsys->Istart),&(qsys->Iend));
+  }
+  //total_levels = qsys->total_levels;
+  qsys->hspace_frozen = 1;
 
   temp = malloc(sizeof(struct qvec));
 
   PetscPrintf(PETSC_COMM_WORLD,"Creating density matrix vector for Liouvillian solver.\n");
-  _create_vec(&(temp->data),sys->dim,sys->my_num);
+  _create_vec(&(temp->data),qsys->dim,qsys->my_num);
 
   VecGetSize(temp->data,&n);
   VecGetOwnershipRange(temp->data,&Istart,&Iend);
@@ -602,16 +649,19 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
   temp->total_levels = sqrt(n);
   temp->Istart = Istart;
   temp->Iend = Iend;
-  temp->n_ops = sys->num_subsystems;
+  temp->n_ops = qsys->num_subsystems;
   //The density matrix is N_tot by N_tot, so we treat it as having double the number of dimensinons
-  temp->ndims_hspace = sys->num_subsystems*2;
-  temp->hspace_dims = malloc(2*sys->num_subsystems*sizeof(PetscInt));
+  temp->ndims_hspace = qsys->num_subsystems*2;
+  temp->hspace_dims = malloc(2*qsys->num_subsystems*sizeof(PetscInt));
+  temp->n_ensemble = -1;
+  temp->ens_spawned = PETSC_FALSE;
+  temp->ens_i = -1;
 
   //For a density matrix with 3 subsystems with L_i levels, we store the :
   //[L_1 L_2 L_3 L_1 L_2 L_3]
-  for(i=0;i<sys->num_subsystems;i++){
-    temp->hspace_dims[i] = sys->subsystem_list[i]->my_levels;
-    temp->hspace_dims[i+sys->num_subsystems] = sys->subsystem_list[i]->my_levels;
+  for(i=0;i<qsys->num_subsystems;i++){
+    temp->hspace_dims[i] = qsys->subsystem_list[i]->my_levels;
+    temp->hspace_dims[i+qsys->num_subsystems] = qsys->subsystem_list[i]->my_levels;
   }
   *new_dm = temp;
   return;
@@ -620,33 +670,37 @@ void create_dm_sys(qsystem sys,qvec *new_dm){
 /*
  * create a wf that is correctly sized for the qsystem
  */
-void create_wf_sys(qsystem sys,qvec *new_wf){
+void create_wf_sys(qsystem qsys,qvec *new_wf){
   qvec temp = NULL;
   PetscInt n,Istart,Iend,i;
 
   /* Check to make sure some operators were created */
-  if (sys->num_subsystems==0){
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to create operators before you construct\n");
+  if (qsys->num_subsystems==0){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to crveate operators before you construct\n");
     PetscPrintf(PETSC_COMM_WORLD,"       a wavefunction!\n");
     exit(0);
   }
 
 
-  if (sys->dm_equations==1){
+  if (qsys->dm_equations==PETSC_TRUE && qsys->mcwf_solver==PETSC_FALSE){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR!\n");
-    PetscPrintf(PETSC_COMM_WORLD,"Must use density matrices if Lindblad terms are used.\n");
+    PetscPrintf(PETSC_COMM_WORLD,"Must use density matrices if Lindblad terms are used without");
+    PetscPrintf(PETSC_COMM_WORLD,"using mcwf_solver.\n");
     exit(0);
   }
 
   PetscPrintf(PETSC_COMM_WORLD,"Creating wavefunction vector for Schrodinger solver.\n");
-  sys->dim = sys->total_levels;
+  qsys->dim = qsys->total_levels;
 
-  _setup_distribution(sys);
-  sys->hspace_frozen = 1;
+  if(qsys->my_num<0){//Only setup the distribution once. Could be created otherwise
+    _setup_distribution(qsys->nid,qsys->np,qsys->dim,&(qsys->my_num),&(qsys->Istart),&(qsys->Iend));
+  }
+  //total_levels = qsys->total_levels;
+  qsys->hspace_frozen = 1;
 
   temp = malloc(sizeof(struct qvec));
 
-  _create_vec(&(temp->data),sys->dim,sys->my_num);
+  _create_vec(&(temp->data),qsys->dim,qsys->my_num);
 
   VecGetSize(temp->data,&n);
   VecGetOwnershipRange(temp->data,&Istart,&Iend);
@@ -656,12 +710,80 @@ void create_wf_sys(qsystem sys,qvec *new_wf){
   temp->total_levels = n;
   temp->Istart = Istart;
   temp->Iend = Iend;
-  temp->n_ops = sys->num_subsystems;
-  temp->ndims_hspace = sys->num_subsystems;
-  temp->hspace_dims = malloc(sys->num_subsystems*sizeof(PetscInt));
+  temp->n_ops = qsys->num_subsystems;
+  temp->ndims_hspace = qsys->num_subsystems;
+  temp->hspace_dims = malloc(qsys->num_subsystems*sizeof(PetscInt));
+  temp->n_ensemble = -1;
+  temp->ens_spawned = PETSC_FALSE;
+  temp->ens_i = -1;
 
-  for(i=0;i<sys->num_subsystems;i++){
-    temp->hspace_dims[i] = sys->subsystem_list[i]->my_levels;
+  for(i=0;i<qsys->num_subsystems;i++){
+    temp->hspace_dims[i] = qsys->subsystem_list[i]->my_levels;
+  }
+
+  *new_wf = temp;
+
+  return;
+}
+
+
+/*
+ * create a wf that is correctly sized for the qsystem
+ */
+void create_wf_ensemble_sys(qsystem qsys,qvec *new_wf){
+  qvec temp = NULL;
+  PetscInt n,Istart,Iend,i;
+
+  /* Check to make sure some operators were created */
+  if (qsys->num_subsystems==0){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to create operators before you construct\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       a wavefunction!\n");
+    exit(0);
+  }
+
+
+  if (qsys->dm_equations==PETSC_TRUE && qsys->mcwf_solver==PETSC_FALSE){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR!\n");
+    PetscPrintf(PETSC_COMM_WORLD,"Must use density matrices if Lindblad terms are used without");
+    PetscPrintf(PETSC_COMM_WORLD,"using mcwf_solver.\n");
+    exit(0);
+  }
+
+  PetscPrintf(PETSC_COMM_WORLD,"Creating wavefunction vector ensemble for Monte Carlo wavefunction solver.\n");
+  qsys->dim = qsys->total_levels;
+
+  if(qsys->my_num<0){//Only setup the distribution once. Could be created otherwise
+    _setup_distribution(qsys->nid,qsys->np,qsys->dim,&(qsys->my_num),&(qsys->Istart),&(qsys->Iend));
+  }
+  //total_levels = qsys->total_levels;
+  qsys->hspace_frozen = 1;
+
+  temp = malloc(sizeof(struct qvec));
+
+  //temp->data will define the initial condition. The ens_datas will those spawned from it
+  _create_vec(&(temp->data),qsys->dim,qsys->my_num);
+  temp->ens_datas = malloc(qsys->num_local_trajs*sizeof(Vec));
+  for(i=0;i<qsys->num_local_trajs;i++){
+    _create_vec(&(temp->ens_datas[i]),qsys->dim,qsys->my_num);
+  }
+
+  VecGetSize(temp->data,&n);
+  VecGetOwnershipRange(temp->data,&Istart,&Iend);
+
+  temp->my_type = WF_ENSEMBLE;
+  temp->n = n;
+  temp->total_levels = n;
+  temp->Istart = Istart;
+  temp->Iend = Iend;
+  temp->n_ops = qsys->num_subsystems;
+  temp->ndims_hspace = qsys->num_subsystems;
+  temp->hspace_dims = malloc(qsys->num_subsystems*sizeof(PetscInt));
+  temp->n_ensemble = qsys->num_local_trajs;
+  temp->ens_spawned = PETSC_FALSE;
+  temp->ens_i = -1;
+
+  for(i=0;i<qsys->num_subsystems;i++){
+    temp->hspace_dims[i] = qsys->subsystem_list[i]->my_levels;
   }
 
   *new_wf = temp;
@@ -673,7 +795,7 @@ void create_wf_sys(qsystem sys,qvec *new_wf){
 
 /*
  * Add alpha at the specified fock_state for operator op in qvec state
- * FIXME: Bad function name?
+ * FIXME: Tensor ordering is backwards and the fock_op series is wrong
  */
 void add_to_qvec_fock_op(PetscScalar alpha,qvec state,PetscInt num_ops,...){
   va_list  ap;
@@ -716,7 +838,7 @@ void add_to_qvec_fock_op_list(PetscScalar alpha,qvec state,PetscInt num_ops,oper
 }
 
 /*
- * Add alpha to the element at location loc in the qvec
+ * Add alpha to the elempent at location loc in the qvec
  * Does not discriminate between WF and DM -- loc needs to be correctly vectorized if DM!
  */
 
@@ -736,7 +858,28 @@ void add_to_qvec_loc(qvec state,PetscScalar alpha,PetscInt loc){
 
 
 /*
+ * Add alpha to the elempent at location loc in the qvec wf_ens i_ens
+ * Does not discriminate between WF and DM -- loc needs to be correctly vectorized if DM!
+ */
+
+void add_to_wf_ens_loc(qvec state,PetscInt i_ens,PetscScalar alpha,PetscInt loc){
+
+  if (loc>state->n||loc<0){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Adding to a qvec location that is out of range!\n");
+    exit(0);
+  }
+  state->ens_spawned=PETSC_TRUE;
+  if (loc>=state->Istart&&loc<state->Iend){
+    VecSetValue(state->ens_datas[i_ens],loc,alpha,ADD_VALUES);
+  }
+
+  return;
+}
+
+
+/*
  * Add alpha to the element at location loc in the qvec
+ * FIXME: Put some safety check on DM with only i (no j) passed in?
  */
 
 void add_to_qvec(qvec state,PetscScalar alpha,...){
@@ -768,6 +911,20 @@ void add_to_qvec(qvec state,PetscScalar alpha,...){
     loc = va_arg(ap,PetscInt);
     add_to_qvec_loc(state,alpha,loc);
     va_end(ap);
+  } else if (state->my_type==WF_ENSEMBLE){
+    if(state->ens_spawned==PETSC_FALSE){
+      /*
+       * Since this is a wavefunction, the input loc is the true location
+       * so we can just call add_to_qvec_loc
+       */
+      num_locs = 1;
+      va_start(ap,num_locs);
+      loc = va_arg(ap,PetscInt);
+      add_to_qvec_loc(state,alpha,loc);
+      va_end(ap);
+    } else {
+      PetscPrintf(PETSC_COMM_WORLD,"Adding to spawned wf_ensemble not yet implemented\n");
+    }
   }
 
   return;
@@ -830,8 +987,9 @@ void get_qvec_loc_fock_op_list(qvec state,PetscInt *loc,PetscInt num_ops,operato
   if (state->my_type==DENSITY_MATRIX){
     //Density matrix; we take it as the diagonal
     *loc = *loc * sqrt(state->n) + *loc;
-  } else if (state->my_type==WAVEFUNCTION){
+  } else if (state->my_type==WAVEFUNCTION||state->my_type==WF_ENSEMBLE){
     //WF, just take the direct state
+    //WF_Ensemble, the state is the same either way
     *loc = *loc;
   } else {
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvec type not understood.");
@@ -843,8 +1001,8 @@ void get_qvec_loc_fock_op_list(qvec state,PetscInt *loc,PetscInt num_ops,operato
 
 
 /*
- * void assemble_dm puts all the cached values in the right place and
- * allows for the dm to be used
+ * void assemble_qvec puts all the cached values in the right place and
+ * allows for the qvec to be used
  *
  * Inputs:
  *         qvec state - state to assemble
@@ -853,8 +1011,22 @@ void get_qvec_loc_fock_op_list(qvec state,PetscInt *loc,PetscInt num_ops,operato
  *
  */
 void assemble_qvec(qvec state){
-  VecAssemblyBegin(state->data);
-  VecAssemblyEnd(state->data);
+  PetscInt i;
+  if(state->my_type==WF_ENSEMBLE&&state->ens_spawned==PETSC_TRUE){
+    /*
+     * Split begin and end into two loops for possible
+     * reduction in communication time?
+     */
+    for(i=0;i<state->n_ensemble;i++){
+      VecAssemblyBegin(state->ens_datas[i]);
+    }
+    for(i=0;i<state->n_ensemble;i++){
+      VecAssemblyEnd(state->ens_datas[i]);
+    }
+  } else {
+    VecAssemblyBegin(state->data);
+    VecAssemblyEnd(state->data);
+  }
 }
 
 /*
@@ -868,8 +1040,16 @@ void assemble_qvec(qvec state){
  */
 
 void destroy_qvec(qvec *state){
+  PetscInt i;
   free(((*state)->hspace_dims));
+  if((*state)->my_type==WF_ENSEMBLE){
+    for(i=0;i<(*state)->n_ensemble;i++){
+      VecDestroy(&((*state)->ens_datas[i]));
+    }
+    free((*state)->ens_datas);
+  }
   VecDestroy(&((*state)->data));
+
   free(*state);
 }
 
@@ -965,6 +1145,13 @@ void get_expectation_value_qvec_list(qvec state,PetscScalar *trace_val,PetscInt 
     _get_expectation_value_wf(state,trace_val,num_ops,ops);
   } else if(state->my_type==DENSITY_MATRIX){
     _get_expectation_value_dm(state,trace_val,num_ops,ops);
+  } else if(state->my_type==WF_ENSEMBLE){
+    if(state->ens_spawned==PETSC_FALSE){
+      //Haven't actually made an ensemble, so revert to just WF
+      _get_expectation_value_wf(state,trace_val,num_ops,ops);
+    } else{
+      _get_expectation_value_wf_ens(state,trace_val,num_ops,ops);
+    }
   } else {
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvec type not understood.");
     exit(0);
@@ -1000,8 +1187,8 @@ void _get_expectation_value_dm(qvec rho,PetscScalar *trace_val,PetscInt num_ops,
    * of the row calculates that value, potentially
    * communicating to get values it does not have
    */
-  my_j_start = my_start/total_levels; // Rely on integer division to get 'floor'
-  my_j_end  = my_end/total_levels;
+  my_j_start = my_start/rho->total_levels; // Rely on integer division to get 'floor'
+  my_j_end  = my_end/rho->total_levels;
 
   for (i=my_j_start;i<my_j_end;i++){
     this_i = i; // The leading index which we check
@@ -1017,12 +1204,12 @@ void _get_expectation_value_dm(qvec rho,PetscScalar *trace_val,PetscInt num_ops,
         if (ops[j+1]->my_op_type!=VEC){
           PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators must come in pairs in get_expectation_value\n");
         }
-        _get_val_j_from_global_i_vec_vec(this_i,ops[j],ops[j+1],&this_j,&val,-1);
+        _get_val_j_from_global_i_vec_vec(rho->total_levels,this_i,ops[j],ops[j+1],&this_j,&val,-1);
         //Increment j
         j=j+1;
       } else {
         //Standard operator
-        _get_val_j_from_global_i(this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+        _get_val_j_from_global_i(rho->total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
       }
       if (this_j<0) {
         /*
@@ -1057,6 +1244,8 @@ void _get_expectation_value_dm(qvec rho,PetscScalar *trace_val,PetscInt num_ops,
   return;
 }
 
+
+
 void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,operator *ops){
   PetscInt Istart,Iend,location[1],i,j,this_j,this_i;
   PetscScalar val_array[1],val,op_val;
@@ -1066,16 +1255,17 @@ void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,
    * FIXME: Check for consistency in operator sizes and wf size
    */
 
-
   *trace_val = 0.0;
   VecGetOwnershipRange(psi->data,&Istart,&Iend);
   VecDuplicate(psi->data,&op_psi);
+
+  //This should be put in a routine called "apply op to psi"?
   //Calculate A * B * Psi
-  for (i=0;i<total_levels;i++){
+  for (i=0;i<psi->total_levels;i++){
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<num_ops;j++){
-      _get_val_j_from_global_i(this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+      _get_val_j_from_global_i(psi->total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i
@@ -1102,6 +1292,66 @@ void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,
   VecAssemblyBegin(op_psi);
   VecAssemblyEnd(op_psi);
   VecDot(op_psi,psi->data,trace_val);
+  VecDestroy(&op_psi);
+
+  return;
+}
+
+
+void _get_expectation_value_wf_ens(qvec psi,PetscScalar *trace_val,PetscInt num_ops,operator *ops){
+  PetscInt Istart,Iend,location[1],i,j,this_j,this_i,i_ens;
+  PetscScalar val_array[1],val,op_val,tmp_trace_val,norm;
+  Vec op_psi;
+
+  /*
+   * FIXME: Check for consistency in operator sizes and wf size
+   * Consider merging with _get_expectation_value_wf in some way
+   */
+
+  *trace_val = 0.0;
+  VecGetOwnershipRange(psi->data,&Istart,&Iend);
+  VecDuplicate(psi->data,&op_psi);
+  for (i_ens=0;i_ens<psi->n_ensemble;i_ens++){
+    //Calculate A * B * Psi
+    for (i=0;i<psi->total_levels;i++){
+      this_i = i; // The leading index which we check
+      op_val = 1.0;
+      for (j=0;j<num_ops;j++){
+        _get_val_j_from_global_i(psi->total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+        if (this_j<0) {
+          /*
+           * Negative j says there is no nonzero value for a given this_i
+           * As such, we can immediately break the loop for i
+           */
+          op_val = 0.0;
+          break;
+        } else {
+          this_i = this_j;
+          op_val = op_val*val;
+        }
+      }
+      //Now we have op1*op2*op3...
+      if (this_i>=Istart&&this_i<Iend&&op_val!=0.0){
+        //this val belongs to me, do the (local) multiplication
+        location[0] = this_i;
+        VecGetValues(psi->ens_datas[i_ens],1,location,val_array);
+        op_val = op_val * val_array[0];
+        //Add the value to the op_psi
+
+        VecSetValue(op_psi,i,op_val,ADD_VALUES);
+      }
+    }
+    // Now, calculate the inner product between psi^H * OP_psi
+    VecAssemblyBegin(op_psi);
+    VecAssemblyEnd(op_psi);
+    VecDot(op_psi,psi->ens_datas[i_ens],&tmp_trace_val);
+    VecDot(psi->ens_datas[i_ens],psi->ens_datas[i_ens],&norm);
+    *trace_val = *trace_val + tmp_trace_val/norm;
+    VecSet(op_psi,0.0);//Reset vector
+  }
+
+  *trace_val = *trace_val/psi->n_ensemble;
+
   VecDestroy(&op_psi);
 
   return;
@@ -1326,20 +1576,47 @@ void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
   return;
 }
 
-void get_bitstring_probs(qvec rho,PetscInt *nloc,PetscReal **probs){
+void get_bitstring_probs(qvec state,PetscInt *nloc,PetscReal **probs,PetscReal **vars){
+  PetscInt i;
   //FIXME Dangerous to return nloc, exposes parallelism to user
 
-  if(rho->my_type==DENSITY_MATRIX){
-    _get_bitstring_probs_dm(rho,nloc,probs);
-  } else if(rho->my_type==WAVEFUNCTION){
-    _get_bitstring_probs_wf(rho,nloc,probs);
+  if(state->my_type==DENSITY_MATRIX){
+    _get_bitstring_probs_dm(state,nloc,probs);
+    (*vars) = malloc((*nloc)*sizeof(PetscReal));
+    //0 variance because we aren't sampling over anything
+    for(i=0;i<(*nloc);i++){
+      (*vars)[i] = 0.0;
+    }
+
+  } else if(state->my_type==WAVEFUNCTION){
+    _get_bitstring_probs_wf(state,nloc,probs);
+    (*vars) = malloc((*nloc)*sizeof(PetscReal));
+    //0 variance because we aren't sampling over anything
+    for(i=0;i<(*nloc);i++){
+      (*vars)[i] = 0.0;
+    }
+
+  } else if(state->my_type==WF_ENSEMBLE){
+    if(state->ens_spawned==PETSC_FALSE){
+      //Haven't actually made an ensemble, so revert to just WF
+      _get_bitstring_probs_wf(state,nloc,probs);
+      (*vars) = malloc((*nloc)*sizeof(PetscReal));
+      //0 variance because we aren't sampling over anything
+      for(i=0;i<(*nloc);i++){
+        (*vars)[i] = 0.0;
+      }
+
+    } else {
+      _get_bitstring_probs_wf_ens(state,nloc,probs,vars);
+    }
   }
 
   return;
 }
 
-void get_linear_xeb_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *lin_xeb_fid){
-  PetscReal tmp_lin_xeb_fid[1];
+void get_linear_xeb_fidelity_probs(PetscReal *probs_ref,PetscReal *vars_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscReal *vars_exp,
+                                   PetscInt nloc_exp,PetscInt h_dim,PetscReal *lin_xeb_fid,PetscReal *lin_xeb_fid_var){
+  PetscReal tmp_lin_xeb_fid[1],tmp_lin_xeb_fid_var[1];
   PetscInt i;
 
   if(nloc_ref!=nloc_exp){
@@ -1353,18 +1630,22 @@ void get_linear_xeb_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscR
    * where D is total hilbert space size
    */
   tmp_lin_xeb_fid[0] = 0;
+  tmp_lin_xeb_fid_var[0] = 0;
   for(i=0;i<nloc_ref;i++){
     tmp_lin_xeb_fid[0] = tmp_lin_xeb_fid[0] + probs_exp[i]*probs_ref[i];
+    tmp_lin_xeb_fid_var[0] = tmp_lin_xeb_fid_var[0] + vars_exp[i]*probs_ref[i]*probs_ref[i];
   }
+
   //Collect all cores
   MPI_Allreduce(MPI_IN_PLACE,tmp_lin_xeb_fid,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,tmp_lin_xeb_fid_var,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
   *lin_xeb_fid = h_dim * tmp_lin_xeb_fid[0] - 1;
-
+  *lin_xeb_fid_var = h_dim * h_dim * tmp_lin_xeb_fid_var[0];
   return;
 }
 
-void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid){
-  PetscReal *probs_ref,*probs_exp;
+void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid,PetscReal *lin_xeb_fid_var){
+  PetscReal *probs_ref,*probs_exp,*vars_ref,*vars_exp;
   PetscInt nloc_ref,nloc_exp;
   /*
    * Our 'experiment' is stored in a dm and we can extract the bitstring
@@ -1375,19 +1656,22 @@ void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
     exit(9);
   }
-  get_bitstring_probs(ref,&nloc_ref,&probs_ref);
-  get_bitstring_probs(exp,&nloc_exp,&probs_exp);
+  get_bitstring_probs(ref,&nloc_ref,&probs_ref,&vars_ref);
+  get_bitstring_probs(exp,&nloc_exp,&probs_exp,&vars_exp);
 
-  get_linear_xeb_fidelity_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,ref->total_levels,lin_xeb_fid);
+  get_linear_xeb_fidelity_probs(probs_ref,vars_ref,nloc_ref,probs_exp,vars_exp,nloc_exp,ref->total_levels,lin_xeb_fid,lin_xeb_fid_var);
 
   free(probs_exp);
   free(probs_ref);
+  free(vars_exp);
+  free(vars_ref);
   return;
 }
 
-void get_log_xeb_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *log_xeb_fid){
+void get_log_xeb_fidelity_probs(PetscReal *probs_ref,PetscReal *vars_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscReal *vars_exp,PetscInt nloc_exp,
+                                PetscInt h_dim,PetscReal *log_xeb_fid,PetscReal *log_xeb_fid_var){
   PetscReal gamma=0.57721566490153286060651209008240243104215933593992;
-  PetscReal tmp_log_xeb_fid[1];
+  PetscReal tmp_log_xeb_fid[1],tmp_log_xeb_fid_var[1];
   PetscInt i;
 
   if(nloc_ref!=nloc_exp){
@@ -1404,22 +1688,27 @@ void get_log_xeb_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal
    */
 
   tmp_log_xeb_fid[0] = 0;
+  tmp_log_xeb_fid_var[0] = 0;
   for(i=0;i<nloc_ref;i++){
     if(probs_ref[i]==0.0){
-      tmp_log_xeb_fid[0] = tmp_log_xeb_fid[0] + probs_exp[i]*PetscLogReal(3e-33);
+      //Protection from log(0)
+      tmp_log_xeb_fid_var[0] = tmp_log_xeb_fid_var[0] + vars_exp[i]*PetscLogReal(3e-33)*PetscLogReal(3e-33);
     } else{
       tmp_log_xeb_fid[0] = tmp_log_xeb_fid[0] + probs_exp[i]*PetscLogReal(probs_ref[i]);
+      tmp_log_xeb_fid_var[0] = tmp_log_xeb_fid_var[0] + vars_exp[i]*PetscLogReal(probs_ref[i])*PetscLogReal(probs_ref[i]);
     }
   }
   //Collect all cores
   MPI_Allreduce(MPI_IN_PLACE,tmp_log_xeb_fid,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,tmp_log_xeb_fid_var,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
   *log_xeb_fid = PetscLogReal(h_dim) + tmp_log_xeb_fid[0] + gamma;
+  *log_xeb_fid_var = tmp_log_xeb_fid_var[0];
 
   return;
 }
 
-void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
-  PetscReal *probs_ref,*probs_exp;
+void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid,PetscReal *log_xeb_fid_var){
+  PetscReal *probs_ref,*probs_exp,*vars_ref,*vars_exp;
   PetscInt nloc_ref,nloc_exp;
 
   /*
@@ -1428,23 +1717,25 @@ void get_log_xeb_fidelity(qvec ref,qvec exp,PetscReal *log_xeb_fid){
    * Similarly, for our reference
    */
   if(ref->total_levels!=exp->total_levels){
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_log_xeb_fidelity!\n");
     exit(9);
   }
 
-  get_bitstring_probs(ref,&nloc_ref,&probs_ref);
-  get_bitstring_probs(exp,&nloc_exp,&probs_exp);
+  get_bitstring_probs(ref,&nloc_ref,&probs_ref,&vars_ref);
+  get_bitstring_probs(exp,&nloc_exp,&probs_exp,&vars_exp);
 
-  get_log_xeb_fidelity_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,ref->total_levels,log_xeb_fid);
+  get_log_xeb_fidelity_probs(probs_ref,vars_ref,nloc_ref,probs_exp,vars_exp,nloc_exp,ref->total_levels,log_xeb_fid,log_xeb_fid_var);
 
   free(probs_exp);
   free(probs_ref);
+  free(vars_exp);
+  free(vars_ref);
 
   return;
 }
 
-void get_hog_score_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *hog_score){
-  PetscReal tmp_hog_score[1];
+void get_hog_score_probs(PetscReal *probs_ref,PetscReal *vars_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscReal *vars_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *hog_score,PetscReal *hog_var){
+  PetscReal tmp_hog_score[1],tmp_hog_var[1];
   PetscInt i;
 
   if(nloc_ref!=nloc_exp){
@@ -1458,20 +1749,24 @@ void get_hog_score_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs
    */
 
   tmp_hog_score[0] = 0;
+  tmp_hog_var[0] = 0;
   for(i=0;i<nloc_ref;i++){
     if(probs_ref[i]>=log(2.0)/h_dim){
       tmp_hog_score[0] = tmp_hog_score[0] + probs_exp[i];
+      tmp_hog_var[0] = tmp_hog_var[0] + vars_exp[i];
     }
   }
   //Collect all cores
   MPI_Allreduce(MPI_IN_PLACE,tmp_hog_score,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,tmp_hog_var,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
   *hog_score = tmp_hog_score[0];
+  *hog_var = tmp_hog_var[0];
 
   return;
 }
 
-void get_hog_score(qvec ref,qvec exp,PetscReal *hog_score){
-  PetscReal *probs_ref,*probs_exp;
+void get_hog_score(qvec ref,qvec exp,PetscReal *hog_score,PetscReal *hog_var){
+  PetscReal *probs_ref,*probs_exp,*vars_ref,*vars_exp;
   PetscInt nloc_ref,nloc_exp;
   /*
    * Our 'experiment' is stored in a dm and we can extract the bitstring
@@ -1480,23 +1775,25 @@ void get_hog_score(qvec ref,qvec exp,PetscReal *hog_score){
    */
 
   if(ref->total_levels!=exp->total_levels){
-    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_hog_score!\n");
     exit(9);
   }
-  get_bitstring_probs(ref,&nloc_ref,&probs_ref);
-  get_bitstring_probs(exp,&nloc_exp,&probs_exp);
+  get_bitstring_probs(ref,&nloc_ref,&probs_ref,&vars_ref);
+  get_bitstring_probs(exp,&nloc_exp,&probs_exp,&vars_exp);
 
-  get_hog_score_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,ref->total_levels,hog_score);
+  get_hog_score_probs(probs_ref,vars_ref,nloc_ref,probs_exp,vars_exp,nloc_exp,ref->total_levels,hog_score,hog_var);
 
   free(probs_exp);
   free(probs_ref);
+  free(vars_exp);
+  free(vars_ref);
 
   return;
 }
 
 
-void get_hog_score_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *hog_score_fid){
-  PetscReal hog_score;
+void get_hog_score_fidelity_probs(PetscReal *probs_ref,PetscReal *vars_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscReal *vars_exp,PetscInt nloc_exp,PetscInt h_dim,PetscReal *hog_score_fid,PetscReal *hog_fid_var){
+  PetscReal hog_score,hog_var;
 
   if(nloc_ref!=nloc_exp){
     //FIXME Dangerous print here
@@ -1504,14 +1801,15 @@ void get_hog_score_fidelity_probs(PetscReal *probs_ref,PetscInt nloc_ref,PetscRe
     exit(9);
   }
 
-  get_hog_score_probs(probs_ref,nloc_ref,probs_exp,nloc_exp,h_dim,&hog_score);
+  get_hog_score_probs(probs_ref,vars_ref,nloc_ref,probs_exp,vars_exp,nloc_exp,h_dim,&hog_score,&hog_var);
   *hog_score_fid = (2*hog_score - 1)/log(2.0);
+  *hog_fid_var   = (2/log(2.0))*(2/log(2.0)) * hog_var;
 
   return;
 }
 
-void get_hog_score_fidelity(qvec ref,qvec exp,PetscReal *hog_score_fid){
-  PetscReal hog_score;
+void get_hog_score_fidelity(qvec ref,qvec exp,PetscReal *hog_score_fid,PetscReal *hog_fid_var){
+  PetscReal hog_score,hog_var;
 
   /*
    * Our 'experiment' is stored in a dm and we can extract the bitstring
@@ -1523,8 +1821,11 @@ void get_hog_score_fidelity(qvec ref,qvec exp,PetscReal *hog_score_fid){
     exit(9);
   }
 
-  get_hog_score(ref,exp,&hog_score);
+  get_hog_score(ref,exp,&hog_score,&hog_var);
   *hog_score_fid = (2*hog_score - 1)/log(2.0);
+  //Var(aX + b) = a^2 *Var(X)
+  *hog_fid_var   = (2/log(2.0))*(2/log(2.0)) * hog_var;
+
   return;
 }
 
@@ -1562,19 +1863,62 @@ void _get_bitstring_probs_dm(qvec q1,PetscInt *num_loc,PetscReal **probs){
 
 void _get_bitstring_probs_wf(qvec q1,PetscInt *num_loc,PetscReal **probs){
   PetscScalar tmp_scalar=0;
-  PetscInt i=0,loc=0,j=0;
+  PetscInt i=0;
 
   //Allocate array
   *num_loc = q1->Iend-q1->Istart;
   (*probs) = malloc((*num_loc)*sizeof(PetscReal));
-  for(i=0;i<q1->total_levels;i++){
-    loc = i;
-    if(loc>=q1->Istart && loc<q1->Iend){
-      //Get local diagonal parts for both q1 and q2
-      get_wf_element_qvec_local(q1,loc,&tmp_scalar);
-      (*probs)[j] = pow(PetscRealPart(PetscAbsComplex(tmp_scalar)),2);
-      j++;
+  for(i=q1->Istart;i<q1->Iend;i++){
+    //Get local element
+    get_wf_element_qvec_local(q1,i,&tmp_scalar);
+    (*probs)[i] = pow(PetscRealPart(PetscAbsComplex(tmp_scalar)),2);
+  }
+
+  return;
+}
+
+void _get_bitstring_probs_wf_ens(qvec q1,PetscInt *num_loc,PetscReal **probs,PetscReal **vars){
+  PetscScalar tmp_scalar=0,norm;
+  PetscReal tmp_real;
+  PetscInt i=0,i_ens=0;
+
+  //Allocate array
+  *num_loc = q1->Iend-q1->Istart;
+  (*probs) = malloc((*num_loc)*sizeof(PetscReal));
+  (*vars) = malloc((*num_loc)*sizeof(PetscReal));
+  for(i=0;i<*num_loc;i++){
+    (*probs)[i] = 0.0;
+    (*vars)[i]  = 0.0;
+  }
+  for(i_ens=0;i_ens<q1->n_ensemble;i_ens++){
+    //Get norm
+    VecDot(q1->ens_datas[i_ens],q1->ens_datas[i_ens],&norm);
+    for(i=q1->Istart;i<q1->Iend;i++){
+      //Get local element
+      get_wf_element_ens_i_qvec_local(q1,i_ens,i,&tmp_scalar);
+      (*probs)[i] += pow(PetscRealPart(PetscAbsComplex(tmp_scalar)),2)/norm;
     }
+  }
+
+  for(i=q1->Istart;i<q1->Iend;i++){
+    (*probs)[i] = (*probs)[i]/q1->n_ensemble;
+  }
+
+  //Now calculate variances
+  for(i_ens=0;i_ens<q1->n_ensemble;i_ens++){
+    //Get norm
+    VecDot(q1->ens_datas[i_ens],q1->ens_datas[i_ens],&norm);
+    for(i=q1->Istart;i<q1->Iend;i++){
+      //Get local element
+      get_wf_element_ens_i_qvec_local(q1,i_ens,i,&tmp_scalar);
+      tmp_real = pow(PetscRealPart(PetscAbsComplex(tmp_scalar)),2)/norm; //X_i
+      (*vars)[i] += (tmp_real - (*probs)[i])*(tmp_real - (*probs)[i]); //(X_i - X)**2
+    }
+  }
+
+  for(i=q1->Istart;i<q1->Iend;i++){
+    (*vars)[i] = (*vars)[i]/(q1->n_ensemble-1); //\sum_i (X_i - X)**2/ (n-1)
+
   }
 
   return;
@@ -1599,7 +1943,7 @@ void get_superfidelity_qvec(qvec q1,qvec q2,PetscReal *superfidelity) {
   if (q1->my_type==DENSITY_MATRIX && q2->my_type==DENSITY_MATRIX){
     _get_superfidelity_dm_dm(q1->data,q2->data,superfidelity);
   } else if(q1->my_type==WAVEFUNCTION && q2->my_type==WAVEFUNCTION){
-    PetscPrintf(PETSC_COMM_WORLD,"Calculating superfidelity between two wavefunctions is not recommended. Use get_fidelity_qvec!\n");
+    PetscPrintf(PETSC_COMM_WORLD,"Calculating superfidelity between two wavefunctions is not recommended. Use get_superfidelity_qvec!\n");
     exit(9);
   } else if(q1->my_type==WAVEFUNCTION && q2->my_type==DENSITY_MATRIX){
     //Copy wf into DM
@@ -1651,8 +1995,11 @@ void  _get_superfidelity_dm_dm(Vec dm1,Vec dm2,PetscReal *superfidelity){
  *         PetscReal *fidelity - the fidelity between the two dms
  *
  */
-void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity) {
-
+void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity,PetscReal *fid_var) {
+  PetscInt i;
+  PetscScalar norm;
+  PetscReal fid_tmp;
+  *fid_var = 0;
   if (q1->my_type==DENSITY_MATRIX && q2->my_type==DENSITY_MATRIX){
     _get_fidelity_dm_dm(q1->data,q2->data,fidelity);
   } else if(q1->my_type==WAVEFUNCTION && q2->my_type==WAVEFUNCTION){
@@ -1661,6 +2008,76 @@ void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity) {
     _get_fidelity_dm_wf(q2->data,q1->data,fidelity);
   } else if(q2->my_type==WAVEFUNCTION && q1->my_type==DENSITY_MATRIX){
     _get_fidelity_dm_wf(q1->data,q2->data,fidelity);
+  } else if(q1->my_type==WF_ENSEMBLE && q2->my_type==WAVEFUNCTION){
+    if(q1->ens_spawned==PETSC_FALSE){
+      _get_fidelity_wf_wf(q1->data,q2->data,fidelity);
+    } else {
+      *fidelity = 0.0;
+      for(i=0;i<q1->n_ensemble;i++){
+        VecDot(q1->ens_datas[i],q1->ens_datas[i],&norm);
+        _get_fidelity_wf_wf(q1->ens_datas[i],q2->data,&fid_tmp);
+        *fidelity = *fidelity + fid_tmp/norm;
+      }
+
+      *fidelity = *fidelity/q1->n_ensemble;
+
+      for(i=0;i<q1->n_ensemble;i++){
+        VecDot(q1->ens_datas[i],q1->ens_datas[i],&norm);
+        _get_fidelity_wf_wf(q1->ens_datas[i],q2->data,&fid_tmp);
+        *fid_var += (fid_tmp - *fidelity)*(fid_tmp - *fidelity);
+      }
+
+      *fid_var = *fid_var/(q1->n_ensemble-1);
+
+    }
+  } else if(q2->my_type==WF_ENSEMBLE && q1->my_type==WAVEFUNCTION){
+    if(q2->ens_spawned==PETSC_FALSE){
+      _get_fidelity_wf_wf(q1->data,q2->data,fidelity);
+    } else {
+      *fidelity = 0.0;
+      for(i=0;i<q2->n_ensemble;i++){
+        VecDot(q2->ens_datas[i],q2->ens_datas[i],&norm);
+        _get_fidelity_wf_wf(q2->ens_datas[i],q1->data,&fid_tmp);
+        *fidelity = *fidelity + fid_tmp/norm;
+      }
+      *fidelity = *fidelity/q2->n_ensemble;
+    }
+
+    for(i=0;i<q2->n_ensemble;i++){
+      VecDot(q2->ens_datas[i],q2->ens_datas[i],&norm);
+      _get_fidelity_wf_wf(q2->ens_datas[i],q1->data,&fid_tmp);
+      *fid_var += (fid_tmp - *fidelity)*(fid_tmp - *fidelity);
+    }
+    *fid_var = *fid_var/(q2->n_ensemble-1);
+
+
+    //Not the correct way to do it - need to explicitly construct DM from ensemble, maybe?
+  /* } else if(q1->my_type==WF_ENSEMBLE && q2->my_type==DENSITY_MATRIX){ */
+  /*   if(q1->ens_spawned==PETSC_FALSE){ */
+  /*     _get_fidelity_dm_wf(q2->data,q1->data,fidelity); */
+  /*   } else { */
+  /*     *fidelity = 0.0; */
+  /*     for(i=0;i<q1->n_ensemble;i++){ */
+  /*       VecDot(q1->ens_datas[i],q1->ens_datas[i],&norm); */
+  /*       _get_fidelity_dm_wf(q2->data,q1->ens_datas[i],&fid_tmp); */
+  /*       *fidelity = *fidelity + fid_tmp/norm; */
+  /*     } */
+  /*     *fidelity = *fidelity/q1->n_ensemble; */
+  /*   } */
+  /* } else if(q2->my_type==WF_ENSEMBLE && q1->my_type==DENSITY_MATRIX){ */
+  /*   if(q2->ens_spawned==PETSC_FALSE){ */
+  /*     printf("here1\n"); */
+  /*     _get_fidelity_dm_wf(q1->data,q2->data,fidelity); */
+  /*   } else { */
+  /*     printf("here2 %d\n",q2->n_ensemble); */
+  /*     *fidelity = 0.0; */
+  /*     for(i=0;i<q2->n_ensemble;i++){ */
+  /*       VecDot(q2->ens_datas[i],q2->ens_datas[i],&norm); */
+  /*       _get_fidelity_dm_wf(q1->data,q2->ens_datas[i],&fid_tmp); */
+  /*       *fidelity = *fidelity + fid_tmp/norm; */
+  /*     } */
+  /*     *fidelity = *fidelity/q2->n_ensemble; */
+  /*   } */
   } else {
     PetscPrintf(PETSC_COMM_WORLD,"Types not understand in get_fidelity_qvec!\n");
     exit(9);
@@ -1722,7 +2139,7 @@ void _get_fidelity_dm_wf(Vec dm,Vec wf,PetscReal *fidelity) {
 
   for (i=0;i<wf_size;i++){
     for (j=0;j<wf_size;j++){
-      get_dm_element(dm,i,j,&val);
+      get_dm_element(dm,i,j,&val);//FIXME: update this to get_dm_element_qvec
       MatSetValue(dm_mat,i,j,val,INSERT_VALUES);
     }
   }
@@ -1855,7 +2272,7 @@ void _get_fidelity_dm_dm(Vec dm,Vec dm_r,PetscReal *fidelity) {
 
   /* Broadcast the value to all cores */
   MPI_Bcast(fidelity,1,MPI_DOUBLE,0,PETSC_COMM_WORLD);
-
+  *fidelity = *fidelity * (*fidelity); //We want fidelity, not sqrt(fidelity)
   VecDestroy(&dm_local);
   VecDestroy(&dm_r_local);
 

@@ -6,6 +6,7 @@
 #include "solver.h"
 #include "dm_utilities.h"
 #include "quantum_gates.h"
+#include "quantum_circuits.h"
 #include "petsc.h"
 #include "qsystem.h"
 

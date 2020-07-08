@@ -631,6 +631,14 @@ void create_circuit(circuit *circ,PetscInt num_gates_est){
   return;
 }
 
+void destroy_circuit(circuit *circ){
+  PetscInt i;
+  for(i=0;i<(*circ).num_gates;i++){
+    free((*circ).gate_list[i].qubit_numbers);
+  }
+  free((*circ).gate_list);
+  free((*circ).layer_list);
+}
 /*
  * Add a gate to a circuit.
  * Inputs:

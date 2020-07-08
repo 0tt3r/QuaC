@@ -10,6 +10,7 @@
 void create_qvec_sys(qsystem,qvec*);
 void create_dm_sys(qsystem,qvec*);
 void create_wf_sys(qsystem,qvec*);
+void create_wf_ens_sys(qsystem,qvec*);
 void create_arb_qvec(qvec*,PetscInt,qvec_type);
 void create_arb_qvec_dims(qvec*,PetscInt,PetscInt*,qvec_type);
 void _create_vec(Vec*,PetscInt,PetscInt);
@@ -32,6 +33,7 @@ void add_to_qvec(qvec,PetscScalar,...);
 void add_to_qvec_loc(qvec,PetscScalar,PetscInt);
 void get_qvec_loc_fock_op(qvec,PetscInt*,PetscInt,...);
 void get_qvec_loc_fock_op_list(qvec,PetscInt*,PetscInt,operator[],PetscInt[]);
+void add_to_wf_ens_loc(qvec,PetscInt,PetscScalar,PetscInt);
 
 void get_qvec_local_idxs(qvec,PetscInt,PetscInt*);
 
@@ -39,10 +41,11 @@ void get_expectation_value_qvec(qvec,PetscScalar*,PetscInt,...);
 void get_expectation_value_qvec_list(qvec,PetscScalar*,PetscInt,operator*);
 void _get_expectation_value_wf(qvec,PetscScalar*,PetscInt,operator*);
 void _get_expectation_value_dm(qvec,PetscScalar*,PetscInt,operator*);
+void _get_expectation_value_wf_ens(qvec,PetscScalar*,PetscInt,operator*);
 
 void qvec_mat_mult(Mat,qvec);
 void loqd_sparse_mat_qvec(char[],Mat*,qvec);
-void get_fidelity_qvec(qvec,qvec,PetscReal*);
+void get_fidelity_qvec(qvec,qvec,PetscReal*,PetscReal*);
 void _get_fidelity_wf_wf(Vec,Vec,PetscReal*);
 void _get_fidelity_dm_dm(Vec,Vec,PetscReal*);
 void _get_fidelity_dm_wf(Vec,Vec,PetscReal*);
@@ -54,26 +57,31 @@ void print_qvec_file(qvec,char[]);
 void print_dm_qvec_file(qvec,char[]);
 void print_wf_qvec_file(qvec,char[]);
 
-void get_log_xeb_fidelity(qvec,qvec,PetscReal*);
-void get_linear_xeb_fidelity(qvec,qvec,PetscReal*);
-void get_log_xeb_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
-void get_linear_xeb_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
-void get_bitstring_probs(qvec,PetscInt*,PetscReal**);
-void get_hog_score_fidelity_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
-void get_hog_score_fidelity(qvec,qvec,PetscReal*);
-void get_hog_score_probs(PetscReal*,PetscInt,PetscReal*,PetscInt,PetscInt,PetscReal*);
-void get_hog_score(qvec,qvec,PetscReal*);
+void get_log_xeb_fidelity(qvec,qvec,PetscReal*,PetscReal*);
+void get_linear_xeb_fidelity(qvec,qvec,PetscReal*,PetscReal*);
+void get_log_xeb_fidelity_probs(PetscReal*,PetscReal*,PetscInt,PetscReal*,PetscReal*,PetscInt,PetscInt,PetscReal*,PetscReal*);
+void get_linear_xeb_fidelity_probs(PetscReal*,PetscReal*,PetscInt,PetscReal*,PetscReal*,PetscInt,PetscInt,PetscReal*,PetscReal*);
+void get_bitstring_probs(qvec,PetscInt*,PetscReal**,PetscReal**);
+void get_hog_score_fidelity_probs(PetscReal*,PetscReal*,PetscInt,PetscReal*,PetscReal*,PetscInt,PetscInt,PetscReal*,PetscReal*);
+void get_hog_score_fidelity(qvec,qvec,PetscReal*,PetscReal*);
+void get_hog_score_probs(PetscReal*,PetscReal*,PetscInt,PetscReal*,PetscReal*,PetscInt,PetscInt,PetscReal*,PetscReal*);
+void get_hog_score(qvec,qvec,PetscReal*,PetscReal*);
 void _get_bitstring_probs_wf(qvec,PetscInt*,PetscReal**);
 void _get_bitstring_probs_dm(qvec,PetscInt*,PetscReal**);
+void _get_bitstring_probs_wf_ens(qvec,PetscInt*,PetscReal**,PetscReal**);
 
 void print_qvec(qvec);
 void print_dm_qvec(qvec);
 void print_wf_qvec(qvec);
+void print_wf_ens_i_qvec(qvec);
+
 void get_wf_element_qvec(qvec,PetscInt,PetscScalar*);
 void get_wf_element_qvec_local(qvec,PetscInt,PetscScalar*);
 void get_dm_element_qvec(qvec,PetscInt,PetscInt,PetscScalar*);
 void get_dm_element_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
 void _get_qvec_element_local(qvec,PetscInt,PetscScalar*);
+
+void get_wf_element_ens_i_qvec_local(qvec,PetscInt,PetscInt,PetscScalar*);
 
 void check_qvec_consistent(qvec,qvec);
 void check_qvec_equal(qvec,qvec,PetscBool*);

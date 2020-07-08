@@ -368,12 +368,12 @@ void time_step(Vec x, PetscReal init_time, PetscReal time_max,PetscReal dt,Petsc
 
     for(i=0;i<_num_time_dep;i++){
       tmp_real = 0.0;
-      _add_ops_to_mat_ham(tmp_real,solve_A,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
+      _add_ops_to_mat_ham(tmp_real,solve_A,total_levels,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
     }
 
     for(i=0;i<_num_time_dep_lin;i++){
       tmp_real = 0.0;
-      _add_ops_to_mat_lin(tmp_real,solve_A,_time_dep_list_lin[i].num_ops,_time_dep_list_lin[i].ops);
+      _add_ops_to_mat_lin(tmp_real,solve_A,total_levels,_time_dep_list_lin[i].num_ops,_time_dep_list_lin[i].ops);
     }
 
     /* Tell PETSc to assemble the matrix */
@@ -605,12 +605,12 @@ PetscErrorCode _RHS_time_dep_ham_p(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *c
 
   for (i=0;i<_num_time_dep;i++){
     time_dep_val = _time_dep_list[i].time_dep_func(t);
-    _add_ops_to_mat_ham(time_dep_val,AA,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
+    _add_ops_to_mat_ham(time_dep_val,AA,total_levels,_time_dep_list[i].num_ops,_time_dep_list[i].ops);
   }
 
   for (i=0;i<_num_time_dep_lin;i++){
     time_dep_val = _time_dep_list_lin[i].time_dep_func(t);
-    _add_ops_to_mat_lin(time_dep_val,AA,_time_dep_list_lin[i].num_ops,_time_dep_list_lin[i].ops);
+    _add_ops_to_mat_lin(time_dep_val,AA,total_levels,_time_dep_list_lin[i].num_ops,_time_dep_list_lin[i].ops);
   }
 
   MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);

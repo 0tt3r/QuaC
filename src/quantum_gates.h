@@ -36,9 +36,10 @@ typedef void(*custom_gate_func_type)(PetscScalar*,PetscInt,PetscInt,void*);
 struct quantum_gate_struct{
   PetscReal time,run_time; //run_time is how long the gate takes
   gate_type my_gate_type;
-  int *qubit_numbers,num_qubits;
+  PetscInt *qubit_numbers,num_qubits;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
   void (*_get_val_j_from_global_i_sys)(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+  void (*gate_func_wf)(qvec,Vec,PetscInt*,void*);
   custom_gate_func_type custom_func;
   PetscReal theta,phi,lambda; //Only used for rotation gates
   void *gate_ctx;
@@ -63,6 +64,7 @@ PetscErrorCode _QC_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
 PetscErrorCode _QC_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,PetscBool,void*);
 
 void create_circuit(circuit*,PetscInt);
+void destroy_circuit(circuit*);
 void add_gate_to_circuit(circuit*,PetscReal,gate_type,...);
 void add_circuit_to_circuit(circuit*,circuit,PetscReal);
 void start_circuit_at_time(circuit*,PetscReal);

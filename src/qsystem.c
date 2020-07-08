@@ -16,16 +16,16 @@ void initialize_system(qsystem *qsys){
   PetscInt num_init_alloc = 150;
   int tmp_nid,tmp_np;
   if (!petsc_initialized){
-    if (nid==0){
-      printf("ERROR! You need to call QuaC_initialize before creating\n");
-      printf("       any systems!\n");
-      exit(0);
-    }
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to call QuaC_initialize before creating\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       any systems!\n");
+    exit(0);
   }
 
   temp = malloc(sizeof(struct qsystem));
   temp->hspace_frozen = 0;
-  temp->dm_equations   = 0; //Assume no density matrix at beginning
+  temp->dm_equations   = PETSC_FALSE; //Assume no density matrix at beginning
+  temp->mcwf_solver    = PETSC_FALSE; //Assume deterministic solver
+  temp->time_step_called = PETSC_FALSE;
   temp->total_levels   = 1;
   temp->dim = 1;
 
@@ -60,6 +60,7 @@ void initialize_system(qsystem *qsys){
   temp->num_circuits = -1;
   temp->current_circuit = 0;
 
+
   *qsys = temp;
   return;
 }
@@ -70,16 +71,31 @@ void destroy_system(qsystem *qsys){
   for(i=0;i<(*qsys)->num_time_dep;i++){
     free((*qsys)->time_dep[i].ops);
   }
+
   free((*qsys)->time_dep);
 
   for(i=0;i<(*qsys)->num_time_indep;i++){
     free((*qsys)->time_indep[i].ops);
+    if((*qsys)->mcwf_solver==PETSC_TRUE){
+      if((*qsys)->time_indep[i].my_term_type==LINDBLAD){
+        MatDestroy(&((*qsys)->time_indep[i].mat_A));
+      }
+    }
+  }
+
+  if((*qsys)->mcwf_solver==PETSC_TRUE && (*qsys)->time_step_called==PETSC_TRUE){
+    VecDestroy(&((*qsys)->mcwf_work_vec));
+    free((*qsys)->rand_number);
   }
   free((*qsys)->time_indep);
   if ((*qsys)->mat_allocated){
     MatDestroy(&((*qsys)->mat_A));
     free((*qsys)->o_nnz);
     free((*qsys)->d_nnz);
+  }
+
+  if((*qsys)->num_circuits>0){
+    free((*qsys)->circuit_list);
   }
   free((*qsys));
 }
@@ -105,11 +121,9 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
   operator *tmp_list;
   PetscInt i=0;
   if (sys->hspace_frozen){
-    if (nid==0){
-      printf("ERROR! You cannot add more operators after\n");
-      printf("       the creating a dm or constructing the matrix!\n");
-      exit(0);
-    }
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You cannot add more operators after\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       the creating a dm or constructing the matrix!\n");
+    exit(0);
   }
 
   /* First make the annihilation operator */
@@ -188,6 +202,58 @@ void destroy_op_sys(operator *op){
 
   return;
 }
+
+/*
+ * Set the solver to use the MCWF solver
+ */
+void use_mcwf_solver(qsystem qsys,PetscInt num_tot_trajs,PetscInt seed){
+  PetscInt i;
+
+  if(qsys->hspace_frozen==PETSC_TRUE){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! use_mcwf_solver must be called before construct_matrix or create_qvec_sys!\n");
+    exit(9);
+  }
+
+  if(qsys->dm_equations==PETSC_FALSE){
+    //We want a lindblad term, or else there is no reason to have an ensemble, as there will be no randomness
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! use_mcwf_solver must be used with a Lindblad term!\n");
+    exit(9);
+  }
+
+  if(num_tot_trajs<2){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! use_mcwf_solver must be called with more than 2 num_tot_trajs!\n");
+    exit(9);
+  }
+
+  if(seed==NULL){
+    //Generate a random seed from sprng
+    seed = make_sprng_seed();
+  }
+  qsys->hspace_frozen = PETSC_TRUE;
+  qsys->mcwf_solver = PETSC_TRUE;
+  qsys->seed = seed;
+  if(num_tot_trajs<1){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! num_tot_trajs must be greater than 0!\n");
+    exit(9);
+  }
+  qsys->num_tot_trajs = num_tot_trajs;
+  qsys->num_local_trajs = num_tot_trajs/qsys->np; //Distribute this properyl?
+  //Initialize sprng random number generator
+  init_sprng(seed,SPRNG_DEFAULT);
+
+  //Cache the matrices for the jump operators
+  //Time independent terms
+  for(i=0;i<qsys->num_time_indep;i++){
+    if(qsys->time_indep[i].my_term_type==LINDBLAD){
+      construct_op_matrix_wf_list(qsys,1.0,&(qsys->time_indep[i].mat_A),qsys->time_indep[i].num_ops,qsys->time_indep[i].ops);
+    }
+  }
+  //TODO Time dependent terms
+
+  return;
+}
+
+
 
 void add_ham_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   va_list  ap;
@@ -362,39 +428,47 @@ void clear_mat_terms_sys(qsystem sys){
   return;
 }
 
-void construct_matrix(qsystem sys){
+void construct_matrix(qsystem qsys){
   PetscInt    i;
   PetscScalar tmp_a;
-  sys->hspace_frozen = 1;
+  qsys->hspace_frozen = 1;
 
   /* Check to make sure some operators were created */
-  if (sys->num_subsystems==0){
+  if (qsys->num_subsystems==0){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to create operators before you construct\n");
     PetscPrintf(PETSC_COMM_WORLD,"       a matrix!\n");
     exit(0);
   }
 
   /* Check to make sure some terms were added*/
-  if ((sys->num_time_dep+sys->num_time_indep)==0){
+  if ((qsys->num_time_dep+qsys->num_time_indep)==0){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to add some terms before you construct\n");
     PetscPrintf(PETSC_COMM_WORLD,"       a matrix!\n");
     exit(0);
   }
 
-  if(sys->dm_equations){
+  if(qsys->dm_equations){
     //If we had Lindblads or are wanting to timestep a DM, we need to use the larger space
-    sys->dim = sys->total_levels*sys->total_levels;
+    qsys->dim = qsys->total_levels*qsys->total_levels;
+    if(qsys->mcwf_solver){
+      //Except when we use the MCWF solver, where we work in the wf space
+      qsys->dim = qsys->total_levels;
+    }
   } else {
+    if(qsys->mcwf_solver){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! It does not make sense to use the mcwf_solver with no Lindblad terms.\n");
+      exit(9);
+    }
     //Just the schrodinger solver
-    sys->dim = sys->total_levels;
+    qsys->dim = qsys->total_levels;
   }
 
-  _preallocate_matrix(sys);
-  sys->mat_allocated = 1;
+  _preallocate_qsys_matrix(qsys);
+  qsys->mat_allocated = 1;
   //Loop over time independent terms
-  for(i=0;i<sys->num_time_indep;i++){
-    _add_ops_to_mat(sys->time_indep[i].a,sys->mat_A,sys->time_indep[i].my_term_type,
-                    sys->dm_equations,sys->time_indep[i].num_ops,sys->time_indep[i].ops);
+  for(i=0;i<qsys->num_time_indep;i++){
+    _add_ops_to_mat(qsys->time_indep[i].a,qsys->mat_A,qsys->time_indep[i].my_term_type,qsys->total_levels,
+                    qsys->dm_equations,qsys->mcwf_solver,qsys->time_indep[i].num_ops,qsys->time_indep[i].ops);
   }
 
   /*
@@ -403,61 +477,64 @@ void construct_matrix(qsystem sys){
    * when we add those time dependent terms
    */
   tmp_a = 0.0;
-  for(i=0;i<sys->num_time_dep;i++){
-    _add_ops_to_mat(tmp_a,sys->mat_A,sys->time_dep[i].my_term_type,
-                    sys->dm_equations,sys->time_dep[i].num_ops,sys->time_dep[i].ops);
+  for(i=0;i<qsys->num_time_dep;i++){
+    _add_ops_to_mat(tmp_a,qsys->mat_A,qsys->time_dep[i].my_term_type,qsys->total_levels,
+                    qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
   }
 
   //Loop over diagonal to specifically add 0 to it.
   tmp_a = 0.0;
-  for(i=sys->Istart;i<sys->Iend;i++){
-    MatSetValue(sys->mat_A,i,i,tmp_a,ADD_VALUES);
+  for(i=qsys->Istart;i<qsys->Iend;i++){
+    MatSetValue(qsys->mat_A,i,i,tmp_a,ADD_VALUES);
   }
-  MatAssemblyBegin(sys->mat_A,MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(sys->mat_A,MAT_FINAL_ASSEMBLY);
-
+  MatAssemblyBegin(qsys->mat_A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(qsys->mat_A,MAT_FINAL_ASSEMBLY);
+  if(qsys->dm_equations==PETSC_FALSE||qsys->mcwf_solver==PETSC_TRUE){
+    //We scale the matrix by -i, because we did NOT account for that in the kron routines
+    MatScale(qsys->mat_A,-PETSC_i);
+  }
   return;
 }
 
-void _setup_distribution(qsystem sys){
+void _setup_distribution(PetscInt nid,PetscInt np,PetscInt dim,PetscInt *my_num,PetscInt *Istart,PetscInt *Iend){
   PetscInt    count,remainder,tmp_nid,tmp_np;
 
-  if (sys->my_num<0){
-    count = sys->dim / sys->np;
-    remainder = sys->dim % sys->np;
+  count = dim / np;
+  remainder = dim % np;
 
-    if (sys->nid < remainder){
-      sys->Istart = sys->nid * (count + 1);
-      sys->Iend   = sys->Istart + count + 1;
-      sys->my_num = count + 1;
+  if (nid < remainder){
+      *Istart = nid * (count + 1);
+      *Iend   = (*Istart) + count + 1;
+      *my_num = count + 1;
     } else {
-      sys->Istart = sys->nid * count + remainder;
-      sys->Iend   = sys->Istart + (count - 1) + 1;
-      sys->my_num = count;
+      *Istart = nid * count + remainder;
+      *Iend   = (*Istart) + (count - 1) + 1;
+      *my_num = count;
     }
-    total_levels = sys->total_levels; //FIXME: Hack to be compatible with old code
-  }
 
   return;
 }
 
-void _preallocate_matrix(qsystem sys){
+void _preallocate_qsys_matrix(qsystem qsys){
   PetscInt    i,count,remainder,tmp_nid,tmp_np;
 
-  _setup_distribution(sys);
-  MatCreate(PETSC_COMM_WORLD,&(sys->mat_A));
-  MatSetType(sys->mat_A,MATMPIAIJ);
-  MatSetSizes(sys->mat_A,sys->my_num,sys->my_num,sys->dim,sys->dim);
-  MatSetFromOptions(sys->mat_A);
+  if(qsys->my_num<0){//Only setup the distribution once. Could be created otherwise
+    _setup_distribution(qsys->nid,qsys->np,qsys->dim,&(qsys->my_num),&(qsys->Istart),&(qsys->Iend));
+  }
+  //  total_levels = qsys->total_levels; //FIXME: Hack to be compatible with old code
+  MatCreate(PETSC_COMM_WORLD,&(qsys->mat_A));
+  MatSetType(qsys->mat_A,MATMPIAIJ);
+  MatSetSizes(qsys->mat_A,qsys->my_num,qsys->my_num,qsys->dim,qsys->dim);
+  MatSetFromOptions(qsys->mat_A);
 
-  sys->o_nnz = malloc(sys->my_num*sizeof(PetscInt));
-  sys->d_nnz = malloc(sys->my_num*sizeof(PetscInt));
+  qsys->o_nnz = malloc(qsys->my_num*sizeof(PetscInt));
+  qsys->d_nnz = malloc(qsys->my_num*sizeof(PetscInt));
 
-  for(i=0;i<sys->my_num;i++){
-    sys->o_nnz[i] = 0;
+  for(i=0;i<qsys->my_num;i++){
+    qsys->o_nnz[i] = 0;
     //Start with assuming the diagonal has values
     //And a bit of a buffer incase we are adding many in the same spot at one time
-    sys->d_nnz[i] = 1;
+    qsys->d_nnz[i] = 1;
   }
 
 
@@ -471,25 +548,105 @@ void _preallocate_matrix(qsystem sys){
    * double counting of basic operators at least.
    */
   //Loop over time independent terms
-  for(i=0;i<sys->num_time_indep;i++){
-    _count_ops_in_mat(sys->d_nnz,sys->o_nnz,sys->Istart,sys->Iend,
-                      sys->mat_A,sys->time_indep[i].my_term_type,
-                      sys->dm_equations,sys->time_indep[i].num_ops,sys->time_indep[i].ops);
+  for(i=0;i<qsys->num_time_indep;i++){
+    _count_ops_in_mat(qsys->d_nnz,qsys->o_nnz,qsys->total_levels,qsys->Istart,qsys->Iend,
+                      qsys->mat_A,qsys->time_indep[i].my_term_type,
+                      qsys->dm_equations,qsys->mcwf_solver,
+                      qsys->time_indep[i].num_ops,qsys->time_indep[i].ops);
   }
 
   //Loop over time dependent terms
-  for(i=0;i<sys->num_time_dep;i++){
-    _count_ops_in_mat(sys->d_nnz,sys->o_nnz,sys->Istart,sys->Iend,
-                      sys->mat_A,sys->time_dep[i].my_term_type,
-                      sys->dm_equations,sys->time_dep[i].num_ops,sys->time_dep[i].ops);
+  for(i=0;i<qsys->num_time_dep;i++){
+    _count_ops_in_mat(qsys->d_nnz,qsys->o_nnz,qsys->total_levels,qsys->Istart,qsys->Iend,
+                      qsys->mat_A,qsys->time_dep[i].my_term_type,
+                      qsys->dm_equations,qsys->mcwf_solver,
+                      qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
 
   }
 
   //-1s are ignored
-  MatMPIAIJSetPreallocation(sys->mat_A,-1,sys->d_nnz,-1,sys->o_nnz);
+  MatMPIAIJSetPreallocation(qsys->mat_A,-1,qsys->d_nnz,-1,qsys->o_nnz);
   return;
 }
 
+void _preallocate_op_matrix(Mat *mat_A,PetscInt nid,PetscInt np,PetscInt dim,PetscInt tot_levels,mat_term_type my_mat_type,
+                         PetscBool dm_equations,PetscBool mcwf_solver,PetscInt num_ops,operator *ops){
+  PetscInt    i,count,remainder,tmp_nid,tmp_np,my_num,Istart,Iend,*o_nnz,*d_nnz;
+
+  _setup_distribution(nid,np,dim,&my_num,&Istart,&Iend);
+
+  MatCreate(PETSC_COMM_WORLD,mat_A);
+  MatSetType(*mat_A,MATMPIAIJ);
+  MatSetSizes(*mat_A,my_num,my_num,dim,dim);
+  MatSetFromOptions(*mat_A);
+
+  o_nnz = malloc((my_num)*sizeof(PetscInt));
+  d_nnz = malloc((my_num)*sizeof(PetscInt));
+
+  for(i=0;i<my_num;i++){
+    o_nnz[i] = 0;
+    //Start with assuming the diagonal has values
+    //And a bit of a buffer incase we are adding many in the same spot at one time
+    d_nnz[i] = 1;
+  }
+
+
+  /*
+   * This counting can double count. For instance, if you added
+   * several copies of the same exact term, it counts them separately,
+   * counting the 1,2 element many times, for instance.
+   *
+   * FIXME: Possible minor solution: Have a counter which checks if basic
+   * operators of a certain nonzero pattern have yet been added. Would fix
+   * double counting of basic operators at least.
+   */
+  _count_ops_in_mat(d_nnz,o_nnz,tot_levels,Istart,Iend,
+                    (*mat_A),my_mat_type,dm_equations,mcwf_solver,
+                    num_ops,ops);
+
+  //-1s are ignored
+  MatMPIAIJSetPreallocation((*mat_A),-1,d_nnz,-1,o_nnz);
+
+  free(o_nnz);
+  free(d_nnz);
+  return;
+}
+
+/*
+ * Construct the matrix defined by ops[0]*ops[1]*ops[2]*... for the NxN wavefunction space
+ * defined by qsys. qsys and ops must be consistent.
+ */
+void construct_op_matrix_wf_list(qsystem qsys,PetscScalar prefactor_a,Mat *mat_A,PetscInt num_ops,operator *ops){
+  PetscInt    i,Istart,Iend;
+  PetscScalar tmp_a;
+  if(qsys->num_subsystems==0){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You need to create operators before you construct\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       a matrix!\n");
+    exit(0);
+  }
+
+  /*
+   * We use total_levels instead of dim because dim is total_levels**2 when using DM equations
+   * and we specifically want the matrix in the WF space. We set dm_equations = PETSC_FALSE
+   * and mcwf_solver = PETSC_FALSE for similar reasons.
+   */
+
+  _preallocate_op_matrix(mat_A,qsys->nid,qsys->np,qsys->total_levels,qsys->total_levels,
+                         HAM,PETSC_FALSE,PETSC_FALSE,num_ops,ops);
+
+  _add_ops_to_mat(prefactor_a,*mat_A,HAM,qsys->total_levels,PETSC_FALSE,PETSC_FALSE,num_ops,ops);
+
+  MatGetOwnershipRange(*mat_A,&Istart,&Iend);
+  //Loop over diagonal to specifically add 0 to it.
+  tmp_a = 0.0;
+  for(i=Istart;i<Iend;i++){
+    MatSetValue(*mat_A,i,i,tmp_a,ADD_VALUES);
+  }
+  MatAssemblyBegin(*mat_A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(*mat_A,MAT_FINAL_ASSEMBLY);
+
+  return;
+}
 
 
 /*
@@ -514,25 +671,30 @@ void set_ts_monitor_sys(qsystem sys,PetscErrorCode (*monitor)(TS,PetscInt,PetscR
  * command line options. Default solver is TSRK3BS
  *
  * Inputs:
- *       Vec     x:       The density matrix, with appropriate inital conditions
- *       double dt:       initial timestep. For certain explicit methods, this timestep
- *                        can be changed, as those methods have adaptive time steps
- *       double time_max: the maximum time to integrate to
- *       int steps_max:   max number of steps to take
+ *       qvec     x:             The density matrix/wavefunction, with appropriate inital conditions
+ *       PetscReal init_time:    initial tim
+ *       PetscReal dt:           initial timestep. For certain explicit methods, this timestep
+ *                               can be changed, as those methods have adaptive time steps
+ *       PetscReal time_max:     the maximum time to integrate to
+ *       PetscInt steps_max:     max number of steps to take
  */
-void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
+void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
                PetscReal dt,PetscInt steps_max){
   PetscViewer    mat_view;
   TS             ts; /* timestepping context */
   Mat            AA;
-  PetscInt       steps,nevents,direction;
-  PetscBool      terminate;
+  PetscInt       nevents=0,direction[2],i,j;
+  PetscBool      terminate[2]; //We have two types of events for now, hence [2]
+  PetscReal      solve_time,atol=5e-7,rtol=5e-7; //These tolerances are from a simple T1 test. May not be general?
+  TSConvergedReason reason;
+  PetscScalar norm;
 
   PetscLogStagePop();
   PetscLogStagePush(solve_stage);
 
-
-  if(sys->mat_allocated!=1){
+  qsys->time_step_called = PETSC_TRUE;
+  qsys->solution_qvec = x;
+  if(qsys->mat_allocated!=1){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! Matrix does not seem to be constructed! You need to\n");
     PetscPrintf(PETSC_COMM_WORLD,"       call construct_matrix!\n");
     exit(0);
@@ -551,35 +713,61 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
   /*
    * Set function to get information at every timestep
    */
-  if (sys->ts_monitor!=NULL){
-    TSMonitorSet(ts,sys->ts_monitor,sys->ts_ctx,NULL);
+  if (qsys->ts_monitor!=NULL){
+    TSMonitorSet(ts,qsys->ts_monitor,qsys->ts_ctx,NULL);
   }
 
   /*
-   * Set up ODE system
+   * Set up ODE qsystem
    */
-  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,sys);
-  if (sys->num_time_dep>0){
+  TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,qsys);
+  if (qsys->num_time_dep>0){
 
     //Duplicate matrix for time dependent runs
-    MatDuplicate(sys->mat_A,MAT_COPY_VALUES,&AA);
+    MatDuplicate(qsys->mat_A,MAT_COPY_VALUES,&AA);
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
-    TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_sys,sys);
+    TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_sys,qsys);
 
   } else {
     //Time indep
-    TSSetRHSJacobian(ts,sys->mat_A,sys->mat_A,TSComputeRHSJacobianConstant,sys);
+    TSSetRHSJacobian(ts,qsys->mat_A,qsys->mat_A,TSComputeRHSJacobianConstant,qsys);
   }
   /* Print information about the matrix. */
+  //TODO Put verbose flag?
   /* PetscViewerASCIIOpen(PETSC_COMM_WORLD,NULL,&mat_view); */
   /* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_INFO); */
   /* /\* PetscViewerPushFormat(mat_view,PETSC_VIEWER_ASCII_MATLAB); *\/ */
-  /* MatView(sys->mat_A,mat_view); */
+  /* MatView(qsys->mat_A,mat_view); */
   /* PetscViewerPopFormat(mat_view); */
   /* PetscViewerDestroy(&mat_view); */
+  if(qsys->mcwf_solver==PETSC_TRUE){
+    if(qsys->dm_equations==PETSC_FALSE){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! It does not make sense to use the MCWF solver without DM equations.\n");
+    }
+    /*
+     * If we are using the mcwf solver, we need to setup an event to catch if we have passed the
+     * time for a quantum jump.
+     */
+    direction[nevents] = -1; //We only want to count an event if we go from positive to negative
+    terminate[nevents] = PETSC_FALSE; //Keep time stepping after we passed our event
+    qsys->post_event_functions[nevents] = _sys_MCWF_PostEventFunction;
+    nevents   =  nevents + 1;
 
+    if(x->ens_spawned==PETSC_FALSE){
+      VecDuplicate(x->data,&(qsys->mcwf_work_vec));
+      qsys->rand_number = malloc(qsys->num_local_trajs*sizeof(PetscReal));
+      //Copy initial data into the ensemble
+      for(i=0;i<qsys->num_local_trajs;i++){
+        VecCopy(x->data,x->ens_datas[i]);
+        //Pick an initial random number
+        qsys->rand_number[i] = sprng();
 
+      }
+      x->ens_spawned=PETSC_TRUE;
+
+    }
+  }
 
   /*
    * Set default options, can be changed at runtime
@@ -588,30 +776,80 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
   TSSetMaxSteps(ts,steps_max);
   TSSetMaxTime(ts,time_max);
   TSSetTime(ts,init_time);
-  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_MATCHSTEP);
+  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_INTERPOLATE);
 
   TSSetType(ts,TSRK);
   TSRKSetType(ts,TSRK3BS);
-
+  TSSetTolerances(ts,atol,NULL,rtol,NULL);
   /* If we have a circuit to apply, set up the event handler */
-  if (sys->num_circuits > 0) {
-    nevents   =  1; //Only one event for now (did we cross a gate?)
-    direction = -1; //We only want to count an event if we go from positive to negative
-    terminate = PETSC_FALSE; //Keep time stepping after we passed our event
-    /* Arguments are: ts context, nevents, direction of zero crossing, whether to terminate,
-     * a function to check event status, a function to apply events, private data context.
-     */
-    TSSetEventHandler(ts,nevents,&direction,&terminate,_sys_QC_EventFunction,_sys_QC_PostEventFunction,sys);
+  if(qsys->num_circuits>0){
+    direction[nevents] = -1; //We only want to count an event if we go from positive to negative
+    terminate[nevents] = PETSC_FALSE; //Keep time stepping after we passed our event
+    qsys->post_event_functions[nevents] = _sys_QC_PostEventFunction;
+    nevents   =  nevents + 1;
+  }
+  /* Arguments are: ts context, nevents, direction of zero crossing, whether to terminate,
+   * a function to check event status, a function to apply events, private data context.
+   */
+  if(nevents>0){
+    TSSetEventHandler(ts,nevents,&direction,&terminate,_sys_EventFunction,_sys_PostEventFunction,qsys);
   }
 
-
+  //Store a reference to the solution vector in the qsystem
   TSSetFromOptions(ts);
-  TSSolve(ts,x->data);
-  TSGetStepNumber(ts,&steps);
+  if(qsys->mcwf_solver){
+    for(i=0;i<qsys->num_local_trajs;i++){
+      //Reset some time stepping things
+      x->ens_i = i;
+      qsys->ens_i = i;
+      TSSetTime(ts,init_time);
+      TSSetStepNumber(ts,0);
+      TSSetTimeStep(ts,dt);
+
+      if(qsys->num_circuits>0){
+        //Reset circuit stuff
+        qsys->current_circuit=0;
+        for(j=0;j<qsys->num_circuits;j++){
+          qsys->circuit_list[qsys->current_circuit].current_gate = 0;
+          qsys->circuit_list[qsys->current_circuit].current_layer = 0;
+        }
+      }
+      qsys->old_rand = qsys->rand_number[qsys->ens_i];
+
+      TSSolve(ts,x->ens_datas[i]);
+      VecDot(x->ens_datas[i],x->ens_datas[i],&norm);
+      if(PetscRealPart(norm)<qsys->rand_number[qsys->ens_i]){
+        //Reset random number, because we overshot the time_max, interpolated back
+        //and rolled a new random number that was higher
+        //This is subtle, but I think this is the correct way to do it
+        //TODO Corner cases: random number = 1.0, other ts_adapt_type none examples?
+        /* printf("Reset: %f %f %f\n",PetscRealPart(norm),qsys->old_rand,qsys->rand_number[qsys->ens_i]); */
+
+        qsys->rand_number[qsys->ens_i] = qsys->old_rand;
+      }
+
+      TSGetSolveTime(ts,&solve_time);
+      if(abs(solve_time-time_max)>1e-8){
+        printf("i: %d solve_time %f\n",i,solve_time);
+        TSGetConvergedReason(ts,&reason);
+        printf("reason: %d\n",reason);
+        print_qvec(x->ens_datas[i]);
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time!\n");
+        exit(9);
+      }
+    }
+  } else {
+    TSSolve(ts,x->data);
+    TSGetSolveTime(ts,&solve_time);
+    if(abs(solve_time-time_max)>1e-8){
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time!\n");
+      exit(9);
+    }
+  }
 
   /* Free work space */
   TSDestroy(&ts);
-  if(sys->num_time_dep>0){
+  if(qsys->num_time_dep>0){
     MatDestroy(&AA);
   }
 
@@ -620,6 +858,146 @@ void time_step_sys(qsystem sys,qvec x, PetscReal init_time, PetscReal time_max,
 
   return;
 }
+
+
+PetscErrorCode _sys_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,void *ctx) {
+  qsystem qsys = (qsystem) ctx;
+  PetscInt event_num=0;
+  PetscScalar tmp_fvalue;
+
+
+  //Check MCWF event
+  if(qsys->mcwf_solver==PETSC_TRUE){
+    //Check mcwf event
+    _sys_MCWF_EventFunction(qsys,U,&tmp_fvalue);
+    fvalue[event_num] = tmp_fvalue;
+    event_num = event_num+1;
+  }
+
+  //Check circuit event
+  if(qsys->num_circuits>0){
+    _sys_QC_EventFunction(qsys,t,&tmp_fvalue);
+    fvalue[event_num] = tmp_fvalue;
+    event_num = event_num+1;
+  }
+  /* if(qsys->solution_qvec->ens_i>686 && qsys->solution_qvec->ens_i<689){ */
+
+  /* } */
+  return(0);
+}
+
+
+PetscErrorCode _sys_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],
+                                           PetscReal t,Vec psi_data,PetscBool forward,void* ctx) {
+  qsystem qsys = (qsystem) ctx;
+  PetscInt i;
+
+  for(i=0;i<nevents;i++){
+    qsys->post_event_functions[event_list[i]](ts,nevents,event_list,t,psi_data,forward,ctx);
+  }
+
+  return(0);
+}
+
+PetscErrorCode _sys_MCWF_EventFunction(qsystem qsys,Vec U,PetscScalar *fvalue){
+  PetscScalar norm;
+  //PetscLogEventBegin(_qc_event_function_event,0,0,0,0);
+
+  //Check if the norm of the wavefunction is below
+  //Get norm = <psi | psi>
+  VecDot(U,U,&norm);
+  //if the norm goes below the rand_number, fvalue will be negative and we trigger the event
+  //PETSc will then backtrack until it goes below TSEventTolerance
+  *fvalue = norm - qsys->rand_number[qsys->ens_i];
+
+  //PetscLogEventEnd(_qc_event_function_event,0,0,0,0);
+  return(0);
+}
+
+
+
+/* PostEventFunction is the other step in Petsc. If an event has happend, petsc will call this function
+ * to apply that event.
+ */
+PetscErrorCode _sys_MCWF_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list[],
+                                           PetscReal t,Vec psi_data,PetscBool forward,void* ctx) {
+  qsystem qsys = (qsystem) ctx;
+  PetscInt i,j,i_jump_op,num_ops;
+  PetscBool found_jump_op=PETSC_FALSE;
+  PetscReal rand_num_op,*probs_of_jump_op,total_prob_jump_op,tmp_sum_prob;
+  PetscScalar trace_val;
+
+  //PetscLogEventBegin(_qc_postevent_function_event,0,0,0,0);
+  if (nevents) {
+    //A jump has occurred, but we have to pick which one
+    //Loop through all Lindblads and store prob in array
+    //Array won't be larger than num_time_indep + num_time_dep
+    probs_of_jump_op = malloc((qsys->num_time_indep + qsys->num_time_dep)*sizeof(PetscReal));
+    total_prob_jump_op = 0.0;
+    i_jump_op = 0;
+    //Time independent terms
+    for(i=0;i<qsys->num_time_indep;i++){
+      if(qsys->time_indep[i].my_term_type==LINDBLAD){
+        //Get the state C_i * |psi>
+        MatMult(qsys->time_indep[i].mat_A,psi_data,qsys->mcwf_work_vec);
+        //Now get <psi | C_i^\dag C_i | psi> by using VecDot
+        VecDot(qsys->mcwf_work_vec,qsys->mcwf_work_vec,&trace_val);
+        //Multiply the trace_val by gamma and store in array
+        //Should be explicitly real? Maybe check?
+        probs_of_jump_op[i_jump_op] = PetscRealPart(qsys->time_indep[i].a*trace_val);
+        total_prob_jump_op = total_prob_jump_op + PetscRealPart(qsys->time_indep[i].a*trace_val);
+        i_jump_op = i_jump_op+1;
+      }
+    }
+    //TODO: time dependent, don't forget to use callback
+
+    //Pick which jump has occurred
+    rand_num_op = sprng();
+    tmp_sum_prob = 0.0;
+    i_jump_op = 0;
+    //Time independent terms
+    for(i=0;i<qsys->num_time_indep;i++){
+      if(qsys->time_indep[i].my_term_type==LINDBLAD){
+        tmp_sum_prob = tmp_sum_prob + probs_of_jump_op[i_jump_op]/total_prob_jump_op;
+        if(tmp_sum_prob>=rand_num_op){
+          //This is the jump that occurred, so we break
+          found_jump_op=PETSC_TRUE;
+          break;
+        }
+        i_jump_op = i_jump_op+1;
+      }
+    }
+
+    //Apply the jump and renormalize the state if we found it in the time indep terms, or go through time_dep terms
+    if(found_jump_op==PETSC_TRUE){
+
+
+      //Apply jump C | psi>
+      MatMult(qsys->time_indep[i].mat_A,psi_data,qsys->mcwf_work_vec);
+
+      //Get renormalization value
+      trace_val = 1/PetscSqrtReal(probs_of_jump_op[i_jump_op]); // sqrt(a * <psi|C_i^\dag C_i|psi>
+      trace_val = trace_val * PetscSqrtComplex(qsys->time_indep[i].a); //need sqrt(a) on the numerator for units consistency
+
+    } else {
+    //TODO: time dependent, don't forget to use callback
+    }
+
+    VecScale(qsys->mcwf_work_vec,trace_val);
+    //Copy the result into psi_data
+    VecCopy(qsys->mcwf_work_vec,psi_data);
+
+    //Draw a new random number
+    qsys->old_rand = qsys->rand_number[qsys->ens_i];
+    qsys->rand_number[qsys->ens_i] = sprng();
+    free(probs_of_jump_op);
+  }
+
+
+  //PetscLogEventEnd(_qc_postevent_function_event,0,0,0,0);
+  return(0);
+}
+
 
 /*
  * _RHS_time_dep_ham_p adds the (user created) time dependent functions
@@ -632,15 +1010,15 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
   PetscScalar time_dep_scalar;
   int i,j;
   operator op;
-  qsystem sys = (qsystem) ctx;
+  qsystem qsys = (qsystem) ctx;
 
   MatZeroEntries(AA);
-  MatCopy(sys->mat_A,AA,SAME_NONZERO_PATTERN);
+  MatCopy(qsys->mat_A,AA,SAME_NONZERO_PATTERN);
 
-  for(i=0;i<sys->num_time_dep;i++){
-    time_dep_scalar = sys->time_dep[i].a*sys->time_dep[i].time_dep_func(t);
-    _add_ops_to_mat(time_dep_scalar,AA,sys->time_dep[i].my_term_type,
-                    sys->dm_equations,sys->time_dep[i].num_ops,sys->time_dep[i].ops);
+  for(i=0;i<qsys->num_time_dep;i++){
+    time_dep_scalar = qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t);
+    _add_ops_to_mat(time_dep_scalar,AA,qsys->time_dep[i].my_term_type,qsys->total_levels,
+                    qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
   }
 
   MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
@@ -653,5 +1031,4 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
 
   PetscFunctionReturn(0);
 }
-
 

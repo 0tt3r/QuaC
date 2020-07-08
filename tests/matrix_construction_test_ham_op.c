@@ -65,7 +65,7 @@ void test_add_to_ham_1op_pauli_real(void)
   qsystem qsys;
   PetscReal norm;
   char fname[255];
-  operator op2,op3,op4;
+  operator op2;
 
   initialize_system(&qsys);
 
