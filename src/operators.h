@@ -52,7 +52,7 @@ void add_lin_mat(PetscScalar,Mat);
 void add_lin_mult2(PetscScalar,operator,operator);
 void print_dense_ham();
 void set_initial_pop(operator,double);
-void combine_ops_to_mat(Mat*,int,...);
+void combine_ops_to_mat(Mat*,PetscInt,int,...);
 
 extern int nid; /* a ranks id */
 extern int np; /* number of processors */

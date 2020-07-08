@@ -874,7 +874,7 @@ void add_lin_mat(PetscScalar a,Mat add_to_lin){
  *        Mat *matrix_out: The matrix where the result is stored.
  *
  */
-void combine_ops_to_mat(Mat *matrix_out,int number_of_ops,...){
+void combine_ops_to_mat(Mat *matrix_out,PetscInt tot_levels,int number_of_ops,...){
   va_list ap;
   operator *op;
   PetscScalar val,op_val;
@@ -916,7 +916,7 @@ void combine_ops_to_mat(Mat *matrix_out,int number_of_ops,...){
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<number_of_ops;j++){
-      _get_val_j_from_global_i(this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
+      _get_val_j_from_global_i(tot_levels,this_i,op[j],&this_j,&val,-1); // Get the corresponding j and val
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i
