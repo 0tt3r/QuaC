@@ -31,7 +31,7 @@ typedef struct {
   mat_term_type my_term_type;
   PetscScalar a;
   Mat mat_A;
-  PetscScalar (*time_dep_func)(double);
+  PetscScalar (*time_dep_func)(PetscReal);
   operator *ops;
 } mat_term;
 
