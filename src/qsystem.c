@@ -190,6 +190,88 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
 }
 
 
+void _create_single_vec(PetscInt total_levels,PetscInt number_of_levels,
+                        PetscInt position,operator *op){
+  operator temp = NULL;
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = (double) 0.0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = VEC;
+  /* This is a VEC operator; set its position */
+  temp->position    = position;
+  *op           = temp;
+
+  return;
+}
+
+void create_vec_op_sys(qsystem qsys,PetscInt number_of_levels,vec_op *new_vec){
+
+  operator temp = NULL,temp1 = NULL;
+  operator *tmp_list;
+  PetscInt i=0;
+  if (qsys->hspace_frozen){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! You cannot add more vec_ops after\n");
+    PetscPrintf(PETSC_COMM_WORLD,"       the creating a dm or constructing the matrix!\n");
+    exit(0);
+  }
+
+  (*new_vec) = malloc(number_of_levels*(sizeof(struct operator*)));
+
+  for (i=0;i<number_of_levels;i++){
+    _create_single_vec(qsys->total_levels,number_of_levels,i,&temp);
+    (*new_vec)[i]     = temp;
+  }
+
+  /*
+   * Store the top of the array in vec[0], so we can access it later,
+   * through subsystem_list.
+   */
+  (*new_vec)[0]->vec_op_list = (*new_vec);
+
+  /* Increase total_levels */
+  qsys->total_levels = qsys->total_levels*number_of_levels;
+
+  /* Add to list */
+  if (qsys->num_subsystems==qsys->alloc_subsystems){
+    /* Realloc array */
+    qsys->alloc_subsystems = 2*qsys->alloc_subsystems;
+    tmp_list = malloc(qsys->num_subsystems*sizeof(struct operator));
+    for (i=0;i<qsys->num_subsystems;i++){
+      tmp_list[i] = qsys->subsystem_list[i];
+    }
+    free(qsys->subsystem_list);
+    qsys->subsystem_list = malloc(qsys->alloc_subsystems*sizeof(struct operator));
+    for (i=0;i<qsys->num_subsystems;i++){
+      qsys->subsystem_list[i] = tmp_list[i];
+    }
+    free(tmp_list);
+  }
+
+  /* Save position in hilbert space */
+  (*new_vec)[0]->pos_in_sys_hspace = qsys->num_subsystems;
+
+  /*
+   * We store just the first VEC in the subsystem list, since it has
+   * enough information to define all others
+   */
+  qsys->subsystem_list[qsys->num_subsystems] = (*new_vec);
+  qsys->num_subsystems++;
+
+  return;
+}
+
+void destroy_vec_op_sys(vec_op *vop){
+  PetscInt i,levels;
+  levels = (*vop)[0]->my_levels;
+  for(i=0;i<levels;i++){
+    free((*vop)[i]);
+  }
+  free(*vop);
+
+  return;
+}
+
 void destroy_op_sys(operator *op){
 
   free((*op)->dag);

@@ -1195,8 +1195,8 @@ void _get_expectation_value_dm(qvec rho,PetscScalar *trace_val,PetscInt num_ops,
     op_val = 1.0;
     for (j=0;j<num_ops;j++){
       if(ops[j]->my_op_type==VEC){
-        PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators not yet supported!\n");
-        exit(0);
+        /* PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators not yet supported!\n"); */
+        /* exit(0); */
         /*
          * Since this is a VEC operator, the next operator must also
          * be a VEC operator; it is assumed they always come in pairs.

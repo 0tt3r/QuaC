@@ -16,6 +16,13 @@ void create_op_sys(qsystem,PetscInt,operator*);
 void destroy_op_sys(operator*);
 void _create_single_op(PetscInt,PetscInt,op_type,operator*);
 
+
+void create_vec_op_sys(qsystem,PetscInt,vec_op*);
+void destroy_vec_op_sys(vec_op*);
+void _create_single_vec(PetscInt,PetscInt,PetscInt,operator*);
+
+
+
 void add_ham_term(qsystem,PetscScalar,PetscInt,...);
 void add_lin_term(qsystem,PetscScalar,PetscInt,...);
 void add_lin_term_list(qsystem,PetscScalar,PetscInt,operator*);
