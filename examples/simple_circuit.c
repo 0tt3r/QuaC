@@ -23,7 +23,7 @@ int main(int argc,char **args){
   PetscInt num_qubits,num_stpes,steps_max,i;
   PetscScalar mat_val;
   PetscInt nloc;
-  PetscReal *probs;
+  PetscReal *probs,*vars;
   /* Initialize QuaC */
   QuaC_initialize(argc,args);
 
@@ -93,7 +93,7 @@ int main(int argc,char **args){
   //Run the evolution, with error and with the circuit
   time_step_sys(system,rho,0.0,time_max,dt,steps_max);
 
-  get_bitstring_probs(rho,&nloc,&probs);
+  get_bitstring_probs(rho,&nloc,&probs,&vars);
   for (i=0;i<nloc;i++){
     printf("probs[%d] = %f\n",i,probs[i]);
   }
