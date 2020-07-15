@@ -803,6 +803,7 @@ void add_to_qvec_fock_op(PetscScalar alpha,qvec state,PetscInt num_ops,...){
   PetscInt *fock_states,i,loc;
 
 
+
   ops = malloc(num_ops*sizeof(struct operator));
   fock_states = malloc(num_ops*sizeof(PetscInt));
 
@@ -814,6 +815,7 @@ void add_to_qvec_fock_op(PetscScalar alpha,qvec state,PetscInt num_ops,...){
   va_end(ap);
 
   get_qvec_loc_fock_op_list(state,&loc,num_ops,ops,fock_states);
+
   add_to_qvec_loc(state,alpha,loc);
 
   free(ops);
@@ -2366,5 +2368,42 @@ void sqrt_mat(Mat dm_mat){
   PetscFree(rwork);
   PetscFree(evec);
   PetscFree(eigs);
+  return;
+}
+
+
+/*
+ * set_qvec_from_init_excited sets the total initial condition from the
+ * initial conditions provided via the set_init_excited_op routine.
+ *
+ * Inputs:
+ *        qsystem qsys
+ *        qvec state
+ */
+void set_qvec_from_init_excited_op(qsystem qsys,qvec state){
+  PetscInt    i,init_row_op=0,n_after;
+  PetscScalar mat_tmp_val;
+
+  /*
+   * See if there are any vec operators
+   */
+
+  /*
+   * We can only use this simpler initialization if all of the operators
+   * are ladder operators, and the user hasn't used any special initialization routine
+   */
+  for (i=0;i<qsys->num_subsystems;i++){
+    n_after   = qsys->total_levels/(qsys->subsystem_list[i]->my_levels*qsys->subsystem_list[i]->n_before);
+    init_row_op += (qsys->subsystem_list[i]->initial_exc)*n_after;
+  }
+
+  if(qsys->dm_equations==PETSC_TRUE) {
+    init_row_op = qsys->total_levels*init_row_op + init_row_op;
+  } else {
+    init_row_op = init_row_op;
+  }
+  mat_tmp_val = 1. + 0.0*PETSC_i;
+  add_to_qvec_loc(state,mat_tmp_val,init_row_op);
+
   return;
 }

@@ -105,6 +105,7 @@ void _create_single_op(PetscInt total_levels,PetscInt number_of_levels,
   operator temp = NULL;
   temp              = malloc(sizeof(struct operator));
   temp->initial_pop = (double) 0.0;
+  temp->initial_exc = 0;
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = my_op_type;
@@ -195,6 +196,7 @@ void _create_single_vec(PetscInt total_levels,PetscInt number_of_levels,
   operator temp = NULL;
   temp              = malloc(sizeof(struct operator));
   temp->initial_pop = (double) 0.0;
+  temp->initial_exc = 0;
   temp->n_before    = total_levels;
   temp->my_levels   = number_of_levels;
   temp->my_op_type  = VEC;
@@ -1116,3 +1118,24 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
   PetscFunctionReturn(0);
 }
 
+
+
+/*
+ * set_init_excited_op sets the initial excitation level for a single operator
+ * Inputs:
+ *       operator op1
+ *       PetscInt initial_exc
+ * Return:
+ *       none
+ */
+void set_init_excited_op(operator op,PetscInt initial_exc){
+
+  if (initial_exc>=op->my_levels&&op->my_op_type!=VEC){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! The initial excitation level must be less than the number of levels and can't be used for VEC_OP!\n");
+    exit(0);
+  }
+
+  op->initial_exc = initial_exc;
+
+  return;
+}

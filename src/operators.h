@@ -6,8 +6,9 @@ struct operator;
 
 typedef struct operator{
   double  initial_pop;
-  int     n_before;
-  int     my_levels;
+  PetscInt     initial_exc;
+  PetscInt     n_before;
+  PetscInt     my_levels;
   op_type my_op_type;
   PetscInt pos_in_sys_hspace; //Position in Hilbert space
   /* For ladder operators only */
@@ -18,7 +19,7 @@ typedef struct operator{
   struct operator *sig_z;
   struct operator *eye;
   /* For vec operators only */
-  int     position;
+  PetscInt     position;
   /* Stores a pointer to the top of the list. Used in vec[0] only*/
   struct operator **vec_op_list;
 

@@ -16,6 +16,8 @@ void create_op_sys(qsystem,PetscInt,operator*);
 void destroy_op_sys(operator*);
 void _create_single_op(PetscInt,PetscInt,op_type,operator*);
 
+void set_init_excited_op(operator,PetscInt);
+void set_qvec_from_init_excited_op(qsystem,qvec);
 
 void create_vec_op_sys(qsystem,PetscInt,vec_op*);
 void destroy_vec_op_sys(vec_op*);

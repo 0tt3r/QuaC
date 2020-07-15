@@ -26,6 +26,8 @@ void _ptrace_over_list_qvec_dm(qvec,PetscInt,PetscInt*,PetscInt,PetscInt*,qvec*)
 void assemble_qvec(qvec);
 void destroy_qvec(qvec*);
 
+void set_qvec_from_init_excited_op(qsystem,qvec);
+
 void add_to_qvec_fock_op(PetscScalar,qvec,PetscInt,...);
 
 void add_to_qvec_fock_op_list(PetscScalar,qvec,PetscInt,operator*,PetscInt*);
