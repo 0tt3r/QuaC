@@ -1,8 +1,9 @@
 #For example, if you wanted to install PETSc into dir/soft
 mkdir soft
 cd soft
-git clone -b v3.13.3 https://gitlab.com/petsc/petsc.git petsc
+git clone https://gitlab.com/petsc/petsc.git petsc
 cd petsc
+git checkout v3.13.3
 
 export PETSC_DIR=${PWD}
 export PETSC_ARCH=linux-gnu-c-complex-int64-sprng
@@ -15,8 +16,9 @@ export PETSC_ARCH=linux-gnu-c-complex-int64-sprng
 #./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --download-sprng  --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices 
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 cd ..
-git clone -b v3.13.3 https://gitlab.com/slepc/slepc
+git clone https://gitlab.com/slepc/slepc
 cd slepc
+git checkout v3.13.3
 
 export SLEPC_DIR=${PWD}
 ./configure

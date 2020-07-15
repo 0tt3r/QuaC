@@ -13,8 +13,9 @@ Before building QuaC, you'll need [PETSc](http://www.mcs.anl.gov/petsc) and [SLE
 For example, to install on a standard Linux system, something along these lines should work:
 
 ```
-git clone -b v3.13.3 https://gitlab.com/petsc/petsc.git petsc
+git clone https://gitlab.com/petsc/petsc.git petsc
 cd petsc
+git checkout v3.13.3
 
 export PETSC_DIR=${PWD}
 export PETSC_ARCH=linux-gnu-c-complex-int64-sprng
@@ -24,7 +25,7 @@ export PETSC_ARCH=linux-gnu-c-complex-int64-sprng
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 
 cd ..
-git clone -b v3.13.3 https://gitlab.com/slepc/slepc
+git clone https://gitlab.com/slepc/slepc
 cd slepc
 
 export SLEPC_DIR=${PWD}
@@ -34,5 +35,6 @@ make SLEPC_DIR=${SLEPC_DIR}
 cd ..
 git clone -b diagonalize https://github.com/0tt3r/QuaC
 cd QuaC
-make simple_circuit
+make test
 ```
+The output of ```make test``` should be a lot of compilation warnings. At the end, it should print all of the errors - if nothing is printed below 'All failures listed below', the tests passed! The full test results can be viewed in the file test_results

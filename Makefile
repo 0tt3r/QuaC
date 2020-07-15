@@ -1,4 +1,4 @@
-CFLAGS = -Wuninitialized -g
+CFLAGS = -Wuninitialized -O3
 
 
 ODIR=obj
@@ -6,8 +6,7 @@ SRCDIR=src
 EXAMPLESDIR=examples
 EXAMPLES=$(basename $(notdir $(wildcard $(EXAMPLESDIR)/*.c)))
 TESTDIR=tests
-#TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*.c)))
-TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/matrix*test*op.c)))
+TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*.c)))
 MPI_TESTS=$(addprefix mpi_,$(TESTS))
 CFLAGS += -isystem $(SRCDIR)
 
@@ -47,7 +46,7 @@ $(TESTS) : CFLAGS += -DUNIT_TEST
 $(TESTS) : % : $(ODIR)/%.o $(OBJ) $(TEST_OBJ)
 	${CLINKER} -o $@ $^ $(CFLAGS) ${PETSC_KSP_LIB} ${SLEPC_EPS_LIB}
 	@echo 'running '$@
-	@-./$@ -ts_adapt_type none > tmp_test_results
+	@-./$@ |tee  tmp_test_results
 	-@grep FAIL tmp_test_results || true
 	@cat tmp_test_results >> test_results
 	@rm tmp_test_results
@@ -68,7 +67,6 @@ count_fails:
 	@grep FAIL test_results || true
 
 clean_test:
-	rm -f $(TEST_OBJ)
 	@rm -f test_results
 
 test: clean_test $(TESTS) count_fails
