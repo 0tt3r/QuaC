@@ -1,27 +1,27 @@
 #For example, if you wanted to install PETSc into dir/soft
 mkdir soft
 cd soft
-git clone -b maint https://gitlab.com/petsc/petsc.git petsc
-cd petsc/
-export PETSC_DIR=dir/soft/petsc
-export PETSC_ARCH=linux-gnu-c-complex
+git clone -b v3.13.3 https://gitlab.com/petsc/petsc.git petsc
+cd petsc
+
+export PETSC_DIR=${PWD}
+export PETSC_ARCH=linux-gnu-c-complex-int64-sprng
 
 ## This compiles PETSc in optimized mode, which is significantly faster than
 ## with debugging information on
 ##If you do not have blas/lapack or mpich, use below.
-#./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --download-fblaslapack --download-mpich  --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices 
-##If you are on an HPC cluster where MPI is already configured, use:
-# ./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices
+#./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --download-fblaslapack --download-mpich --download-sprng  --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices 
+##If you are on an HPC cluster where MPI and BLAS are already configured, use:
+#./configure PETSC_ARCH=${PETSC_ARCH} PETSC_DIR=${PETSC_DIR} --download-sprng  --with-scalar-type=complex --with-debugging=no COPTFLAGS=-O3 CXXOPTFLAGS=-O3 FOPTFLAGS=-O3 --with-64-bit-indices 
 make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
-make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} test
-
-#Note, you should set PETSC_DIR=<dir/soft/petsc> and PETSC_ARCH=linux-gnu-c-soft in your bashrc
-
-##Now, make SLEPc
 cd ..
-git clone -b maint https://bitbucket.org/slepc/slepc
+git clone -b v3.13.3 https://gitlab.com/slepc/slepc
 cd slepc
-export SLEPC_DIR=dir/soft/slepc
+
+export SLEPC_DIR=${PWD}
 ./configure
-make SLEPC_DIR=${SLEPC_DIR} PETSC_ARCH=${PETSC_ARCH}
+make SLEPC_DIR=${SLEPC_DIR}
+
+#Note, you should set PETSC_DI, PETSC_ARCH, and SLEPC_DIR in your profile (such as ~/.bashrc) so that it is automatically loaded whenever you start a new terminal
+
 
