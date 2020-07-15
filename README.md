@@ -37,4 +37,4 @@ git clone -b diagonalize https://github.com/0tt3r/QuaC
 cd QuaC
 make test
 ```
-The output of ```make test``` should be a lot of compilation warnings. At the end, it should print all of the errors - if nothing is printed below 'All failures listed below', the tests passed! The full test results can be viewed in the file test_results
+The output of ```make test``` should be a lot of compilation warnings. At the end, it should print all of the errors - if nothing is printed below 'All failures listed below', the tests passed! The full test results can be viewed in the file test_results. The environmental variables ```PETSC_DIR```, ```PETSC_ARCH```, and ```SLEPC_DIR``` will need to be added to your profile (such as ~/.bashrc file) so that they are automatically loaded whenever you start a new terminal.
