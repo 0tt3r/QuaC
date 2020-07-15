@@ -524,6 +524,35 @@ QuaCInstance_add_ham_cross_coupling(QuaCInstance *self, PyObject *args, PyObject
 }
 
 static PyObject *
+QuaCInstance_add_ham_zz_coupling(QuaCInstance *self, PyObject *args, PyObject *kwds) {
+  int qubit1, qubit2;
+  double zeta;
+
+  static char *kwlist[] = {"qubit1", "qubit2", "zeta", NULL};
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "iid", kwlist,
+                                   &qubit1, &qubit2, &zeta))
+    Py_RETURN_NONE;
+
+  if (qubit1 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit1 index is out of range");
+    Py_RETURN_NONE;
+  }
+
+  if (qubit2 >= self->num_qubits) {
+    PyErr_SetString(PyExc_RuntimeError, "qubit2 index is out of range");
+    Py_RETURN_NONE;
+  }
+
+  add_ham_term(self->system, zeta/4, 2, self->qubits[qubit1]->eye, self->qubits[qubit2]->eye);
+  add_ham_term(self->system, -zeta/4, 2, self->qubits[qubit1]->eye, self->qubits[qubit2]->sig_z);
+  add_ham_term(self->system, -zeta/4, 2, self->qubits[qubit1]->sig_z, self->qubits[qubit2]->eye);
+  add_ham_term(self->system, zeta/4, 2, self->qubits[qubit1]->sig_z, self->qubits[qubit2]->sig_z);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject *
 QuaCInstance_add_ham_num_time_dep(QuaCInstance *self, PyObject *args, PyObject *kwds) {
   int qubit;
   PyObject *coeff;
@@ -701,6 +730,10 @@ static PyMethodDef QuaCInstance_methods[] = {
     {"add_lindblad_cross_coupling",
      (PyCFunction) QuaCInstance_add_lindblad_cross_coupling, METH_VARARGS | METH_KEYWORDS,
      "Add Lindblad cross_coupling terms."
+    },
+    {"add_ham_zz_coupling",
+     (PyCFunction) QuaCInstance_add_ham_zz_coupling, METH_VARARGS | METH_KEYWORDS,
+     "Add zz coupling terms to Hamiltonian."
     },
     {"add_ham_num",
      (PyCFunction) QuaCInstance_add_ham_num, METH_VARARGS | METH_KEYWORDS,
