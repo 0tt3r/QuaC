@@ -2030,11 +2030,10 @@ void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity,PetscReal *fid_var) {
       }
 
       *fid_var = *fid_var/(q1->n_ensemble-1);
-
     }
   } else if(q2->my_type==WF_ENSEMBLE && q1->my_type==WAVEFUNCTION){
     if(q2->ens_spawned==PETSC_FALSE){
-      _get_fidelity_wf_wf(q1->data,q2->data,fidelity);
+      _get_fidelity_wf_wf(q2->data,q1->data,fidelity);
     } else {
       *fidelity = 0.0;
       for(i=0;i<q2->n_ensemble;i++){
@@ -2043,15 +2042,13 @@ void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity,PetscReal *fid_var) {
         *fidelity = *fidelity + fid_tmp/norm;
       }
       *fidelity = *fidelity/q2->n_ensemble;
+      for(i=0;i<q2->n_ensemble;i++){
+        VecDot(q2->ens_datas[i],q2->ens_datas[i],&norm);
+        _get_fidelity_wf_wf(q2->ens_datas[i],q1->data,&fid_tmp);
+        *fid_var += (fid_tmp - *fidelity)*(fid_tmp - *fidelity);
+      }
+      *fid_var = *fid_var/(q2->n_ensemble-1);
     }
-
-    for(i=0;i<q2->n_ensemble;i++){
-      VecDot(q2->ens_datas[i],q2->ens_datas[i],&norm);
-      _get_fidelity_wf_wf(q2->ens_datas[i],q1->data,&fid_tmp);
-      *fid_var += (fid_tmp - *fidelity)*(fid_tmp - *fidelity);
-    }
-    *fid_var = *fid_var/(q2->n_ensemble-1);
-
 
     //Not the correct way to do it - need to explicitly construct DM from ensemble, maybe?
   /* } else if(q1->my_type==WF_ENSEMBLE && q2->my_type==DENSITY_MATRIX){ */
@@ -2084,6 +2081,7 @@ void get_fidelity_qvec(qvec q1,qvec q2,PetscReal *fidelity,PetscReal *fid_var) {
     PetscPrintf(PETSC_COMM_WORLD,"Types not understand in get_fidelity_qvec!\n");
     exit(9);
   }
+
   return;
 }
 
