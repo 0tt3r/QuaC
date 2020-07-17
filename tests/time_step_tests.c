@@ -82,7 +82,7 @@ void test_time_step_t1_decay_dm_1sys(void){
   assemble_qvec(dm);
 
   construct_matrix(qsys);
-  print_mat_sparse(qsys->mat_A);
+
 
   time_max  = 1;
   dt        = 0.05;
@@ -728,21 +728,21 @@ int main(int argc, char** argv)
   QuaC_initialize(argc,argv);
 
   RUN_TEST(test_time_step_t1_decay_dm_vec_1sys);
-  /* RUN_TEST(test_time_step_t1_decay_dm_1sys); */
-  /* RUN_TEST(test_time_step_t1_decay_mcwf_1sys); */
+  RUN_TEST(test_time_step_t1_decay_dm_1sys);
+  RUN_TEST(test_time_step_t1_decay_mcwf_1sys);
 
   RUN_TEST(test_time_step_t1_decay_dm_vec_2sys);
   RUN_TEST(test_time_step_t1_decay_dm_2sys);
-  /* RUN_TEST(test_time_step_t1_decay_dm_2sys); */
-  /* RUN_TEST(test_time_step_t1_decay_mcwf_2sys); */
+  RUN_TEST(test_time_step_t1_decay_dm_2sys);
+  RUN_TEST(test_time_step_t1_decay_mcwf_2sys);
 
-  /* RUN_TEST(test_time_step_circuit_decay_dm_2sys); */
-  /* RUN_TEST(test_time_step_circuit_decay_wf_ens_2sys); */
+  RUN_TEST(test_time_step_circuit_decay_dm_2sys);
+  RUN_TEST(test_time_step_circuit_decay_wf_ens_2sys);
 
-  /* RUN_TEST(test_time_step_circuit_wf_ens_dm_gam0); */
-  /* RUN_TEST(test_time_step_circuit_wf_ens_dm_gam1); */
+  RUN_TEST(test_time_step_circuit_wf_ens_dm_gam0);
+  RUN_TEST(test_time_step_circuit_wf_ens_dm_gam1);
 
-  /* RUN_TEST(test_time_step_circuit_restart_dm_2sys); */
+  RUN_TEST(test_time_step_circuit_restart_dm_2sys);
   QuaC_finalize();
   return UNITY_END();
 }
