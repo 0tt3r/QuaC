@@ -142,6 +142,54 @@ void test_time_step_t1_decay_mcwf_1sys(void){
   return;
 }
 
+void test_time_step_t1_decay_mcwf_1sys_restart(void){
+  qsystem qsys;
+  PetscScalar omega2=1.0,gamma=1.0,trace_val;
+  operator op2;
+  PetscInt steps_max,n_samples,n_restarts=10,i;
+  PetscReal dt,time_max,tot_time;
+  qvec wf_ens;
+
+  n_samples = 1000;
+
+  initialize_system(&qsys);
+  //Create some operators
+  create_op_sys(qsys,2,&op2);
+
+  add_ham_term(qsys,omega2,1,op2->n);
+  add_lin_term(qsys,gamma,1,op2);
+
+  use_mcwf_solver(qsys,n_samples,NULL);
+
+  create_qvec_sys(qsys,&wf_ens);
+  add_to_qvec(wf_ens,1.0,1);
+
+  assemble_qvec(wf_ens);
+
+  construct_matrix(qsys);
+
+  time_max  = 1;
+  dt        = 0.01;
+  steps_max = 1000;
+
+  /* set_ts_monitor_sys(qsys,ts_monitor,qsys); */
+  for(i=0;i<n_restarts;i++){
+    tot_time = tot_time + time_max/n_restarts;
+    time_step_sys(qsys,wf_ens,i*time_max/n_restarts,(i+1)*time_max/n_restarts,dt,steps_max);
+  }
+
+  get_expectation_value_qvec(wf_ens,&trace_val,1,op2->n);
+
+  TEST_ASSERT_FLOAT_WITHIN(2/sqrt(n_samples),1/exp(1),PetscRealPart(trace_val));
+
+
+  destroy_op_sys(&op2);
+  destroy_system(&qsys);
+  destroy_qvec(&wf_ens);
+
+  return;
+}
+
 
 void test_time_step_t1_decay_dm_vec_2sys(void){
   qsystem qsys;
@@ -267,7 +315,7 @@ void test_time_step_t1_decay_mcwf_2sys(void){
 
   time_max  = 1;
   dt        = 0.05;
-  steps_max = 200;
+  steps_max = 2000;
   /* set_ts_monitor_sys(qsys,ts_monitor,qsys); */
   time_step_sys(qsys,wf_ens,0.0,time_max,dt,steps_max);
 
@@ -384,7 +432,7 @@ void test_time_step_circuit_decay_wf_ens_2sys(void){
 
   time_max  = 1.1;
   dt        = 0.1;
-  steps_max = 25;
+  steps_max = 250000;
   /* set_ts_monitor_sys(qsys,ts_monitor,qsys); */
   time_step_sys(qsys,wf_ens,0.0,time_max,dt,steps_max);
 
@@ -731,8 +779,9 @@ int main(int argc, char** argv)
   RUN_TEST(test_time_step_t1_decay_dm_1sys);
   RUN_TEST(test_time_step_t1_decay_mcwf_1sys);
 
+  RUN_TEST(test_time_step_t1_decay_mcwf_1sys_restart);
+
   RUN_TEST(test_time_step_t1_decay_dm_vec_2sys);
-  RUN_TEST(test_time_step_t1_decay_dm_2sys);
   RUN_TEST(test_time_step_t1_decay_dm_2sys);
   RUN_TEST(test_time_step_t1_decay_mcwf_2sys);
 
