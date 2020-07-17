@@ -851,7 +851,6 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
 
       }
       x->ens_spawned=PETSC_TRUE;
-
     }
   }
 
@@ -862,7 +861,8 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
   TSSetMaxSteps(ts,steps_max);
   TSSetMaxTime(ts,time_max);
   TSSetTime(ts,init_time);
-  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_INTERPOLATE);
+  /* TSSetExactFinalTime(ts,TS_EXACTFINALTIME_INTERPOLATE); */
+  TSSetExactFinalTime(ts,TS_EXACTFINALTIME_MATCHSTEP);
 
   TSSetType(ts,TSRK);
   TSRKSetType(ts,TSRK3BS);
@@ -879,6 +879,7 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
    */
   if(nevents>0){
     TSSetEventHandler(ts,nevents,&direction,&terminate,_sys_EventFunction,_sys_PostEventFunction,qsys);
+    TSSetEventTolerances(ts,1e-9,NULL);
   }
 
   //Store a reference to the solution vector in the qsystem
@@ -900,27 +901,23 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
           qsys->circuit_list[qsys->current_circuit].current_layer = 0;
         }
       }
+      //old_rand can likely be removed because we fixed the corner cases
       qsys->old_rand = qsys->rand_number[qsys->ens_i];
 
       TSSolve(ts,x->ens_datas[i]);
       VecDot(x->ens_datas[i],x->ens_datas[i],&norm);
       if(PetscRealPart(norm)<qsys->rand_number[qsys->ens_i]){
         //Reset random number, because we overshot the time_max, interpolated back
-        //and rolled a new random number that was higher
-        //This is subtle, but I think this is the correct way to do it
-        //TODO Corner cases: random number = 1.0, other ts_adapt_type none examples?
-        /* printf("Reset: %f %f %f\n",PetscRealPart(norm),qsys->old_rand,qsys->rand_number[qsys->ens_i]); */
-
+        //This should not happen because we correctly set tolerances. Left for error checking purposes
+        PetscPrintf("ERROR! There was a reset: %d %f %.20f %.20f\n",i,PetscRealPart(norm),qsys->old_rand,qsys->rand_number[qsys->ens_i]);
+        exit(0);
         qsys->rand_number[qsys->ens_i] = qsys->old_rand;
       }
 
       TSGetSolveTime(ts,&solve_time);
       if(abs(solve_time-time_max)>1e-8){
-        printf("i: %d solve_time %f\n",i,solve_time);
         TSGetConvergedReason(ts,&reason);
-        printf("reason: %d\n",reason);
-        print_qvec(x->ens_datas[i]);
-        PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time!\n");
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Reason: %d\n",reason);
         exit(9);
       }
     }
@@ -950,7 +947,6 @@ PetscErrorCode _sys_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,vo
   qsystem qsys = (qsystem) ctx;
   PetscInt event_num=0;
   PetscScalar tmp_fvalue;
-
 
   //Check MCWF event
   if(qsys->mcwf_solver==PETSC_TRUE){
@@ -995,7 +991,6 @@ PetscErrorCode _sys_MCWF_EventFunction(qsystem qsys,Vec U,PetscScalar *fvalue){
   //if the norm goes below the rand_number, fvalue will be negative and we trigger the event
   //PETSc will then backtrack until it goes below TSEventTolerance
   *fvalue = norm - qsys->rand_number[qsys->ens_i];
-
   //PetscLogEventEnd(_qc_event_function_event,0,0,0,0);
   return(0);
 }
@@ -1012,9 +1007,9 @@ PetscErrorCode _sys_MCWF_PostEventFunction(TS ts,PetscInt nevents,PetscInt event
   PetscBool found_jump_op=PETSC_FALSE;
   PetscReal rand_num_op,*probs_of_jump_op,total_prob_jump_op,tmp_sum_prob;
   PetscScalar trace_val;
-
   //PetscLogEventBegin(_qc_postevent_function_event,0,0,0,0);
   if (nevents) {
+
     //A jump has occurred, but we have to pick which one
     //Loop through all Lindblads and store prob in array
     //Array won't be larger than num_time_indep + num_time_dep
