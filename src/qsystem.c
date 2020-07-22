@@ -1097,7 +1097,12 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
   MatCopy(qsys->mat_A,AA,SAME_NONZERO_PATTERN);
 
   for(i=0;i<qsys->num_time_dep;i++){
-    time_dep_scalar = qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t,qsys->time_dep[i].ctx);
+    if(qsys->dm_equations==PETSC_FALSE||qsys->mcwf_solver==PETSC_TRUE){
+      //We multiply by -i, because we did NOT account for that in the kron routines
+      time_dep_scalar = -PETSC_i*qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t,qsys->time_dep[i].ctx);
+    } else {
+      time_dep_scalar = qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t,qsys->time_dep[i].ctx);
+    }
     _add_ops_to_mat(time_dep_scalar,AA,qsys->time_dep[i].my_term_type,qsys->total_levels,
                     qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
   }

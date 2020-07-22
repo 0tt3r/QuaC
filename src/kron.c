@@ -873,7 +873,7 @@ void _add_ops_to_mat(PetscScalar a,Mat A,mat_term_type my_term_type,PetscInt tot
       }
     }
   } else {
-    if (my_term_type==HAM){
+    if (my_term_type==HAM||my_term_type==TD_HAM){
       _add_ops_to_mat_ham_only(a,A,tot_levels,num_ops,ops);
     } else {
       if (nid==0){

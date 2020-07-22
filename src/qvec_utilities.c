@@ -1267,7 +1267,22 @@ void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,
     this_i = i; // The leading index which we check
     op_val = 1.0;
     for (j=0;j<num_ops;j++){
-      _get_val_j_from_global_i(psi->total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+      if(ops[j]->my_op_type==VEC){
+        /* PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators not yet supported!\n"); */
+        /* exit(0); */
+        /*
+         * Since this is a VEC operator, the next operator must also
+         * be a VEC operator; it is assumed they always come in pairs.
+         */
+        if (ops[j+1]->my_op_type!=VEC){
+          PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators must come in pairs in get_expectation_value\n");
+        }
+        _get_val_j_from_global_i_vec_vec(psi->total_levels,this_i,ops[j],ops[j+1],&this_j,&val,-1);
+        //Increment j
+        j=j+1;
+      } else {
+        _get_val_j_from_global_i(psi->total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+      }
       if (this_j<0) {
         /*
          * Negative j says there is no nonzero value for a given this_i
