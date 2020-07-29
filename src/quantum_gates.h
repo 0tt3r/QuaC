@@ -10,6 +10,7 @@
 
 typedef enum {
   NULL_GATE = -1000,
+  CZ_ARP = -7,
   CUSTOM2QGATE = -6,
   CZX  = -5,
   CmZ  = -4,

@@ -980,6 +980,107 @@ void CZ_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_s
   return;
 }
 
+void CZ_ARP_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
+                                  PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
+  PetscInt n_after,i_sub,k1,k2,i1,i2,num_js_i1=0,num_js_i2=0,js_i1[2],js_i2[2];
+  PetscInt control,i_tmp,my_levels,moved_system;
+  PetscScalar vals_i1[2],vals_i2[2];
+
+  /* The controlled-Z - ARP gate comes from https://journals.aps.org/pra/pdf/10.1103/PhysRevA.101.062309
+   * gate has two inputs, a target and a control.
+   * As a matrix, for a two qubit system
+   *     1 0 0 0
+   *     0 -1 0 0
+   *     0 0 -1 0
+   *     0 0 0 -1
+   * Of course, when there are other qubits, tensor products and such
+   * must be applied to get the full basis representation.
+   *
+   * Note that this is a temporary gate; i.e., we will create a more
+   * general controlled-U gate at a later time that will replace
+   *
+   * Controlled-z is the same for both possible controls
+   */
+
+  if (tensor_control!= 0) {
+
+    /* 4 is hardcoded because 2 qubits with 2 levels each */
+    my_levels   = 4;
+    // Get the correct hilbert space information
+    i_tmp = i;
+    _get_n_after_2qbit_sys(sys,&i_tmp,gate.qubit_numbers,tensor_control,&n_after,&control,&moved_system,&i_sub);
+    *num_js = 1;
+    if (i_sub==0){
+      // Same, regardless of control
+      // Diagonal
+      vals[0] = 1.0;
+      /*
+       * We shouldn't need to deal with any permutation here;
+       * i_sub is in the permuted basis, but we know that a
+       * diagonal element is diagonal in all bases, so
+       * we just use the computational basis value.
+       p         */
+      js[0]  = i;
+
+    } else if (i_sub==1){
+      // Diagonal
+      vals[0] = -1.0;
+      js[0]   = i;
+    } else if (i_sub==2){
+      // Diagonal
+      vals[0] = -1.0;
+      js[0]   = i;
+    } else if (i_sub==3){
+      vals[0] = -1.0;
+      js[0]   = i;
+    } else {
+      if (nid==0){
+        printf("ERROR! CZ ARP gate is only defined for 2 qubits!\n");
+        exit(0);
+      }
+    }
+  } else {
+        /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/sys->total_levels;
+    i2 = i%sys->total_levels;
+
+    /* Now, get js for U* (i1) by calling this function */
+    CZ_ARP_get_val_j_from_global_i_sys(sys,i1,gate,&num_js_i1,js_i1,vals_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    CZ_ARP_get_val_j_from_global_i_sys(sys,i2,gate,&num_js_i2,js_i2,vals_i2,-1);
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *num_js = 0;
+    for(k1=0;k1<num_js_i1;k1++){
+      for(k2=0;k2<num_js_i2;k2++){
+        js[*num_js] = sys->total_levels * js_i1[k1] + js_i2[k2];
+        //Need to take complex conjugate to get true U*
+        vals[*num_js] = PetscConjComplex(vals_i1[k1])*vals_i2[k2];
+
+        *num_js = *num_js + 1;
+      }
+    }
+
+  }
+
+  return;
+}
+
 
 void CmZ_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_gate_struct gate,PetscInt *num_js,
                                   PetscInt js[],PetscScalar vals[],PetscInt tensor_control){
@@ -2309,6 +2410,7 @@ void _initialize_gate_function_array_sys(){
   _get_val_j_functions_gates_sys[CZX+_min_gate_enum] = CZX_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CmZ+_min_gate_enum] = CmZ_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CZ+_min_gate_enum] = CZ_get_val_j_from_global_i_sys;
+  _get_val_j_functions_gates_sys[CZ_ARP+_min_gate_enum] = CZ_ARP_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CXZ+_min_gate_enum] = CXZ_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[CNOT+_min_gate_enum] = CNOT_get_val_j_from_global_i_sys;
   _get_val_j_functions_gates_sys[HADAMARD+_min_gate_enum] = HADAMARD_get_val_j_from_global_i_sys;

@@ -18,6 +18,11 @@ void _get_n_after_2qbit_sys(qsystem,PetscInt*,PetscInt[],PetscInt,PetscInt*,Pets
 void _get_n_after_1qbit_sys(qsystem,PetscInt,PetscInt,PetscInt,PetscInt*,PetscInt*);
 void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void HADAMARD_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void CZX_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void CmZ_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void CZ_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void CXZ_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+void CZ_ARP_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void CNOT_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void SIGMAX_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void SIGMAY_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);

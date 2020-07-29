@@ -12,7 +12,7 @@
 int _num_quantum_gates = 0;
 int _current_gate = 0;
 struct quantum_gate_struct _quantum_gate_list[MAX_GATES];
-int _min_gate_enum = 6; // Minimum gate enumeration number
+int _min_gate_enum = 7; // Minimum gate enumeration number
 int _gate_array_initialized = 0;
 int _num_circuits    = 0;
 int _current_circuit = 0;
@@ -3003,7 +3003,7 @@ void _check_gate_type(gate_type my_gate_type,int *num_qubits){
   if (my_gate_type==HADAMARD||my_gate_type==SIGMAX||my_gate_type==SIGMAY||my_gate_type==SIGMAZ||my_gate_type==EYE||
       my_gate_type==RZ||my_gate_type==RX||my_gate_type==RY||my_gate_type==U1||my_gate_type==U2||my_gate_type==U3||my_gate_type==CUSTOM1QGATE) {
     *num_qubits = 1;
-  } else if (my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX||my_gate_type==CUSTOM2QGATE){
+  } else if (my_gate_type==CZ_ARP||my_gate_type==CNOT||my_gate_type==CXZ||my_gate_type==CZ||my_gate_type==CmZ||my_gate_type==CZX||my_gate_type==CUSTOM2QGATE){
     *num_qubits = 2;
   } else {
     if (nid==0){
