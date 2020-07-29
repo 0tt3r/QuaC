@@ -925,7 +925,8 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
     TSSolve(ts,x->data);
     TSGetSolveTime(ts,&solve_time);
     if(abs(solve_time-time_max)>1e-8){
-      PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time!\n");
+      TSGetConvergedReason(ts,&reason);
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Reason: %d\n",reason);
       exit(9);
     }
   }
