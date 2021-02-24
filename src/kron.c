@@ -577,8 +577,14 @@ void _add_ops_to_mat_lin_mcwf(PetscScalar a,Mat A,PetscInt tot_levels,PetscInt n
    */
   tmp_ops = malloc(2*num_ops*sizeof(operator));
   for(i=0;i<num_ops;i++){
-    tmp_ops[num_ops-i-1] = ops[i]->dag; //take reverse order of ops because (ab)^\dag = b^\dag a^\dag
-    tmp_ops[num_ops+i] = ops[i];
+    if(ops[i]->my_op_type==VEC){
+      tmp_ops[num_ops-i-1] = ops[i]; //take reverse order of ops because (ab)^\dag = b^\dag a^\dag
+      tmp_ops[num_ops+i] = ops[i];
+    } else {
+      tmp_ops[num_ops-i-1] = ops[i]->dag; //take reverse order of ops because (ab)^\dag = b^\dag a^\dag
+      tmp_ops[num_ops+i] = ops[i];
+    }
+
   }
 
   for (i=Istart;i<Iend;i++){
@@ -766,8 +772,13 @@ void _count_ops_in_mat_lin_mcwf(PetscInt *d_nnz,PetscInt *o_nnz,PetscInt tot_lev
    */
   tmp_ops = malloc(2*num_ops*sizeof(operator));
   for(i=0;i<num_ops;i++){
-    tmp_ops[2*i] = ops[i];
-    tmp_ops[2*i+1] = ops[i]->dag;
+    if(ops[i]->my_op_type==VEC){
+      tmp_ops[2*i] = ops[i];
+      tmp_ops[2*i+1] = ops[i];
+    } else {
+      tmp_ops[2*i] = ops[i];
+      tmp_ops[2*i+1] = ops[i]->dag;
+    }
   }
 
   MatGetSize(A,&n,NULL);

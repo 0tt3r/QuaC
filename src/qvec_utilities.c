@@ -358,6 +358,22 @@ void _get_qvec_element_local(qvec state,PetscInt loc,PetscScalar *val){
   return;
 }
 
+void get_trace_qvec(qvec dm,PetscScalar *val){
+  PetscInt loc,i;
+  PetscScalar tmp_val;
+
+  if(dm->my_type!=DENSITY_MATRIX){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Can only take the trace of density matrices!\n");
+    exit(0);
+  }
+  *val = 0;
+  for(i=0;i<dm->total_levels;i++){
+    get_dm_element_qvec(dm,i,i,&tmp_val);
+    *val = *val + tmp_val;
+  }
+  return;
+}
+
 /*
  * Print the dense wf
  */
@@ -496,7 +512,6 @@ void create_arb_qvec_dims(qvec *new_qvec,PetscInt ndims,PetscInt *dims,qvec_type
   for(i=0;i<ndims;i++){
     nstates = nstates * dims[i];
   }
-
   temp = malloc(sizeof(struct qvec));
 
   if(my_type==WAVEFUNCTION){
@@ -684,7 +699,7 @@ void create_wf_sys(qsystem qsys,qvec *new_wf){
 
   if (qsys->dm_equations==PETSC_TRUE && qsys->mcwf_solver==PETSC_FALSE){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR!\n");
-    PetscPrintf(PETSC_COMM_WORLD,"Must use density matrices if Lindblad terms are used without");
+    PetscPrintf(PETSC_COMM_WORLD,"Must use density matrices if Lindblad terms are used without ");
     PetscPrintf(PETSC_COMM_WORLD,"using mcwf_solver.\n");
     exit(0);
   }
@@ -1225,6 +1240,7 @@ void _get_expectation_value_dm(qvec rho,PetscScalar *trace_val,PetscInt num_ops,
         op_val = op_val*val;
       }
     }
+
     /*
      * Check that this i is on this core;
      * most of the time, it will be, but sometimes
@@ -1240,6 +1256,7 @@ void _get_expectation_value_dm(qvec rho,PetscScalar *trace_val,PetscInt num_ops,
       *trace_val = *trace_val + op_val*(dm_element);
     }
   }
+
 
   MPI_Allreduce(MPI_IN_PLACE,trace_val,1,MPIU_SCALAR,MPI_SUM,PETSC_COMM_WORLD);
 
@@ -1334,7 +1351,22 @@ void _get_expectation_value_wf_ens(qvec psi,PetscScalar *trace_val,PetscInt num_
       this_i = i; // The leading index which we check
       op_val = 1.0;
       for (j=0;j<num_ops;j++){
-        _get_val_j_from_global_i(psi->total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+        if(ops[j]->my_op_type==VEC){
+          /* PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators not yet supported!\n"); */
+          /* exit(0); */
+          /*
+           * Since this is a VEC operator, the next operator must also
+           * be a VEC operator; it is assumed they always come in pairs.
+           */
+          if (ops[j+1]->my_op_type!=VEC){
+            PetscPrintf(PETSC_COMM_WORLD,"ERROR! VEC operators must come in pairs in get_expectation_value\n");
+          }
+          _get_val_j_from_global_i_vec_vec(psi->total_levels,this_i,ops[j],ops[j+1],&this_j,&val,-1);
+          //Increment j
+          j=j+1;
+        } else {
+          _get_val_j_from_global_i(psi->total_levels,this_i,ops[j],&this_j,&val,-1); // Get the corresponding j and val
+        }
         if (this_j<0) {
           /*
            * Negative j says there is no nonzero value for a given this_i
@@ -1684,6 +1716,64 @@ void get_linear_xeb_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_fid,PetscReal 
   free(vars_ref);
   return;
 }
+
+void get_linear_xeb_unbiased_fidelity_probs(PetscReal *probs_ref,PetscReal *vars_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscReal *vars_exp,
+                                   PetscInt nloc_exp,PetscInt h_dim,PetscReal *lin_xeb_u_fid,PetscReal *lin_xeb_u_fid_var){
+  PetscReal tmp_lin_xeb_u_fid_num[1],tmp_lin_xeb_u_fid_den[1],tmp_lin_xeb_u_fid_var_num[1];
+  PetscInt i;
+
+  if(nloc_ref!=nloc_exp){
+    printf("ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity_probs!\n");
+    exit(9);
+  }
+  /*
+   * linear xeb fid estimator:
+   * F_lxeb_u = <D p(q) - 1>/<D p_true -1>, but we have the distribution of the bitstrings q, so
+   * F_lxeb_u = (D \sum_i p_exp(q_i) p_true(q_i) - 1) / (D \sum_i p_true(q_i) p_true(q_i) - 1)
+   * where D is total hilbert space size
+   */
+  tmp_lin_xeb_u_fid_den[0] = 0;
+  tmp_lin_xeb_u_fid_num[0] = 0;
+  tmp_lin_xeb_u_fid_var_num[0] = 0;
+  for(i=0;i<nloc_ref;i++){
+    tmp_lin_xeb_u_fid_num[0] = tmp_lin_xeb_u_fid_num[0] + probs_exp[i]*probs_ref[i];
+    tmp_lin_xeb_u_fid_den[0] = tmp_lin_xeb_u_fid_den[0] + probs_ref[i]*probs_ref[i];
+    tmp_lin_xeb_u_fid_var_num[0] = tmp_lin_xeb_u_fid_var_num[0] + vars_exp[i]*probs_ref[i]*probs_ref[i];
+  }
+
+  //Collect all cores
+  MPI_Allreduce(MPI_IN_PLACE,tmp_lin_xeb_u_fid_num,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,tmp_lin_xeb_u_fid_den,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE,tmp_lin_xeb_u_fid_var_num,1,MPIU_REAL,MPI_SUM,PETSC_COMM_WORLD);
+  *lin_xeb_u_fid = (h_dim * tmp_lin_xeb_u_fid_num[0] - 1)/(h_dim * tmp_lin_xeb_u_fid_den[0] - 1);
+  *lin_xeb_u_fid_var = h_dim * h_dim * tmp_lin_xeb_u_fid_var_num[0]/((h_dim * tmp_lin_xeb_u_fid_den[0] - 1)*(h_dim * tmp_lin_xeb_u_fid_den[0] - 1));
+  return;
+}
+
+void get_linear_xeb_unbiased_fidelity(qvec ref,qvec exp,PetscReal *lin_xeb_u_fid,PetscReal *lin_xeb_u_fid_var){
+  PetscReal *probs_ref,*probs_exp,*vars_ref,*vars_exp;
+  PetscInt nloc_ref,nloc_exp;
+  /*
+   * Our 'experiment' is stored in a dm and we can extract the bitstring
+   * probabilities by just taking the diagonal part
+   * Similarly, for our reference
+   */
+  if(ref->total_levels!=exp->total_levels){
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Ref and Exp are not the same size in get_linear_xeb_fidelity!\n");
+    exit(9);
+  }
+  get_bitstring_probs(ref,&nloc_ref,&probs_ref,&vars_ref);
+  get_bitstring_probs(exp,&nloc_exp,&probs_exp,&vars_exp);
+
+  get_linear_xeb_unbiased_fidelity_probs(probs_ref,vars_ref,nloc_ref,probs_exp,vars_exp,nloc_exp,ref->total_levels,lin_xeb_u_fid,lin_xeb_u_fid_var);
+
+  free(probs_exp);
+  free(probs_ref);
+  free(vars_exp);
+  free(vars_ref);
+  return;
+}
+
 
 void get_log_xeb_fidelity_probs(PetscReal *probs_ref,PetscReal *vars_ref,PetscInt nloc_ref,PetscReal *probs_exp,PetscReal *vars_exp,PetscInt nloc_exp,
                                 PetscInt h_dim,PetscReal *log_xeb_fid,PetscReal *log_xeb_fid_var){

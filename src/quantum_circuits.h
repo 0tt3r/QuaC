@@ -13,7 +13,6 @@ void add_gate_to_circuit_sys(circuit*,PetscReal,gate_type,...);
 void apply_circuit_to_sys(qsystem,circuit*,PetscReal);
 void combine_circuit_to_mat_sys(qsystem,Mat*,circuit);
 void schedule_circuit_layers(qsystem,circuit*);
-
 void _get_n_after_2qbit_sys(qsystem,PetscInt*,PetscInt[],PetscInt,PetscInt*,PetscInt*,PetscInt*,PetscInt*);
 void _get_n_after_1qbit_sys(qsystem,PetscInt,PetscInt,PetscInt,PetscInt*,PetscInt*);
 void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
@@ -36,11 +35,21 @@ void U2_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,
 void U3_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 
 
-void CUSTOM2Q_gate_func_wf(qvec,Vec,PetscInt*,void*);//need to be void?
-void HADAMARD_gate_func_wf(qvec,Vec,PetscInt*,void*);
-void CNOT_gate_func_wf(qvec,Vec,PetscInt*,void*);
 
-void (*_get_gate_func_wf(gate_type))(qvec,Vec,PetscInt*,void*);
+void apply_single_qb_measurement_error_probs(PetscReal*,PetscInt,PetscReal,PetscReal,PetscInt);
+void apply_single_qb_measurement_error_state(qvec,PetscReal,PetscReal,PetscInt);
+void _apply_single_qb_measurement_error_wf(qvec,PetscReal,PetscReal,PetscInt);
+
+
+void CUSTOM2Q_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);//need to be void?
+void HADAMARD_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
+void SIGMAX_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
+void RZ_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
+void CNOT_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
+void U3_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
+
+
+void (*_get_gate_func_wf(gate_type))(qvec,Vec,PetscInt*,void*,PetscBool);
 void _change_basis_ij_pair_sys(qsystem,PetscInt*,PetscInt*,PetscInt,PetscInt);
 void _initialize_gate_function_array_sys();
 PetscErrorCode _sys_QC_EventFunction(qsystem,PetscReal,PetscScalar*);

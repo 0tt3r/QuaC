@@ -40,7 +40,7 @@ struct quantum_gate_struct{
   PetscInt *qubit_numbers,num_qubits;
   void (*_get_val_j_from_global_i)(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
   void (*_get_val_j_from_global_i_sys)(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
-  void (*gate_func_wf)(qvec,Vec,PetscInt*,void*);
+  void (*gate_func_wf)(qvec,Vec,PetscInt*,void*,PetscBool);
   custom_gate_func_type custom_func;
   PetscReal theta,phi,lambda; //Only used for rotation gates
   void *gate_ctx;

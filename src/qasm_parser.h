@@ -15,3 +15,6 @@ void qiskit_qasm_read(char[],PetscInt*,circuit*);
 void cirq_qasm_read(char[],PetscInt*,circuit*);
 void _qiskit_qasm_add_gate(char*,circuit*,PetscReal,PetscInt,PetscInt);
 void _qasm_get_angles_from_string(char[],PetscReal*,PetscReal*,PetscReal*);
+
+void _qiskit_tqasm_add_gate(char*,circuit*,PetscInt,PetscInt);
+void qiskit_tqasm_read(char[],PetscInt*,circuit*);

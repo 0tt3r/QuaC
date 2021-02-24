@@ -85,7 +85,7 @@ typedef struct qsystem{
   //mcwf related
   PetscReal *rand_number,old_rand;
   PetscInt num_tot_trajs,num_local_trajs,seed,ens_i;
-  Vec mcwf_work_vec;
+  Vec mcwf_work_vec,mcwf_backup_vec;
 
   //For TSEventHandler - 2 is hard coded because we have two events
   PetscErrorCode (*post_event_functions[2])(TS,PetscInt,PetscInt[],PetscReal,Vec,PetscBool,void*);

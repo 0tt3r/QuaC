@@ -85,6 +85,7 @@ void destroy_system(qsystem *qsys){
 
   if((*qsys)->mcwf_solver==PETSC_TRUE && (*qsys)->time_step_called==PETSC_TRUE){
     VecDestroy(&((*qsys)->mcwf_work_vec));
+    VecDestroy(&((*qsys)->mcwf_backup_vec));
     free((*qsys)->rand_number);
   }
   free((*qsys)->time_indep);
@@ -769,7 +770,7 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
   PetscViewer    mat_view;
   TS             ts; /* timestepping context */
   Mat            AA;
-  PetscInt       nevents=0,direction[2],i,j;
+  PetscInt       nevents=0,direction[2],i,j,retry;
   PetscBool      terminate[2]; //We have two types of events for now, hence [2]
   PetscReal      solve_time,atol=5e-7,rtol=5e-7; //These tolerances are from a simple T1 test. May not be general?
   TSConvergedReason reason;
@@ -842,6 +843,7 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
 
     if(x->ens_spawned==PETSC_FALSE){
       VecDuplicate(x->data,&(qsys->mcwf_work_vec));
+      VecDuplicate(x->data,&(qsys->mcwf_backup_vec));
       qsys->rand_number = malloc(qsys->num_local_trajs*sizeof(PetscReal));
       //Copy initial data into the ensemble
       for(i=0;i<qsys->num_local_trajs;i++){
@@ -886,38 +888,51 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
   TSSetFromOptions(ts);
   if(qsys->mcwf_solver){
     for(i=0;i<qsys->num_local_trajs;i++){
-      //Reset some time stepping things
-      x->ens_i = i;
-      qsys->ens_i = i;
-      TSSetTime(ts,init_time);
-      TSSetStepNumber(ts,0);
-      TSSetTimeStep(ts,dt);
+      retry=0;
+      VecCopy(x->ens_datas[i],qsys->mcwf_backup_vec);
+      if(retry<10){
+        //Reset some time stepping things
+        x->ens_i = i;
+        qsys->ens_i = i;
+        TSSetTime(ts,init_time);
+        TSSetStepNumber(ts,0);
+        TSSetTimeStep(ts,dt);
 
-      if(qsys->num_circuits>0){
-        //Reset circuit stuff
-        qsys->current_circuit=0;
-        for(j=0;j<qsys->num_circuits;j++){
-          qsys->circuit_list[qsys->current_circuit].current_gate = 0;
-          qsys->circuit_list[qsys->current_circuit].current_layer = 0;
+        if(qsys->num_circuits>0){
+          //Reset circuit stuff
+          qsys->current_circuit=0;
+          for(j=0;j<qsys->num_circuits;j++){
+            qsys->circuit_list[qsys->current_circuit].current_gate = 0;
+            qsys->circuit_list[qsys->current_circuit].current_layer = 0;
+          }
         }
-      }
-      //old_rand can likely be removed because we fixed the corner cases
-      qsys->old_rand = qsys->rand_number[qsys->ens_i];
+        //old_rand can likely be removed because we fixed the corner cases
+        if(retry>0){
+          //draw a new random number
+          qsys->rand_number[qsys->ens_i] = sprng();
+        }
+        qsys->old_rand = qsys->rand_number[qsys->ens_i];
+        VecCopy(qsys->mcwf_backup_vec,x->ens_datas[i]);
+        TSSolve(ts,x->ens_datas[i]);
+        VecDot(x->ens_datas[i],x->ens_datas[i],&norm);
+        if(PetscRealPart(norm)<qsys->rand_number[qsys->ens_i]){
+          //Reset random number, because we overshot the time_max, interpolated back
+          //This should not happen because we correctly set tolerances. Left for error checking purposes
+          PetscPrintf("ERROR! There was a reset: %d %f %.20f %.20f\n",i,PetscRealPart(norm),qsys->old_rand,qsys->rand_number[qsys->ens_i]);
+          exit(0);
+          qsys->rand_number[qsys->ens_i] = qsys->old_rand;
+        }
 
-      TSSolve(ts,x->ens_datas[i]);
-      VecDot(x->ens_datas[i],x->ens_datas[i],&norm);
-      if(PetscRealPart(norm)<qsys->rand_number[qsys->ens_i]){
-        //Reset random number, because we overshot the time_max, interpolated back
-        //This should not happen because we correctly set tolerances. Left for error checking purposes
-        PetscPrintf("ERROR! There was a reset: %d %f %.20f %.20f\n",i,PetscRealPart(norm),qsys->old_rand,qsys->rand_number[qsys->ens_i]);
-        exit(0);
-        qsys->rand_number[qsys->ens_i] = qsys->old_rand;
-      }
-
-      TSGetSolveTime(ts,&solve_time);
-      if(abs(solve_time-time_max)>1e-8){
-        TSGetConvergedReason(ts,&reason);
-        PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Reason: %d\n",reason);
+        TSGetSolveTime(ts,&solve_time);
+        if(abs(solve_time-time_max)>1e-8){
+          TSGetConvergedReason(ts,&reason);
+          PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Retrying. Reason: %d\n",reason);
+          retry=retry+1;
+        } else{
+          retry = 100;
+        }
+      } else {
+        PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Exhausted retries.\n");
         exit(9);
       }
     }
@@ -964,7 +979,6 @@ PetscErrorCode _sys_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,vo
     event_num = event_num+1;
   }
   /* if(qsys->solution_qvec->ens_i>686 && qsys->solution_qvec->ens_i<689){ */
-
   /* } */
   return(0);
 }
