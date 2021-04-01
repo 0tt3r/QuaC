@@ -63,6 +63,7 @@ typedef struct qsystem{
   PetscInt num_time_indep,num_time_dep;
   PetscInt alloc_time_indep,alloc_time_dep;
 
+  PetscScalar min_time_dep; //Minimum cutoff for including a time dependent term
   mat_term *time_indep,*time_dep;
   PetscInt hspace_frozen;
   PetscBool dm_equations,mcwf_solver,time_step_called;
@@ -77,7 +78,8 @@ typedef struct qsystem{
   PetscInt total_levels,dim;
 
   qvec solution_qvec;
-
+  Vec work_vec; //May be redundant with mcwf_work_vec
+  
   //Distribution info
   PetscInt np,nid;
   PetscInt Istart,Iend,my_num;
@@ -91,6 +93,7 @@ typedef struct qsystem{
   PetscErrorCode (*post_event_functions[2])(TS,PetscInt,PetscInt[],PetscReal,Vec,PetscBool,void*);
 
   //TS monitor related
+  PetscReal current_time;
   PetscErrorCode (*ts_monitor)(TS,PetscInt,PetscReal,Vec,void*);
   void *ts_ctx;
 
@@ -106,6 +109,7 @@ PetscErrorCode _sys_MCWF_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,
 PetscErrorCode _sys_EventFunction(TS,PetscReal,Vec,PetscScalar*,void*);
 PetscErrorCode _sys_PostEventFunction(TS,PetscInt,PetscInt[],PetscReal,Vec,PetscBool,void*);
 
+PetscErrorCode _time_dep_mat_mult(Mat,Vec,Vec);
 void _setup_distribution(PetscInt,PetscInt,PetscInt,PetscInt*,PetscInt*,PetscInt*);
 void _preallocate_qsys_matrix(qsystem);
 void _preallocate_op_matrix(Mat*,PetscInt,PetscInt,PetscInt,PetscInt,mat_term_type,PetscBool,PetscBool,PetscInt,operator*);

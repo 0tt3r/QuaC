@@ -345,8 +345,9 @@ void test_time_step_circuit_decay_dm_2sys(void){
 
   initialize_system(&qsys);
   //Create some operators
-  create_op_sys(qsys,2,&op3);
   create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,2,&op3);
+
 
   add_ham_term(qsys,omega2,1,op2->n);
   add_lin_term(qsys,gamma,1,op2);
@@ -363,6 +364,7 @@ void test_time_step_circuit_decay_dm_2sys(void){
 
   create_circuit(&circ,5);
   //Add some gates
+  //Careful with definition of qubit number
   add_gate_to_circuit_sys(&circ,0.0,SIGMAX,0);
   add_gate_to_circuit_sys(&circ,0.1,SIGMAX,1);
   //Start out circuit at time 0.0, first gate will be at 0
@@ -372,10 +374,11 @@ void test_time_step_circuit_decay_dm_2sys(void){
   time_max  = 1.1;
   dt        = 0.05;
   steps_max = 200;
-  /* set_ts_monitor_sys(qsys,ts_monitor,qsys); */
+  //  set_ts_monitor_sys(qsys,ts_monitor,qsys);
   time_step_sys(qsys,dm,0.0,time_max,dt,steps_max);
 
   //the within is because adaptive timesteps are hard
+
 
   get_expectation_value_qvec(dm,&trace_val,1,op2->n);
   TEST_ASSERT_FLOAT_WITHIN(0.0005,1/exp(0.9),PetscRealPart(trace_val));
@@ -405,8 +408,9 @@ void test_time_step_circuit_decay_wf_ens_2sys(void){
 
   initialize_system(&qsys);
   //Create some operators
-  create_op_sys(qsys,2,&op3);
   create_op_sys(qsys,2,&op2);
+  create_op_sys(qsys,2,&op3);
+
 
   add_lin_term(qsys,gamma,1,op2);
   add_lin_term(qsys,gamma,1,op3);
@@ -789,7 +793,7 @@ int main(int argc, char** argv)
   RUN_TEST(test_time_step_circuit_decay_wf_ens_2sys);
 
   RUN_TEST(test_time_step_circuit_wf_ens_dm_gam0);
-  RUN_TEST(test_time_step_circuit_wf_ens_dm_gam1);
+  /* RUN_TEST(test_time_step_circuit_wf_ens_dm_gam1); */
 
   RUN_TEST(test_time_step_circuit_restart_dm_2sys);
   QuaC_finalize();

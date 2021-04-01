@@ -10,6 +10,8 @@
 #include <stdarg.h>
 
 PetscErrorCode _RHS_time_dep_ham_sys(TS,PetscReal,Vec,Mat,Mat,void*); // Move to header?
+PetscErrorCode _RHS_time_dep_ham_mf_sys(TS,PetscReal,Vec,Mat,Mat,void*); // Move to header?
+
 
 void initialize_system(qsystem *qsys){
   qsystem temp = NULL;
@@ -28,6 +30,8 @@ void initialize_system(qsystem *qsys){
   temp->time_step_called = PETSC_FALSE;
   temp->total_levels   = 1;
   temp->dim = 1;
+
+  temp->min_time_dep = 1e-10; //Minimum
 
   temp->num_subsystems = 0;
   temp->alloc_subsystems = num_init_alloc;
@@ -68,32 +72,17 @@ void initialize_system(qsystem *qsys){
 void destroy_system(qsystem *qsys){
   PetscInt i;
   free((*qsys)->subsystem_list);
-  for(i=0;i<(*qsys)->num_time_dep;i++){
-    free((*qsys)->time_dep[i].ops);
-  }
 
-  free((*qsys)->time_dep);
-
-  for(i=0;i<(*qsys)->num_time_indep;i++){
-    free((*qsys)->time_indep[i].ops);
-    if((*qsys)->mcwf_solver==PETSC_TRUE){
-      if((*qsys)->time_indep[i].my_term_type==LINDBLAD){
-        MatDestroy(&((*qsys)->time_indep[i].mat_A));
-      }
-    }
-  }
+  clear_mat_terms_sys(*qsys);
+  free((*qsys)->time_dep); /***/
+  free((*qsys)->time_indep); /**/
 
   if((*qsys)->mcwf_solver==PETSC_TRUE && (*qsys)->time_step_called==PETSC_TRUE){
     VecDestroy(&((*qsys)->mcwf_work_vec));
     VecDestroy(&((*qsys)->mcwf_backup_vec));
     free((*qsys)->rand_number);
   }
-  free((*qsys)->time_indep);
-  if ((*qsys)->mat_allocated){
-    MatDestroy(&((*qsys)->mat_A));
-    free((*qsys)->o_nnz);
-    free((*qsys)->d_nnz);
-  }
+
 
   if((*qsys)->num_circuits>0){
     free((*qsys)->circuit_list);
@@ -364,6 +353,7 @@ void add_ham_term(qsystem sys,PetscScalar a,PetscInt num_ops,...){
   }
   va_end(ap);
   sys->num_time_indep = sys->num_time_indep+1;
+
   /* PetscLogEventEnd(add_to_ham_event,0,0,0,0); */
   return;
 }
@@ -489,34 +479,44 @@ void add_lin_term_time_dep(qsystem sys,PetscScalar a,void *ctx,PetscScalar (*tim
 /*
  * Clear the mat_terms so that the system can be reused with a different H / L
  */
-void clear_mat_terms_sys(qsystem sys){
+void clear_mat_terms_sys(qsystem qsys){
   PetscInt i;
 
-  if (sys->mat_allocated){
+  for(i=0;i<qsys->num_time_dep;i++){
+    free(qsys->time_dep[i].ops);
+    if(qsys->mat_allocated){
+      //Free each time dep term
+      MatDestroy(&(qsys->time_dep[i].mat_A));
+    }
+  }
+
+  for(i=0;i<qsys->num_time_indep;i++){
+    free(qsys->time_indep[i].ops);
+    if(qsys->mcwf_solver==PETSC_TRUE){
+      if(qsys->time_indep[i].my_term_type==LINDBLAD){
+        MatDestroy(&(qsys->time_indep[i].mat_A));
+      }
+    }
+  }
+
+
+  if (qsys->mat_allocated){
     //Free the matrix
-    MatDestroy(&(sys->mat_A));
-    free(sys->o_nnz);
-    free(sys->d_nnz);
-    sys->mat_allocated = 0; //
-  }
-
-  for(i=0;i<sys->num_time_indep;i++){
-    free(sys->time_indep[i].ops);
-  }
-
-  for(i=0;i<sys->num_time_dep;i++){
-    free(sys->time_dep[i].ops);
+    MatDestroy(&(qsys->mat_A));
+    free(qsys->o_nnz);
+    free(qsys->d_nnz);
+    qsys->mat_allocated = 0;
   }
 
   //Reset our counters
-  sys->num_time_indep = 0;
-  sys->num_time_dep = 0;
+  qsys->num_time_indep = 0;
+  qsys->num_time_dep = 0;
 
   return;
 }
 
-void construct_matrix(qsystem qsys){
-  PetscInt    i;
+void construct_matrix (qsystem qsys){
+  PetscInt    i,j;
   PetscScalar tmp_a;
   qsys->hspace_frozen = 1;
 
@@ -559,26 +559,43 @@ void construct_matrix(qsystem qsys){
   }
 
   /*
-   * Loop over time dependent terms, using 0 as the scalar. This
-   * ensures that the matrix will have the correct nonzero structure
+   * Loop over time dependent terms, using 1.0 as the scalar. This
+   * pre-caches the time-dependent matrices. We will later add them to A during
+   * time stepping.
+   *
+   * We also add the time dep matrix terms to A so that A has the right nonzero structure
    * when we add those time dependent terms
    */
-  tmp_a = 0.0;
+
   for(i=0;i<qsys->num_time_dep;i++){
+    tmp_a = 1.0;
+    _add_ops_to_mat(tmp_a,qsys->time_dep[i].mat_A,qsys->time_dep[i].my_term_type,qsys->total_levels,
+                    qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
+    tmp_a = 0.0;
     _add_ops_to_mat(tmp_a,qsys->mat_A,qsys->time_dep[i].my_term_type,qsys->total_levels,
                     qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
+
   }
 
   //Loop over diagonal to specifically add 0 to it.
   tmp_a = 0.0;
   for(i=qsys->Istart;i<qsys->Iend;i++){
     MatSetValue(qsys->mat_A,i,i,tmp_a,ADD_VALUES);
+    for(j=0;j<qsys->num_time_dep;j++){
+      MatSetValue(qsys->time_dep[j].mat_A,i,i,tmp_a,ADD_VALUES);
+    }
   }
   MatAssemblyBegin(qsys->mat_A,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(qsys->mat_A,MAT_FINAL_ASSEMBLY);
+
+  for(i=0;i<qsys->num_time_dep;i++){
+    MatAssemblyBegin(qsys->time_dep[i].mat_A,MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(qsys->time_dep[i].mat_A,MAT_FINAL_ASSEMBLY);
+  }
   if(qsys->dm_equations==PETSC_FALSE||qsys->mcwf_solver==PETSC_TRUE){
     //We scale the matrix by -i, because we did NOT account for that in the kron routines
     MatScale(qsys->mat_A,-PETSC_i);
+    //Time dep matrices are taken care of in _RHS_time_dep_ham_sys
   }
   return;
 }
@@ -603,12 +620,13 @@ void _setup_distribution(PetscInt nid,PetscInt np,PetscInt dim,PetscInt *my_num,
 }
 
 void _preallocate_qsys_matrix(qsystem qsys){
-  PetscInt    i,count,remainder,tmp_nid,tmp_np;
+  PetscInt i,j,count,remainder,tmp_nid,tmp_np;
+  PetscInt *o_nnz_td,*d_nnz_td; //Time dependent nnzs
 
   if(qsys->my_num<0){//Only setup the distribution once. Could be created otherwise
     _setup_distribution(qsys->nid,qsys->np,qsys->dim,&(qsys->my_num),&(qsys->Istart),&(qsys->Iend));
   }
-  //  total_levels = qsys->total_levels; //FIXME: Hack to be compatible with old code
+
   MatCreate(PETSC_COMM_WORLD,&(qsys->mat_A));
   MatSetType(qsys->mat_A,MATMPIAIJ);
   MatSetSizes(qsys->mat_A,qsys->my_num,qsys->my_num,qsys->dim,qsys->dim);
@@ -617,11 +635,16 @@ void _preallocate_qsys_matrix(qsystem qsys){
   qsys->o_nnz = malloc(qsys->my_num*sizeof(PetscInt));
   qsys->d_nnz = malloc(qsys->my_num*sizeof(PetscInt));
 
+  o_nnz_td = malloc(qsys->my_num*sizeof(PetscInt));
+  d_nnz_td = malloc(qsys->my_num*sizeof(PetscInt));
+
   for(i=0;i<qsys->my_num;i++){
     qsys->o_nnz[i] = 0;
     //Start with assuming the diagonal has values
     //And a bit of a buffer incase we are adding many in the same spot at one time
     qsys->d_nnz[i] = 1;
+    o_nnz_td[i] = 0;
+    d_nnz_td[i] = 1;
   }
 
 
@@ -640,19 +663,42 @@ void _preallocate_qsys_matrix(qsystem qsys){
                       qsys->mat_A,qsys->time_indep[i].my_term_type,
                       qsys->dm_equations,qsys->mcwf_solver,
                       qsys->time_indep[i].num_ops,qsys->time_indep[i].ops);
+
   }
 
   //Loop over time dependent terms
   for(i=0;i<qsys->num_time_dep;i++){
-    _count_ops_in_mat(qsys->d_nnz,qsys->o_nnz,qsys->total_levels,qsys->Istart,qsys->Iend,
+    //Create matrices for the time dependent parts; one for each
+    MatCreate(PETSC_COMM_WORLD,&(qsys->time_dep[i].mat_A));
+    MatSetType(qsys->time_dep[i].mat_A,MATMPIAIJ);
+    MatSetSizes(qsys->time_dep[i].mat_A,qsys->my_num,qsys->my_num,qsys->dim,qsys->dim);
+    MatSetFromOptions(qsys->time_dep[i].mat_A);
+
+    //Matrix qsys->mat_A is only used for the size, n, and A and time_dep[i] have
+    //the same size
+    // FIXME: Perhaps it should be the matrix size, if that is really all that it is used for?
+    _count_ops_in_mat(d_nnz_td,o_nnz_td,qsys->total_levels,qsys->Istart,qsys->Iend,
                       qsys->mat_A,qsys->time_dep[i].my_term_type,
                       qsys->dm_equations,qsys->mcwf_solver,
                       qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
+
+    //Set the preallocation for time_dep[i] to only include time_dep[i]'s nonzers'
+    MatMPIAIJSetPreallocation(qsys->time_dep[i].mat_A,-1,d_nnz_td,-1,o_nnz_td);
+
+    //Add the nnzs to the mat_As nnzs and zero out for the next count
+    for(j=0;j<qsys->my_num;j++){
+      qsys->o_nnz[j] += o_nnz_td[j];
+      qsys->d_nnz[j] += d_nnz_td[j];
+      o_nnz_td[j] = 0;
+      d_nnz_td[j] = 1; //always need 1 to ensure the diagonal has some elements
+    }
 
   }
 
   //-1s are ignored
   MatMPIAIJSetPreallocation(qsys->mat_A,-1,qsys->d_nnz,-1,qsys->o_nnz);
+  free(o_nnz_td);
+  free(d_nnz_td);
   return;
 }
 
@@ -770,12 +816,12 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
   PetscViewer    mat_view;
   TS             ts; /* timestepping context */
   Mat            AA;
-  PetscInt       nevents=0,direction[2],i,j,retry;
+  PetscInt       nevents=0,direction[2],i,j,retry,m_local,n_local;
   PetscBool      terminate[2]; //We have two types of events for now, hence [2]
   PetscReal      solve_time,atol=5e-7,rtol=5e-7; //These tolerances are from a simple T1 test. May not be general?
   TSConvergedReason reason;
   PetscScalar norm;
-
+  PetscErrorCode ierr;
   PetscLogStagePop();
   PetscLogStagePush(solve_stage);
 
@@ -809,12 +855,18 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
    */
   TSSetRHSFunction(ts,NULL,TSComputeRHSFunctionLinear,qsys);
   if (qsys->num_time_dep>0){
-
+    VecDuplicate(x->data,&(qsys->work_vec));
     //Duplicate matrix for time dependent runs
     MatDuplicate(qsys->mat_A,MAT_COPY_VALUES,&AA);
     MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
     TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_sys,qsys);
+
+    /* ierr = MatGetLocalSize(qsys->mat_A,&m_local,&n_local); */
+    /* ierr = MatCreateShell(PETSC_COMM_WORLD,m_local,n_local,PETSC_DETERMINE,PETSC_DETERMINE,qsys,&AA);CHKERRQ(ierr); */
+    /* ierr = MatShellSetOperation(AA,MATOP_MULT,(void (*)(void))_time_dep_mat_mult);CHKERRQ(ierr); */
+
+    /* TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_mf_sys,qsys); */
 
   } else {
     //Time indep
@@ -928,7 +980,7 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
           TSGetConvergedReason(ts,&reason);
           PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Retrying. Reason: %d\n",reason);
           retry=retry+1;
-        } else{
+        } else {
           retry = 100;
         }
       } else {
@@ -942,13 +994,14 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
     if(abs(solve_time-time_max)>1e-8){
       TSGetConvergedReason(ts,&reason);
       PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Reason: %d\n",reason);
-      exit(9);
+      //      exit(9);
     }
   }
 
   /* Free work space */
   TSDestroy(&ts);
   if(qsys->num_time_dep>0){
+    VecDestroy(&(qsys->mcwf_work_vec));
     MatDestroy(&AA);
   }
 
@@ -978,8 +1031,7 @@ PetscErrorCode _sys_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,vo
     fvalue[event_num] = tmp_fvalue;
     event_num = event_num+1;
   }
-  /* if(qsys->solution_qvec->ens_i>686 && qsys->solution_qvec->ens_i<689){ */
-  /* } */
+
   return(0);
 }
 
@@ -988,6 +1040,7 @@ PetscErrorCode _sys_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_list
                                            PetscReal t,Vec psi_data,PetscBool forward,void* ctx) {
   qsystem qsys = (qsystem) ctx;
   PetscInt i;
+
 
   for(i=0;i<nevents;i++){
     qsys->post_event_functions[event_list[i]](ts,nevents,event_list,t,psi_data,forward,ctx);
@@ -1005,7 +1058,7 @@ PetscErrorCode _sys_MCWF_EventFunction(qsystem qsys,Vec U,PetscScalar *fvalue){
   VecDot(U,U,&norm);
   //if the norm goes below the rand_number, fvalue will be negative and we trigger the event
   //PETSc will then backtrack until it goes below TSEventTolerance
-  *fvalue = norm - qsys->rand_number[qsys->ens_i];
+  *fvalue = PetscRealPart(norm - qsys->rand_number[qsys->ens_i]);
   //PetscLogEventEnd(_qc_event_function_event,0,0,0,0);
   return(0);
 }
@@ -1023,8 +1076,8 @@ PetscErrorCode _sys_MCWF_PostEventFunction(TS ts,PetscInt nevents,PetscInt event
   PetscReal rand_num_op,*probs_of_jump_op,total_prob_jump_op,tmp_sum_prob;
   PetscScalar trace_val;
   //PetscLogEventBegin(_qc_postevent_function_event,0,0,0,0);
-  if (nevents) {
 
+  if (nevents) {
     //A jump has occurred, but we have to pick which one
     //Loop through all Lindblads and store prob in array
     //Array won't be larger than num_time_indep + num_time_dep
@@ -1096,7 +1149,7 @@ PetscErrorCode _sys_MCWF_PostEventFunction(TS ts,PetscInt nevents,PetscInt event
 
 
 /*
- * _RHS_time_dep_ham_p adds the (user created) time dependent functions
+ * _RHS_time_dep_ham_sys adds the (user created) time dependent functions
  * to the time independent hamiltonian. It is used internally by PETSc
  * during time stepping.
  */
@@ -1111,6 +1164,7 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
   MatZeroEntries(AA);
   MatCopy(qsys->mat_A,AA,SAME_NONZERO_PATTERN);
 
+  PetscLogEventBegin(_RHS_time_dep_event,0,0,0,0);
   for(i=0;i<qsys->num_time_dep;i++){
     if(qsys->dm_equations==PETSC_FALSE||qsys->mcwf_solver==PETSC_TRUE){
       //We multiply by -i, because we did NOT account for that in the kron routines
@@ -1118,10 +1172,16 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
     } else {
       time_dep_scalar = qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t,qsys->time_dep[i].ctx);
     }
-    _add_ops_to_mat(time_dep_scalar,AA,qsys->time_dep[i].my_term_type,qsys->total_levels,
-                    qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
-  }
 
+    //Only add the term if it is above a threshold
+    //Do A = A + s(t)*B
+    if(PetscAbsScalar(time_dep_scalar)>PetscAbsScalar(qsys->min_time_dep)){
+      MatAXPY(AA,time_dep_scalar,qsys->time_dep[i].mat_A,SUBSET_NONZERO_PATTERN);
+    }
+    /* _add_ops_to_mat(time_dep_scalar,AA,qsys->time_dep[i].my_term_type,qsys->total_levels, */
+    /*                 qsys->dm_equations,qsys->mcwf_solver,qsys->time_dep[i].num_ops,qsys->time_dep[i].ops); */
+  }
+  PetscLogEventEnd(_RHS_time_dep_event,0,0,0,0);
   MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
 
@@ -1134,7 +1194,53 @@ PetscErrorCode _RHS_time_dep_ham_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void 
 }
 
 
+/*
+ * _RHS_time_dep_ham_mf_sys caches the current time. It will be used in the custom matmult function
+ */
 
+PetscErrorCode _RHS_time_dep_ham_mf_sys(TS ts,PetscReal t,Vec X,Mat AA,Mat BB,void *ctx){
+  double time_dep_val;
+  PetscScalar time_dep_scalar;
+  int i,j;
+  operator op;
+  qsystem qsys = (qsystem) ctx;
+
+  qsys->current_time = t;
+  PetscFunctionReturn(0);
+}
+
+
+ PetscErrorCode _time_dep_mat_mult(Mat A_shell,Vec X,Vec Y){
+   qsystem qsys;
+   PetscErrorCode ierr;
+   PetscScalar time_dep_scalar;
+   PetscReal t;
+   PetscInt i;
+
+   PetscLogEventBegin(_RHS_time_dep_event,0,0,0,0);
+   ierr = MatShellGetContext(A_shell,(void**)&qsys);CHKERRQ(ierr);
+   t = qsys->current_time;
+   MatMult(qsys->mat_A,X,Y);
+   for(i=0;i<qsys->num_time_dep;i++){
+     if(qsys->dm_equations==PETSC_FALSE||qsys->mcwf_solver==PETSC_TRUE){
+       //We multiply by -i, because we did NOT account for that in the kron routines
+       time_dep_scalar = -PETSC_i*qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t,qsys->time_dep[i].ctx);
+     } else {
+       time_dep_scalar = qsys->time_dep[i].a*qsys->time_dep[i].time_dep_func(t,qsys->time_dep[i].ctx);
+     }
+     //    PetscPrintf(PETSC_COMM_WORLD,"here i= %d %e %e\n",i,PetscAbsScalar(time_dep_scalar),PetscAbsScalar(qsys->min_time_dep));
+     //Only add the term if it is above a threshold
+     if(PetscAbsScalar(time_dep_scalar)>PetscAbsScalar(qsys->min_time_dep)){
+       MatMult(qsys->time_dep[i].mat_A,X,qsys->work_vec); // work = A * X
+       VecAXPY(Y,time_dep_scalar,qsys->work_vec); //dm = dm + a * work
+     }
+   }
+
+   PetscLogEventEnd(_RHS_time_dep_event,0,0,0,0);
+
+   PetscFunctionReturn(0);
+
+ }
 /*
  * set_init_excited_op sets the initial excitation level for a single operator
  * Inputs:

@@ -43,6 +43,7 @@ void QuaC_initialize(int argc,char **args){
   PetscLogEventRegister("_qc_event",quac_class_id,&_qc_event_function_event);
   PetscLogEventRegister("_qc_postevent",quac_class_id,&_qc_postevent_function_event);
   PetscLogEventRegister("_apply_gate",quac_class_id,&_apply_gate_event);
+  PetscLogEventRegister("_RHS_time_dep",quac_class_id,&_RHS_time_dep_event);
 
   PetscLogStagePush(pre_solve_stage);
 
@@ -79,6 +80,10 @@ void QuaC_clear(){
 
 void QuaC_finalize(){
   int i;
+  /**********************************************************
+   * FIXME: The code below legacy code which should be removed!!
+   ***********************************************************/
+
   /* Destroy Matrix */
   MatDestroy(&full_A);
   MatDestroy(&ham_A);
@@ -88,6 +93,9 @@ void QuaC_finalize(){
   for (i=0;i<_num_time_dep;i++){
     MatDestroy(&_time_dep_list[i].mat);
   }
+  /**********************************************************
+   * FIXME: The code below legacy code which should be removed!!
+   ***********************************************************/
   /* Finalize Petsc */
   PetscLogStagePop();
   SlepcFinalize();

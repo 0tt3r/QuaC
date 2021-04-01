@@ -66,6 +66,7 @@ PetscErrorCode _sys_QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_l
     */
 
   PetscLogEventBegin(_qc_postevent_function_event,0,0,0,0);
+
   if (nevents) {
     if (sys->circuit_list[sys->current_circuit].num_layers>0){
       //We have scheduled the circuit, so we will use layers instead of gates
@@ -93,7 +94,6 @@ PetscErrorCode _sys_QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_l
       num_gates    = sys->circuit_list[sys->current_circuit].num_gates;
       current_gate = sys->circuit_list[sys->current_circuit].current_gate;
       gate_time = sys->circuit_list[sys->current_circuit].gate_list[current_gate].time;
-
       /* Apply all gates at a given time incrementally  */
       while (current_gate<num_gates && sys->circuit_list[sys->current_circuit].gate_list[current_gate].time == gate_time){
         /* apply the current gate */
@@ -121,10 +121,18 @@ PetscErrorCode _sys_QC_PostEventFunction(TS ts,PetscInt nevents,PetscInt event_l
 
 //Disentangle the qsys from here
 void apply_circuit_to_qvec2(circuit circ,qvec state){
-  PetscInt i;
+  PetscInt i,i_ens;
 
   for(i=0;i<circ.num_gates;i++){
-    _apply_gate2(circ.gate_list[i],state);
+    if(state->ens_spawned==PETSC_TRUE){
+      for(i_ens=0;i_ens<state->n_ensemble;i_ens++){
+        //implicitly saying that timestepping and apply_circuit_to_qvec2 are incompatible
+        state->ens_i = i_ens; //will this conflict with something somewhere else?
+        _apply_gate2(circ.gate_list[i],state);
+      }
+    } else {
+      _apply_gate2(circ.gate_list[i],state);
+    }
    }
 
   return;
@@ -504,7 +512,6 @@ void apply_single_qb_measurement_error_state(qvec state,PetscReal p01,PetscReal 
   if(state->my_type!=DENSITY_MATRIX){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! Must be a DENSITY_MATRIX in apply_single_qb_measurement_error_state\n");
   }
-  printf("qubit_num: %d\n",qubit_num);
   _apply_single_qb_measurement_error_wf(state,p01,p10,qubit_num);
 
   /* qubit_num = qubit_num+state->ndims_hspace/2; */
@@ -560,9 +567,6 @@ void _apply_gate2(struct quantum_gate_struct this_gate,qvec state){
       this_gate.gate_func_wf(state,state->ens_datas[state->ens_i],this_gate.qubit_numbers,this_gate.gate_ctx,conj_gate);
     } else {
       this_gate.gate_func_wf(state,state->ens_datas[state->ens_i],this_gate.qubit_numbers,&this_gate,conj_gate);
-    }
-    for(i=0;i<state->n_ensemble;i++){
-      this_gate.gate_func_wf(state,state->ens_datas[i],this_gate.qubit_numbers,this_gate.gate_ctx,conj_gate);
     }
 
   } else {
@@ -1716,7 +1720,6 @@ void U3_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,Pe
   //This, and other gate routines, inspired by QuEST implementation
 
   qubit_num = qubit_nums[0]; //Only one qubit
-
   // set dimensions
   n_bef = 1;
   for(i=0;i<qubit_num;i++){
@@ -1742,7 +1745,6 @@ void U3_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,Pe
   }
 
   VecGetArray(state_data,&array);
-
   for (i=0; i<state->n/2; i++) {
     tmp_i   = i / n_bef; //Necessary for integer division
     i0     =  tmp_i*n_inc_me + i % n_bef;
@@ -1755,7 +1757,6 @@ void U3_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,Pe
     array[i1] = u10*tmp0 + u11*tmp1;
   }
   VecRestoreArray(state_data,&array);
-
   return;
 }
 
