@@ -1,4 +1,4 @@
-CFLAGS = -Wuninitialized -O3
+CFLAGS =  -g -Wuninitialized -O3
 
 
 ODIR=obj
@@ -28,15 +28,15 @@ TEST_DEPS  = $(patsubst %,$(TESTDIR)/%,$(_TEST_DEPS))
 
 $(ODIR)/%.o: $(SRCDIR)/%.c $(DEPS)
 	@mkdir -p $(@D)
-	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
+	${PETSC_COMPILE_SINGLE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
 
 $(ODIR)/%.o: $(EXAMPLESDIR)/%.c $(DEPS)
 	@mkdir -p $(@D)
-	${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
+	${PETSC_COMPILE_SINGLE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
 
 $(ODIR)/%.o: $(TESTDIR)/%.c $(DEPS) $(TEST_DEPS)
 	@mkdir -p $(@D)
-	@${PETSC_COMPILE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
+	@${PETSC_COMPILE_SINGLE} -c -o $@ $< $(CFLAGS) ${PETSC_KSP_LIB} ${PETSC_CC_INCLUDES} ${SLEPC_EPS_LIB}
 
 all: examples
 
