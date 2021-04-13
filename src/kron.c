@@ -206,6 +206,74 @@ void _get_val_j_ops(PetscScalar *val_out, PetscInt *j_out,PetscInt tot_levels,Pe
   return;
 }
 
+void _get_val_j_from_global_i_mat(PetscInt tot_levels,PetscInt i,operator this_op,PetscScalar **mat,PetscInt *num_js,PetscInt js[],PetscScalar vals[],tensor_control_enum tensor_control){
+  PetscInt n_after,j,i_sub,k1,k2,tmp_int,i1,i2,num_js_i1,num_js_i2,js_i1[2],js_i2[2],extra_after;
+  PetscScalar vals_i1[2],vals_i2[2];
+  PetscReal theta,lambda,phi;
+
+  if (tensor_control!=TENSOR_GG) {
+    if (tensor_control==TENSOR_GI) {
+      extra_after = tot_levels;
+    } else {
+      extra_after = 1;
+    }
+
+    n_after = tot_levels/(this_op->my_levels*this_op->n_before)*extra_after;
+    i_sub = i/n_after%this_op->my_levels; //Use integer arithmetic to get floor function
+    *num_js = 0;
+    for(j=0;j<this_op->my_levels;j++){
+      if(PetscAbsComplex(mat[i_sub][j])!=0){
+        tmp_int = i - i_sub * n_after;
+        k2      = tmp_int/(this_op->my_levels*n_after);//Use integer arithmetic to get floor function
+        k1      = tmp_int%(this_op->my_levels*n_after);
+        js[*num_js]   = (j) * n_after + k1 + k2*this_op->my_levels*n_after;
+        vals[*num_js] = mat[i_sub][j];
+        *num_js = *num_js + 1;
+      }
+    }
+  } else {
+    /*
+     * U* cross U
+     * To calculate this, we first take our i_global, convert
+     * it to i1 (for U*) and i2 (for U) within their own
+     * part of the Hilbert space. pWe then treat i1 and i2 as
+     * global i's for the matrices U* and U themselves, which
+     * gives us j's for those matrices. We then expand the j's
+     * to get the full space representation, using the normal
+     * tensor product.
+     */
+
+    /* Calculate i1, i2 */
+    i1 = i/tot_levels;
+    i2 = i%tot_levels;
+
+    /* Now, get js for U* (pi1) by calling this function */
+    _get_val_j_from_global_i_mat(tot_levels,i1,this_op,mat,&num_js_i1,js_i1,vals_i1,-1);
+
+    /* Now, get js for U (i2) by calling this function */
+    _get_val_j_from_global_i_mat(tot_levels,i2,this_op,mat,&num_js_i2,js_i2,vals_i2,-1);
+
+
+    /*
+     * Combine j's to get U* cross U
+     * Must do all possible permutations
+     */
+    *num_js = 0;
+    for(k1=0;k1<num_js_i1;k1++){
+      for(k2=0;k2<num_js_i2;k2++){
+        js[*num_js] = tot_levels * js_i1[k1] + js_i2[k2];
+        //Need to take complex conjugate to get true U*
+        vals[*num_js] = PetscConjComplex(vals_i1[k1])*vals_i2[k2];
+
+        *num_js = *num_js + 1;
+      }
+    }
+  }
+
+  return;
+}
+
+
 /*
  * _get_val_j_from_global_i returns the val and global j for a given global i.
  * If there is no nonzero value for a given i, it returns a negative j
@@ -311,10 +379,14 @@ void _get_val_j_from_global_i(PetscInt tot_levels,PetscInt i,operator this_op,Pe
         *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
         *val   = 1.0;
       } else {
-        if (nid==0){
-          printf("ERROR! Pauli Operators are only defined for qubits\n");
-          exit(0);
-        }
+        // We assume that this is embedded in a larger system as [q0,q1,other] - and other does not get touched
+        // by the pauli operators, so there is no nonzero value for given global i
+        *j = -1;
+        *val = 0.0;
+        /* if (nid==0){ */
+        /*   printf("ERROR! Pauli Operators are only defined for qubits\n"); */
+        /*   exit(0); */
+        /* } */
       }
     } else if (this_op->my_op_type==SIGMA_Y){
       /*
@@ -340,7 +412,12 @@ void _get_val_j_from_global_i(PetscInt tot_levels,PetscInt i,operator this_op,Pe
         *j = 0 * n_after + k1 + k2*this_op->my_levels*n_after;
         *val   = PETSC_i;
       } else {
-        if (nid==0){ 
+        // We assume that this is embedded in a larger system as [q0,q1,other] - and other does not get touched
+        // by the pauli operators, so there is no nonzero value for given global i
+        *j = -1;
+        *val = 0.0;
+
+        if (nid==0){
           printf("ERROR! Pauli Operators are only defined for qubits\n");
           exit(0);
         }
@@ -376,12 +453,31 @@ void _get_val_j_from_global_i(PetscInt tot_levels,PetscInt i,operator this_op,Pe
         *j = i;
         *val   = -1.0;
       } else {
+        // We assume that this is embedded in a larger system as [q0,q1,other] - and other does not get touched
+        // by the pauli operators, so there is no nonzero value for given global i
+        *j = -1;
+        *val = 0.0;
         if (nid==0){
           printf("ERROR! Pauli Operators are only defined for qubits\n");
           exit(0);
         }
       }
-    } else {
+    } else if (this_op->my_op_type==OTHER){
+      //OTHER means the non-qubit embedded states. This assumes an embedding of [qb0.qb1,other]
+      if (i_sub==0) {
+        //There is no nonzero value for given global i; return -1 as flag
+        *j = -1;
+        *val   = 0.0;
+      } else if (i_sub==1) {
+        //There is no nonzero value for given global i; return -1 as flag
+        *j = -1;
+        *val   = 0.0;
+      } else {
+        //all OTHER states will just return identity
+        *j = i;
+        *val = 1.0;
+      }
+    }  else {
 
       /* Vec operator */
       /*
@@ -624,7 +720,7 @@ void _add_ops_to_mat_ham(PetscScalar a,Mat A,PetscInt tot_levels,PetscInt num_op
 
     //Add i * G_1*T G_2*T ... G_n*T cross I
     if (this_j_gi!=-1){
-      add_to_mat = a*PETSC_i*PetscConjComplex(val_gi);
+      add_to_mat = PetscConjComplex(a)*PETSC_i*PetscConjComplex(val_gi); //complex conjugate of (a) fro imaginary terms
       MatSetValue(A,this_j_gi,i,add_to_mat,ADD_VALUES);
     }
   }

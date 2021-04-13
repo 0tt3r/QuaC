@@ -6,7 +6,7 @@ SRCDIR=src
 EXAMPLESDIR=examples
 EXAMPLES=$(basename $(notdir $(wildcard $(EXAMPLESDIR)/*.c)))
 TESTDIR=tests
-TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*.c)))
+TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*na*.c)))
 MPI_TESTS=$(addprefix mpi_,$(TESTS))
 CFLAGS += -isystem $(SRCDIR)
 
@@ -14,10 +14,10 @@ include ${SLEPC_DIR}/lib/slepc/conf/slepc_variables
 #include ${PETSC_DIR}/lib/petsc/conf/variables
 #include ${PETSC_DIR}/lib/petsc/conf/rules
 
-_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h qasm_parser.h error_correction.h qsystem.h qsystem_p.h qvec_utilities.h quantum_circuits.h
+_DEPS = quantum_gates.h dm_utilities.h operators.h solver.h operators_p.h quac.h quac_p.h kron_p.h qasm_parser.h error_correction.h qsystem.h qsystem_p.h qvec_utilities.h quantum_circuits.h neutral_atom.h
 DEPS  = $(patsubst %,$(SRCDIR)/%,$(_DEPS))
 
-_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o error_correction.o qasm_parser.o qsystem.o qvec_utilities.o quantum_circuits.o
+_OBJ  = quac.o operators.o solver.o kron.o dm_utilities.o quantum_gates.o error_correction.o qasm_parser.o qsystem.o qvec_utilities.o quantum_circuits.o neutral_atom.o
  OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 _TEST_OBJ  = unity.o t_helpers.o

@@ -2,6 +2,7 @@
 #define OPERATORS_H_
 
 #include "operators_p.h"
+
 struct operator;
 
 typedef struct operator{
@@ -18,11 +19,15 @@ typedef struct operator{
   struct operator *sig_y;
   struct operator *sig_z;
   struct operator *eye;
+  struct operator *other;
   /* For vec operators only */
   PetscInt     position;
   /* Stores a pointer to the top of the list. Used in vec[0] only*/
   struct operator **vec_op_list;
 
+  //Eigenvalue/vector information, used for projective measurements and only defined in the local space
+  PetscScalar evals[2]; //2 is hardcoded because these are pauli matrices
+  PetscScalar evecs[2][2];
 } *operator;
 
 typedef operator *vec_op; /* Treat vec_op as an array of operators  */
@@ -54,6 +59,7 @@ void add_lin_mult2(PetscScalar,operator,operator);
 void print_dense_ham();
 void set_initial_pop(operator,double);
 void combine_ops_to_mat(Mat*,PetscInt,int,...);
+
 
 extern int nid; /* a ranks id */
 extern int np; /* number of processors */

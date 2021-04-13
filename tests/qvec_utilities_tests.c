@@ -398,44 +398,44 @@ void test_ptrace_wf_22_rand(void)
 
   assemble_qvec(wf);
 
-  //Partial trace the first qubit away
+  //Partial trace the qubit 0 away - keep qubit 1
   ptrace_over_list_qvec(wf,1,op_list,&ptrace0_dm);
 
   get_dm_element_qvec(ptrace0_dm,0,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.48810445290399873,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace0_dm,0,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.008965286971174186,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.1605679145006028,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace0_dm,1,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.008965286971174186,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.1605679145006028,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace0_dm,1,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.5118955466049314,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  //Partial trace the first qubit away
-  op_list[0] = 1;
-  ptrace_over_list_qvec(wf,1,op_list,&ptrace1_dm);
-
-  get_dm_element_qvec(ptrace1_dm,0,0,&val);
   TEST_ASSERT_EQUAL_FLOAT(0.41411156544486266,PetscRealPart(val));
   TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
 
-  get_dm_element_qvec(ptrace1_dm,0,1,&val);
+  get_dm_element_qvec(ptrace0_dm,0,1,&val);
   TEST_ASSERT_EQUAL_FLOAT(-0.07457172896962921,PetscRealPart(val));
   TEST_ASSERT_EQUAL_FLOAT(-0.11430734736991019,PetscImaginaryPart(val));
 
-  get_dm_element_qvec(ptrace1_dm,1,0,&val);
+  get_dm_element_qvec(ptrace0_dm,1,0,&val);
   TEST_ASSERT_EQUAL_FLOAT(-0.07457172896962921,PetscRealPart(val));
   TEST_ASSERT_EQUAL_FLOAT(0.11430734736991019,PetscImaginaryPart(val));
 
-  get_dm_element_qvec(ptrace1_dm,1,1,&val);
+  get_dm_element_qvec(ptrace0_dm,1,1,&val);
   TEST_ASSERT_EQUAL_FLOAT(0.5858884340640674,PetscRealPart(val));
   TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
+
+  //Partial trace qubit 1 away - keep qubit 0
+  op_list[0] = 1;
+  ptrace_over_list_qvec(wf,1,op_list,&ptrace1_dm);
+  get_dm_element_qvec(ptrace1_dm,0,0,&val);
+  TEST_ASSERT_EQUAL_FLOAT(0.48810445290399873,PetscRealPart(val));
+  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
+
+  get_dm_element_qvec(ptrace1_dm,0,1,&val);
+  TEST_ASSERT_EQUAL_FLOAT(-0.008965286971174186,PetscRealPart(val));
+  TEST_ASSERT_EQUAL_FLOAT(0.1605679145006028,PetscImaginaryPart(val));
+
+  get_dm_element_qvec(ptrace1_dm,1,0,&val);
+  TEST_ASSERT_EQUAL_FLOAT(-0.008965286971174186,PetscRealPart(val));
+  TEST_ASSERT_EQUAL_FLOAT(-0.1605679145006028,PetscImaginaryPart(val));
+
+  get_dm_element_qvec(ptrace1_dm,1,1,&val);
+  TEST_ASSERT_EQUAL_FLOAT(0.5118955466049314,PetscRealPart(val));
+  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
+
 
   destroy_qvec(&wf);
   destroy_qvec(&ptrace0_dm);
@@ -445,11 +445,13 @@ void test_ptrace_wf_22_rand(void)
 
 /*
  * Test ptrace
+ * This tests the ordering [qt0,qb1,qb2]
+ * where qt is a qutrit, qb is a qubit
  */
-void test_ptrace_wf_223_rand(void)
+void test_ptrace_wf_322_rand(void)
 {
   qvec wf,ptrace0_dm,ptrace1_dm,ptrace2_dm;
-  PetscInt i,j,ndims_wf=3,dims_wf[3] = {2,2,3},op_list[2]={0,2};
+  PetscInt i,j,ndims_wf=3,dims_wf[3] = {3,2,2},op_list[2]={0,2};
   PetscScalar val=pow(2,-0.5);
   PetscBool flag;
 
@@ -467,9 +469,9 @@ void test_ptrace_wf_223_rand(void)
 
   assemble_qvec(wf);
 
-  //Partial trace the first qubit and the qudit away
+  //Partial trace qb2 and qt0 away, keep qb1
   ptrace_over_list_qvec(wf,2,op_list,&ptrace0_dm);
-
+  print_qvec(ptrace0_dm);
   get_dm_element_qvec(ptrace0_dm,0,0,&val);
   TEST_ASSERT_EQUAL_FLOAT(0.48810445290399873,PetscRealPart(val));
   TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
@@ -486,8 +488,8 @@ void test_ptrace_wf_223_rand(void)
   TEST_ASSERT_EQUAL_FLOAT(0.5118955466049314,PetscRealPart(val));
   TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
 
-  //Partial trace the second qubit and the qudit away
-  op_list[0] = 1;
+  //Partial trace the qt0 and qb1 away, keep qb2
+  op_list[1] = 1;
   ptrace_over_list_qvec(wf,2,op_list,&ptrace1_dm);
 
   get_dm_element_qvec(ptrace1_dm,0,0,&val);
@@ -506,9 +508,9 @@ void test_ptrace_wf_223_rand(void)
   TEST_ASSERT_EQUAL_FLOAT(0.5858884340640674,PetscRealPart(val));
   TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
 
-  //Partial trace the qubits away
-  op_list[0] = 0;
-  op_list[1] = 1;
+  //Partial trace the qb1 and qb2 away, keeping qt0
+  op_list[0] = 1;
+  op_list[1] = 2;
   ptrace_over_list_qvec(wf,2,op_list,&ptrace2_dm);
 
   for(i=0;i<3;i++){
@@ -587,20 +589,22 @@ void test_ptrace_dm_22(void)
 
 /*
  * Test ptrace
+ * This tests the ordering [qt0,qb1,qb2]
+ * where qt is a qutrit, qb is qubit
  */
-void test_ptrace_dm_223(void)
+void test_ptrace_dm_322(void)
 {
   qvec dm,ptrace0_dm,ptrace1_dm,ptrace2_dm;
-  PetscInt i,j,ndims_dm=6,dims_dm[6] = {2,2,3,2,2,3},op_list[2]={0,2};
+  PetscInt i,j,ndims_dm=6,dims_dm[6] = {3,2,2,3,2,2},op_list[2]={0,2};
   PetscScalar val=0.5;
   PetscBool flag;
   create_arb_qvec_dims(&dm,ndims_dm,dims_dm,DENSITY_MATRIX);
 
   //Create a Bell state
-  // 0.5 0 0 0.5
-  // 0 0 0 0
-  // 0 0 0 0  \cross I_3
-  // 0.5 0 0 0.5
+  //           0.5 0 0 0.5
+  //           0 0 0 0
+  //I_3 \cross 0 0 0 0
+  //           0.5 0 0 0.5
 
   add_to_qvec(dm,val,0,0);
   add_to_qvec(dm,val,0,3);
@@ -609,7 +613,7 @@ void test_ptrace_dm_223(void)
 
   assemble_qvec(dm);
 
-  //Partial trace the first qubit and qutrit away
+  //Partial trace the qutrit (0) and qubit (2) away - keeping qubit 1
   ptrace_over_list_qvec(dm,2,op_list,&ptrace0_dm);
 
   get_dm_element_qvec(ptrace0_dm,0,0,&val);
@@ -624,17 +628,17 @@ void test_ptrace_dm_223(void)
   get_dm_element_qvec(ptrace0_dm,1,1,&val);
   TEST_ASSERT_EQUAL_FLOAT(0.5,PetscRealPart(val));
 
-  //Partial trace the second qubit and qutrit away
-  op_list[0] = 1;
+  //Partial trace the qubit 1 and the qutrit (0) away - keeping qubit 2
+  op_list[1] = 1;
   ptrace_over_list_qvec(dm,2,op_list,&ptrace1_dm);
 
   check_qvec_equal(ptrace0_dm,ptrace1_dm,&flag);
 
   TEST_ASSERT_EQUAL_INT(flag,PETSC_TRUE);
 
-  //Partial trace the qubits away
-  op_list[0] = 0;
-  op_list[1] = 1;
+  //Partial trace the qubits away - keeping qutrit (0)
+  op_list[0] = 1;
+  op_list[1] = 2;
   ptrace_over_list_qvec(dm,2,op_list,&ptrace2_dm);
 
   for(i=0;i<3;i++){
@@ -709,11 +713,14 @@ void test_ptrace_dm_232(void)
 
 /*
  * Test ptrace
+ * This tests the ordering [qb0,qb1,qt2]
+ * where qt is a qutrit, qb is qubit
+
  */
-void test_ptrace_dm_322(void)
+void test_ptrace_dm_223(void)
 {
-  qvec dm,ptrace0_dm,ptrace1_dm;
-  PetscInt ndims_dm=6,dims_dm[6] = {3,2,2,3,2,2},op_list[2]={0,1};
+  qvec dm,ptrace0_dm,ptrace1_dm,ptrace2_dm;
+  PetscInt i,j,ndims_dm=6,dims_dm[6] = {2,2,3,2,2,3},op_list[2]={0,2};
   PetscScalar val=0.5;
   PetscBool flag;
   create_arb_qvec_dims(&dm,ndims_dm,dims_dm,DENSITY_MATRIX);
@@ -727,7 +734,7 @@ void test_ptrace_dm_322(void)
 
   assemble_qvec(dm);
 
-  //Partial trace the first qubit away
+  //Partial trace qb0 and qt2 away, leaving qb1
   ptrace_over_list_qvec(dm,2,op_list,&ptrace0_dm);
 
   get_dm_element_qvec(ptrace0_dm,0,0,&val);
@@ -742,192 +749,40 @@ void test_ptrace_dm_322(void)
   get_dm_element_qvec(ptrace0_dm,1,1,&val);
   TEST_ASSERT_EQUAL_FLOAT(0.5,PetscRealPart(val));
 
-  //Partial trace the second qubit away
-  op_list[1] = 2;
+  //Partial trace qb1 and qt2 away, leaving qb0
+  op_list[0] = 1;
   ptrace_over_list_qvec(dm,2,op_list,&ptrace1_dm);
 
   check_qvec_equal(ptrace0_dm,ptrace1_dm,&flag);
 
   TEST_ASSERT_EQUAL_INT(flag,PETSC_TRUE);
 
-  destroy_qvec(&dm);
-  destroy_qvec(&ptrace0_dm);
-  destroy_qvec(&ptrace1_dm);
-  return;
-}
 
-/*
- * Test ptrace
- */
-void test_ptrace_dm_read(void)
-{
-  qvec dm,ptrace0_dm,ptrace1_dm,ptrace2_dm,ptrace3_dm;
-  PetscInt ndims_dm=6,dims_dm[6] = {3,2,2,3,2,2},op_list[2]={0,1};
-  char fname[255];
-  PetscScalar val;
-
-  strcpy(fname,"tests/pristine_matrices/rand_dm_12.dat");
-  read_qvec_dm_binary(&dm,fname);
-  change_qvec_dims(dm,ndims_dm,dims_dm);
-  //Partial trace the first qubit away
-  ptrace_over_list_qvec(dm,2,op_list,&ptrace0_dm);
-
-  get_dm_element_qvec(ptrace0_dm,0,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.5420756864450957,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace0_dm,0,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.025030113980266385,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.005789702976289845,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace0_dm,1,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.025030113980266385,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.005789702976289845,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace0_dm,1,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.45792431355490437,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-
-  op_list[0] = 2;
-  op_list[1] = 0;
-  ptrace_over_list_qvec(dm,2,op_list,&ptrace1_dm);
-
-  get_dm_element_qvec(ptrace1_dm,0,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.581836376193823,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace1_dm,0,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.04368941460960388,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.04746952991693304,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace1_dm,1,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.04368941460960388,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.04746952991693304,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace1_dm,1,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.4181636238061771,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-
-  op_list[0] = 2;
+  //Partial trace the qubits away - keeping qutrit (2)
+  op_list[0] = 0;
   op_list[1] = 1;
   ptrace_over_list_qvec(dm,2,op_list,&ptrace2_dm);
 
-  get_dm_element_qvec(ptrace2_dm,0,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.3490918865996646,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace2_dm,0,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.025052317597371015,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.02727048147176586,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace2_dm,1,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.025052317597371015,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.02727048147176586,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace2_dm,0,2,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.04890863129313094,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.03811639912017202,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace2_dm,1,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.3621623047829811,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace2_dm,2,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.04890863129313094,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.03811639912017202,PetscImaginaryPart(val));
+  for(i=0;i<3;i++){
+    for(j=0;j<3;j++){
+      get_dm_element_qvec(ptrace2_dm,i,j,&val);
+      if(i==0&&j==0){
+        TEST_ASSERT_EQUAL_FLOAT(1.0,PetscRealPart(val));
+        TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
+      } else {
+        TEST_ASSERT_EQUAL_FLOAT(0.0,PetscRealPart(val));
+        TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
+      }
+    }
+  }
 
 
-  get_dm_element_qvec(ptrace2_dm,2,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.009260436688818072,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.06523688619193503,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace2_dm,1,2,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.009260436688818072,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.06523688619193503,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace2_dm,2,2,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.2887458086173543,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-
-  op_list[0] = 0;
-  ptrace_over_list_qvec(dm,1,op_list,&ptrace3_dm);
-
-  get_dm_element_qvec(ptrace3_dm,0,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.2860187090747016,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,0,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.02993737380002487,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.05023572358578976,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,1,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.02993737380002487,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.05023572358578976,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,0,2,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.01543240763366838,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.02765643728599932,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,2,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.01543240763366838,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.02765643728599932,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,3,0,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.0005124015753832749,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.006209371092574906,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,0,3,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.0005124015753832749,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.006209371092574906,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,1,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.2560569773703941,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,1,2,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.04786633264483934,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.01215464590919162,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,2,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(-0.04786633264483934,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.01215464590919162,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,1,3,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.040462521613934765,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.03344614026228916,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,3,1,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.040462521613934765,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.03344614026228916,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,2,2,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.29581766711912133,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,3,2,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.01375204080957901,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(-0.002766193668856713,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,2,3,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.01375204080957901,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.002766193668856713,PetscImaginaryPart(val));
-
-  get_dm_element_qvec(ptrace3_dm,3,3,&val);
-  TEST_ASSERT_EQUAL_FLOAT(0.16210664643578304,PetscRealPart(val));
-  TEST_ASSERT_EQUAL_FLOAT(0.0,PetscImaginaryPart(val));
-
-
+  destroy_qvec(&dm);
   destroy_qvec(&ptrace0_dm);
   destroy_qvec(&ptrace1_dm);
   destroy_qvec(&ptrace2_dm);
-  destroy_qvec(&ptrace3_dm);
-  destroy_qvec(&dm);
   return;
 }
-
 
 
 void test_read_dm_binary(void){
@@ -1457,12 +1312,10 @@ int main(int argc, char** argv)
 
   RUN_TEST(test_ptrace_wf_22_bs);
   RUN_TEST(test_ptrace_wf_22_rand);
-  RUN_TEST(test_ptrace_wf_223_rand);
+  RUN_TEST(test_ptrace_wf_322_rand);
 
   RUN_TEST(test_read_dm_binary);
   RUN_TEST(test_read_wf_binary);
-
-  RUN_TEST(test_ptrace_dm_read);
 
   RUN_TEST(test_get_bitstring_probs_wf);
   RUN_TEST(test_get_bitstring_probs_wf_ens);

@@ -116,6 +116,19 @@ void create_op(int number_of_levels,operator *new_op) {
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
 
+  /* Set eval / evec information */
+  temp->evals[0] = -1;
+  temp->evals[1]  = 1;
+
+  //evec 0: [-1/sqrt(2),1/sqrt(2)]
+  temp->evecs[0][0] = -1/sqrt(2);
+  temp->evecs[0][1] = 1/sqrt(2);
+
+  //evec 1: [1/sqrt(2),1/sqrt(2)]
+  temp->evecs[1][0] = 1/sqrt(2);
+  temp->evecs[1][1] = 1/sqrt(2);
+
+
   (*new_op)->sig_x      = temp;
 
   /* Make SIGMA_Z operator (only valid for qubits, made for every system) */
@@ -127,6 +140,18 @@ void create_op(int number_of_levels,operator *new_op) {
   temp->dag         = temp; //The pauli operators are hermitian
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
+
+  /* Set eval / evec information */
+  temp->evals[0] = -1;
+  temp->evals[1]  = 1;
+
+  //evec 0: [0,-1]
+  temp->evecs[0][0] = 0;
+  temp->evecs[0][1] = -1;
+
+  //evec 1: [-1,0]
+  temp->evecs[1][0] = -1;
+  temp->evecs[1][1] = 0;
 
   (*new_op)->sig_z      = temp;
 
@@ -140,7 +165,30 @@ void create_op(int number_of_levels,operator *new_op) {
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
 
+  /* Set eval / evec information */
+  temp->evals[0] = -1;
+  temp->evals[1]  = 1;
+
+  //evec 0: [-1/sqrt(2),1/sqrt(2) i]
+  temp->evecs[0][0] = -1/sqrt(2);
+  temp->evecs[0][1] = 1/sqrt(2)*PETSC_i;
+
+  //evec 1: [-1/sqrt(2), -1/sqrt(2) i]
+  temp->evecs[1][0] = -1/sqrt(2);
+  temp->evecs[1][1] = -1/sqrt(2)*PETSC_i;
+
   (*new_op)->sig_y      = temp;
+
+
+  /* Make OTHER operator (only valid for embedded qubits, made for every system) */
+  temp              = malloc(sizeof(struct operator));
+  temp->initial_pop = (double) 0.0;
+  temp->n_before    = total_levels;
+  temp->my_levels   = number_of_levels;
+  temp->my_op_type  = OTHER;
+  temp->dag         = temp; //The OTHER operator is hermitian
+  /* Since this is a basic operator, not a vec, set positions to -1 */
+  temp->position    = -1;
 
   /* Increase total_levels */
   total_levels = total_levels*number_of_levels;
@@ -152,8 +200,7 @@ void create_op(int number_of_levels,operator *new_op) {
 }
 
 /*
- * create_op creates a basic set of operators, namely the creation, annihilation, and
- * number operator.
+ * create_vec creates a basic vec op
  * Inputs:
  *        int number_of_levels: number of levels for this basic set
  * Outputs:
@@ -164,7 +211,6 @@ void create_vec(int number_of_levels,vec_op *new_vec) {
   operator temp = NULL;
   int i;
   _check_initialized_op();
-
   (*new_vec) = malloc(number_of_levels*(sizeof(struct operator*)));
   for (i=0;i<number_of_levels;i++){
     temp              = malloc(sizeof(struct operator));
@@ -901,7 +947,7 @@ void combine_ops_to_mat(Mat *matrix_out,PetscInt tot_levels,int number_of_ops,..
 
   /*
    * Calculate ABC using the following observation:
-   *     Each operator (ABCD...) are very sparse - having less than
+   *     Each operator (ABCD...) is very sparse - having less than
    *          1 value per row. This allows us to efficiently do the
    *          multiplication of ABCD... by just calculating the value
    *          for one of the indices (i); if there is no matching j,
@@ -983,6 +1029,9 @@ void _check_initialized_op(){
   }
 
 }
+
+
+
 
 /*
  * _check_op_type2 checks to make sure the two ops can be

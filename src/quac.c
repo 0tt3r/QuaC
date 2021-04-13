@@ -3,6 +3,7 @@
 #include "quac.h"
 #include "operators_p.h"
 #include "operators.h"
+
 #include <petsc.h>
 #include <slepc.h>
 
@@ -17,7 +18,7 @@ int np;
  *       int argc, char **args - command line input, for PETSc
  */
 void QuaC_initialize(int argc,char **args){
-
+  PetscInt seed=1;
   /* Initialize Petsc */
   //PetscInitialize(&argc,&args,(char*)0,NULL);
   /* Initialize SLEPc */
@@ -45,8 +46,10 @@ void QuaC_initialize(int argc,char **args){
   PetscLogEventRegister("_apply_gate",quac_class_id,&_apply_gate_event);
   PetscLogEventRegister("_RHS_time_dep",quac_class_id,&_RHS_time_dep_event);
 
-  PetscLogStagePush(pre_solve_stage);
+  seed = make_sprng_seed();
 
+  PetscLogStagePush(pre_solve_stage);
+  init_sprng(seed,SPRNG_DEFAULT);
 }
 
 /*

@@ -18,7 +18,7 @@ typedef enum {
   CXZ  = -2,
   CNOT = -1,
   HADAMARD = 1,
-  SIGMAX = 2,
+  SIGMAX = 2, //SIGMAX (gate) and SIGMA_X (operator) are confusingly named!
   SIGMAY = 3,
   SIGMAZ = 4,
   EYE    = 5,

@@ -79,7 +79,7 @@ typedef struct qsystem{
 
   qvec solution_qvec;
   Vec work_vec; //May be redundant with mcwf_work_vec
-  
+
   //Distribution info
   PetscInt np,nid;
   PetscInt Istart,Iend,my_num;

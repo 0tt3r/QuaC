@@ -101,6 +101,50 @@ void _create_single_op(PetscInt total_levels,PetscInt number_of_levels,
   temp->my_op_type  = my_op_type;
   /* Since this is a basic operator, not a vec, set positions to -1 */
   temp->position    = -1;
+
+  if(my_op_type==SIGMA_Z){
+    /* Set eval / evec information */
+    temp->evals[0] = 1;
+    temp->evals[1]  = -1;
+
+    //evec 0: [-1,0]
+    temp->evecs[0][0] = -1;
+    temp->evecs[0][1] = 0;
+
+    //evec 1: [0,-1]
+    temp->evecs[1][0] = 0;
+    temp->evecs[1][1] = -1;
+
+
+  } else if(my_op_type==SIGMA_Y){
+    /* Set eval / evec information */
+    temp->evals[0] = -1;
+    temp->evals[1]  = 1;
+
+    //evec 0: [-1/sqrt(2),1/sqrt(2) i]
+    temp->evecs[0][0] = -1/sqrt(2);
+    temp->evecs[0][1] = 1/sqrt(2)*PETSC_i;
+
+    //evec 1: [-1/sqrt(2), -1/sqrt(2) i]
+    temp->evecs[1][0] = -1/sqrt(2);
+    temp->evecs[1][1] = -1/sqrt(2)*PETSC_i;
+
+  } else if(my_op_type==SIGMA_X){
+    /* Set eval / evec information */
+    temp->evals[0] = -1;
+    temp->evals[1]  = 1;
+
+    //evec 0: [-1/sqrt(2),1/sqrt(2)]
+    temp->evecs[0][0] = -1/sqrt(2);
+    temp->evecs[0][1] = 1/sqrt(2);
+
+    //evec 1: [1/sqrt(2),1/sqrt(2)]
+    temp->evecs[1][0] = 1/sqrt(2);
+    temp->evecs[1][1] = 1/sqrt(2);
+
+  }
+
+
   *op           = temp;
 
   return;
@@ -152,6 +196,11 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
   (*new_op)->sig_y      = temp;
   temp->dag         = temp; //pauli operators are hermitian
 
+  /* Make OTHER operator (only valid for embedded qubits, made for every system) */
+  _create_single_op(sys->total_levels,number_of_levels,OTHER,&temp);
+  (*new_op)->other      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
+
   /* Increase total_levels */
   sys->total_levels = sys->total_levels*number_of_levels;
 
@@ -184,6 +233,7 @@ void create_op_sys(qsystem sys,PetscInt number_of_levels,operator *new_op){
 void _create_single_vec(PetscInt total_levels,PetscInt number_of_levels,
                         PetscInt position,operator *op){
   operator temp = NULL;
+
   temp              = malloc(sizeof(struct operator));
   temp->initial_pop = (double) 0.0;
   temp->initial_exc = 0;
@@ -193,6 +243,32 @@ void _create_single_vec(PetscInt total_levels,PetscInt number_of_levels,
   /* This is a VEC operator; set its position */
   temp->position    = position;
   *op           = temp;
+
+  /* Make identity operator */
+  _create_single_op(total_levels,number_of_levels,IDENTITY,&temp);
+  (*op)->eye    = temp;
+  temp->dag         = temp; //IDENTITY operator is hermitian
+
+  /* Make SIGMA_X operator (only valid for qubits, made for every system) */
+  _create_single_op(total_levels,number_of_levels,SIGMA_X,&temp);
+  (*op)->sig_x      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
+
+  /* Make SIGMA_Z operator (only valid for qubits, made for every system) */
+  _create_single_op(total_levels,number_of_levels,SIGMA_Z,&temp);
+  (*op)->sig_z      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
+
+  /* Make SIGMA_Y operator (only valid for qubits, made for every system) */
+  _create_single_op(total_levels,number_of_levels,SIGMA_Y,&temp);
+  (*op)->sig_y      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
+
+  /* Make OTHER operator (only valid for embedded qubits, made for every system) */
+  _create_single_op(total_levels,number_of_levels,OTHER,&temp);
+  (*op)->other      = temp;
+  temp->dag         = temp; //pauli operators are hermitian
+
 
   return;
 }
@@ -242,12 +318,11 @@ void create_vec_op_sys(qsystem qsys,PetscInt number_of_levels,vec_op *new_vec){
 
   /* Save position in hilbert space */
   (*new_vec)[0]->pos_in_sys_hspace = qsys->num_subsystems;
-
   /*
    * We store just the first VEC in the subsystem list, since it has
    * enough information to define all others
    */
-  qsys->subsystem_list[qsys->num_subsystems] = (*new_vec);
+  qsys->subsystem_list[qsys->num_subsystems] = (*new_vec)[0];
   qsys->num_subsystems++;
 
   return;
@@ -678,10 +753,14 @@ void _preallocate_qsys_matrix(qsystem qsys){
     //the same size
     // FIXME: Perhaps it should be the matrix size, if that is really all that it is used for?
     _count_ops_in_mat(d_nnz_td,o_nnz_td,qsys->total_levels,qsys->Istart,qsys->Iend,
-                      qsys->mat_A,qsys->time_dep[i].my_term_type,
+                      qsys->time_dep[i].mat_A,qsys->time_dep[i].my_term_type,
                       qsys->dm_equations,qsys->mcwf_solver,
                       qsys->time_dep[i].num_ops,qsys->time_dep[i].ops);
 
+    for(j=0;j<qsys->my_num;j++){
+      o_nnz_td[j] += 40;
+      d_nnz_td[j] += 40; //always need 1 to ensure the diagonal has some elements
+    }
     //Set the preallocation for time_dep[i] to only include time_dep[i]'s nonzers'
     MatMPIAIJSetPreallocation(qsys->time_dep[i].mat_A,-1,d_nnz_td,-1,o_nnz_td);
 
@@ -697,10 +776,12 @@ void _preallocate_qsys_matrix(qsystem qsys){
 
   //-1s are ignored
   MatMPIAIJSetPreallocation(qsys->mat_A,-1,qsys->d_nnz,-1,qsys->o_nnz);
-  free(o_nnz_td);
-  free(d_nnz_td);
+  /* free(o_nnz_td); */
+  /* free(d_nnz_td); */
+
   return;
 }
+
 
 void _preallocate_op_matrix(Mat *mat_A,PetscInt nid,PetscInt np,PetscInt dim,PetscInt tot_levels,mat_term_type my_mat_type,
                          PetscBool dm_equations,PetscBool mcwf_solver,PetscInt num_ops,operator *ops){
@@ -857,16 +938,16 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
   if (qsys->num_time_dep>0){
     VecDuplicate(x->data,&(qsys->work_vec));
     //Duplicate matrix for time dependent runs
-    MatDuplicate(qsys->mat_A,MAT_COPY_VALUES,&AA);
-    MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY);
-    TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_sys,qsys);
+    /* MatDuplicate(qsys->mat_A,MAT_COPY_VALUES,&AA); */
+    /* MatAssemblyBegin(AA,MAT_FINAL_ASSEMBLY); */
+    /* MatAssemblyEnd(AA,MAT_FINAL_ASSEMBLY); */
+    /* TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_sys,qsys); */
 
-    /* ierr = MatGetLocalSize(qsys->mat_A,&m_local,&n_local); */
-    /* ierr = MatCreateShell(PETSC_COMM_WORLD,m_local,n_local,PETSC_DETERMINE,PETSC_DETERMINE,qsys,&AA);CHKERRQ(ierr); */
-    /* ierr = MatShellSetOperation(AA,MATOP_MULT,(void (*)(void))_time_dep_mat_mult);CHKERRQ(ierr); */
+    ierr = MatGetLocalSize(qsys->mat_A,&m_local,&n_local);
+    ierr = MatCreateShell(PETSC_COMM_WORLD,m_local,n_local,PETSC_DETERMINE,PETSC_DETERMINE,qsys,&AA);CHKERRQ(ierr);
+    ierr = MatShellSetOperation(AA,MATOP_MULT,(void (*)(void))_time_dep_mat_mult);CHKERRQ(ierr);
 
-    /* TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_mf_sys,qsys); */
+    TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_mf_sys,qsys);
 
   } else {
     //Time indep

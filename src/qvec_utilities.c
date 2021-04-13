@@ -6,11 +6,6 @@
 #include <stdio.h>
 #include <petscblaslapack.h>
 #include <string.h>
-/*
- * FIXME:
- *    Add print_qvec_sparse
- *    Add print_qvec_file
- */
 
 void check_qvec_consistent(qvec state1,qvec state2){
   PetscInt error=0;
@@ -173,12 +168,32 @@ void read_qvec_dm_binary(qvec *newvec,const char filename[]){
 //A*state - be careful with use, might not be intuitive behavior for DM
 void qvec_mat_mult(Mat circ_mat,qvec state){
   Vec tmp;
-  VecDuplicate(state->data,&tmp);
-  MatMult(circ_mat,state->data,tmp);
-  VecCopy(tmp,state->data);
-  VecDestroy(&tmp);
+  PetscInt i;
+  if(state->my_type!=WF_ENSEMBLE){
+    VecDuplicate(state->data,&tmp);
+    MatMult(circ_mat,state->data,tmp);
+    VecCopy(tmp,state->data);
+    VecDestroy(&tmp);
+  } else {
+    if(state->ens_spawned==PETSC_FALSE){
+      VecDuplicate(state->data,&tmp);
+      MatMult(circ_mat,state->data,tmp);
+      VecCopy(tmp,state->data);
+      VecDestroy(&tmp);
+    } else {
+      for(i=0;i<state->n_ensemble;i++){
+        VecDuplicate(state->ens_datas[i],&tmp);
+        MatMult(circ_mat,state->data,tmp);
+        VecCopy(tmp,state->ens_datas[i]);
+        VecDestroy(&tmp); //shouldn't create / destroy inside loop
+      }
+    }
+  }
+  VecAssemblyBegin(state->data);
+  VecAssemblyEnd(state->data);
   return;
 }
+
 
 /*
  * Print the qvec densely
@@ -192,6 +207,8 @@ void print_qvec_file(qvec state,char filename[]){
   } else {
     print_wf_qvec_file(state,filename);
   }
+
+  return;
 }
 
 void print_dm_qvec_file(qvec dm,char filename[]){
@@ -1322,6 +1339,7 @@ void _get_expectation_value_wf(qvec psi,PetscScalar *trace_val,PetscInt num_ops,
       VecSetValue(op_psi,i,op_val,ADD_VALUES);
     }
   }
+
   // Now, calculate the inner product between psi^H * OP_psi
   VecAssemblyBegin(op_psi);
   VecAssemblyEnd(op_psi);
@@ -1412,8 +1430,8 @@ void get_qvec_local_idxs(qvec state,PetscInt global_idx,PetscInt *local_idxs){
   this_global_idx = global_idx;
 
   for(i=0;i<state->ndims_hspace;i++){
-    local_idxs[i] = this_global_idx % state->hspace_dims[i];
-    this_global_idx = this_global_idx/state->hspace_dims[i];
+    local_idxs[state->ndims_hspace-1-i] = this_global_idx % state->hspace_dims[state->ndims_hspace - 1 - i];
+    this_global_idx = this_global_idx/state->hspace_dims[state->ndims_hspace - 1 - i];
   }
 
   return;
@@ -1532,10 +1550,47 @@ void _ptrace_over_list_qvec_wf(qvec full_wf,PetscInt n_ops,PetscInt *op_loc_list
   return;
 }
 
+void apply_op_to_qvec_mat(qvec q,PetscScalar **mat,operator op){ //Careful with this 3!!
+  PetscScalar vals[10];//Be carefule with this 10 here! Might not be enough
+  PetscInt i,num_js,these_js[10],Istart,Iend,dim;
+  Mat A;
+
+
+  if(q->my_type==DENSITY_MATRIX){
+    dim = q->total_levels*q->total_levels;
+  } else {
+    dim = q->total_levels;
+  }
+  MatCreate(PETSC_COMM_WORLD,&A);
+  MatSetType(A,MATMPIAIJ);
+  MatSetSizes(A,PETSC_DECIDE,PETSC_DECIDE,dim,dim); //This might need to inherit structure from system Lindbladian?
+  MatSetFromOptions(A);
+  MatMPIAIJSetPreallocation(A,10,NULL,10,NULL); //This matrix is incredibly sparse!
+  MatGetOwnershipRange(A,&Istart,&Iend);
+
+  for (i=Istart;i<Iend;i++){
+    if(q->my_type==DENSITY_MATRIX){
+      _get_val_j_from_global_i_mat(q->total_levels,i,op,mat,&num_js,&these_js,&vals,TENSOR_GG);
+    } else if(q->my_type==WAVEFUNCTION||q->my_type==WF_ENSEMBLE){
+      _get_val_j_from_global_i_mat(q->total_levels,i,op,mat,&num_js,&these_js,&vals,TENSOR_IG);
+    } else {
+      PetscPrintf(PETSC_COMM_WORLD,"ERROR! qvec type not understood in apply_op_to_qvec_mat!\n");
+      exit(0);
+    }
+    MatSetValues(A,1,&i,num_js,these_js,vals,ADD_VALUES);
+  }
+  MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);
+  MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);
+
+  qvec_mat_mult(A,q);
+
+  MatDestroy(&A);
+  return;
+}
+
 void ptrace_over_list_qvec(qvec full_state,PetscInt n_ops,PetscInt *op_loc_list,qvec *new_dm){
   PetscInt i,j,ndims_new,*hspace_dims_new,i_h,found=0;
   PetscInt n_ops_keep,*ops_keep_list;
-
 
   if(n_ops>full_state->n_ops){
     PetscPrintf(PETSC_COMM_WORLD,"ERROR! Trying to ptrace more ops than are in the state!\n");
@@ -1551,7 +1606,7 @@ void ptrace_over_list_qvec(qvec full_state,PetscInt n_ops,PetscInt *op_loc_list,
 
   //2 * ndims_hspace because the wf is implicitly turned into a DM
   //2 * nops because we are removing 2 of the ndims per n_op
-  if(full_state->my_type==WAVEFUNCTION){
+  if(full_state->my_type==WAVEFUNCTION | full_state->my_type==WF_ENSEMBLE){
     ndims_new = 2*full_state->ndims_hspace - 2*n_ops; //WF specific
   } else{
     ndims_new = full_state->ndims_hspace - 2*n_ops; //WF specific
@@ -1598,7 +1653,6 @@ void ptrace_over_list_qvec(qvec full_state,PetscInt n_ops,PetscInt *op_loc_list,
 
   return;
 }
-
 
 void get_hilbert_schmidt_dist_qvec(qvec q1,qvec q2,PetscReal *hs_dist) {
   Vec temp;

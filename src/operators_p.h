@@ -11,7 +11,8 @@ typedef enum {
     SIGMA_X = 3,
     SIGMA_Y = 4,
     SIGMA_Z = 5,
-    IDENTITY = 6
+    IDENTITY = 6,
+    OTHER    = 7
 } op_type;
 
 

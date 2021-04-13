@@ -95,5 +95,6 @@ void copy_qvec(qvec,qvec);
 void copy_qvec_wf_to_dm(qvec,qvec);
 void get_hilbert_schmidt_dist_qvec(qvec,qvec,PetscReal*);
 void sqrt_mat(Mat);
+void apply_op_to_qvec_mat(qvec,PetscScalar**,operator);
 
 #endif

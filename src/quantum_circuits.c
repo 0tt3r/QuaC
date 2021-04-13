@@ -10,7 +10,7 @@
 
 //FIXME: This should maybe be accessible by a user to register a new gate?
 
-void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+
 /* EventFunction is one step in Petsc to apply some action at a specific time.
  * This function checks to see if an event has happened.
  */
@@ -431,7 +431,7 @@ void apply_circuit_to_sys(qsystem sys,circuit *circ,PetscReal time){
 //FIXME: Move below to quantum_gates.c when rewrite is stable
 /* Apply a specific gate */
 void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
-    PetscScalar *op_vals;
+  PetscScalar *op_vals;
   //FIXME Consider having only one static Mat stores in sys for all gates, rather than creating new ones every time
   Mat gate_mat;
   Vec tmp_answer;
@@ -478,6 +478,7 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   return;
 }
 
+//Applies classical measurement error; i.e., p01 => probability of measuring 0 when the state was really 1
 void apply_single_qb_measurement_error_probs(PetscReal *probs,PetscInt n,PetscReal p01,PetscReal p10,PetscInt qubit_num){
   PetscInt n_inc_me, n_bef;
   PetscInt i,i1,i0,tmp_i;
@@ -1132,6 +1133,7 @@ void CZ_ARP_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_ga
       js[0]   = i;
     } else if (i_sub==3){
       vals[0] = -1.0*PETSC_i;
+      vals[0] = -1.0;//*PETSC_i;
       js[0]   = i;
     } else {
       if (nid==0){
