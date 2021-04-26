@@ -170,7 +170,7 @@ void apply_circuit_to_qvec(qsystem qsys,circuit circ,qvec state){
  */
 void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type,...){
   PetscReal theta,phi,lambda;
-  int num_qubits=0,qubit,i;
+  PetscInt num_qubits=0,qubit,i;
   void *gate_ctx;
   va_list ap;
   custom_gate_func_type custom_gate_func;
@@ -190,7 +190,8 @@ void add_gate_to_circuit_sys(circuit *circ,PetscReal time,gate_type my_gate_type
     }
   }
   // Store arguments in list
-  (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(int));
+
+  (*circ).gate_list[(*circ).num_gates].qubit_numbers = malloc(num_qubits*sizeof(PetscInt));
   (*circ).gate_list[(*circ).num_gates].time = time;
   (*circ).gate_list[(*circ).num_gates].run_time = -1;
   (*circ).gate_list[(*circ).num_gates].my_gate_type = my_gate_type;
