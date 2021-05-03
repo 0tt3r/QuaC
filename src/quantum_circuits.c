@@ -133,7 +133,8 @@ void apply_circuit_to_qvec2(circuit circ,qvec state){
     } else {
       _apply_gate2(circ.gate_list[i],state);
     }
-   }
+
+  }
 
   return;
 }
@@ -479,6 +480,142 @@ void _apply_gate_sys(qsystem sys,struct quantum_gate_struct this_gate,Vec rho){
   return;
 }
 
+
+void apply_projective_measurement_qubit(qvec q,PetscScalar *meas_val,PetscInt num_ops,...){
+  va_list ap;
+  PetscInt i;
+  operator *ops;
+
+  ops = malloc(num_ops*sizeof(struct operator));
+
+  va_start(ap,num_ops);
+  for (i=0;i<num_ops;i++){
+    ops[i] = va_arg(ap,operator);
+  }
+  va_end(ap);
+
+  apply_projective_measurement_qubit_list(q,meas_val,num_ops,ops);
+
+  free(ops);
+  return;
+}
+
+
+void apply_projective_measurement_qubit_list(qvec q,PetscScalar *meas_val,PetscInt num_ops,operator *ops){
+  PetscInt i,j,k,i_evec,*op_loc_list;
+  PetscScalar prob,prob_0,**evec_mat,this_meas_value,exp_val;
+  PetscReal rand_num,current_prob;
+  qvec ptrace_dm;
+
+  op_loc_list = malloc(q->n_ops*sizeof(PetscInt));
+  evec_mat = (PetscScalar **)malloc(3*sizeof(PetscScalar*));
+  for(i=0;i<2;i++){ //two because qubit
+    evec_mat[i] = malloc(2*sizeof(PetscScalar));
+  }
+  *meas_val = 1;
+  //Loop over the ops
+  for(i=0;i<num_ops;i++){
+    /* //Ptrace down to just the system of interest */
+    /* k=0; */
+    /* for(j=0;j<q->n_ops-1;j++){ */
+    /*   // ptrace away every system EXCEPT i */
+    /*   if(j==i){ */
+    /*     k=k+1; */
+    /*   } */
+    /*   op_loc_list[j] = k; */
+
+    /*   k = k+1; */
+    /* } */
+    /* //ptrace_dm will be the 2x2 one qubit density matrix */
+    /* ptrace_over_list_qvec(q,q->n_ops-1,op_loc_list,&ptrace_dm); */
+
+    /* //Get probabilities of different states */
+    /* get_probs_pauli_qb_1sys(ptrace_dm,ops[i],probs); */
+    get_expectation_value_qvec(q,&exp_val,1,ops[i]);
+    //assume ops[i] is sig_z
+    prob_0 = (exp_val + 1)/2;
+
+    //randomly pick one
+    rand_num = sprng();
+    if(rand_num<PetscRealPart(prob_0)){
+      //0 happened
+      i_evec = 0;
+      prob = prob_0;
+    } else {
+      i_evec = 1;
+      prob = 1-prob_0;
+    }
+    //Build the matrix M_i = |i><i|
+    //Assuming Pauli system here
+    for(j=0;j<2;j++){//2 because qubit
+      for(k=0;k<2;k++){
+        evec_mat[j][k] = 0.0;
+      }
+    }
+
+    for(j=0;j<2;j++){//2 hardcoded because qubit
+      for(k=0;k<2;k++){
+        evec_mat[j][k] = ops[i]->evecs[i_evec][j]*PetscConjComplex(ops[i]->evecs[i_evec][k]);
+      }
+    }
+    this_meas_value = ops[i]->evals[i_evec];
+
+    apply_op_to_qvec_mat(q,evec_mat,ops[i]);
+    //renormalize!!
+    if(q->my_type==DENSITY_MATRIX){
+      VecScale(q->data,1/prob);
+    } else {
+      VecScale(q->data,1/sqrt(prob));
+    }
+
+    //Record the measurement result
+    *meas_val = *meas_val*this_meas_value;
+
+  }
+
+  for(i=0;i<2;i++){ //2 because qubit
+    free(evec_mat[i]);
+  }
+  free(evec_mat);
+
+  return;
+}
+
+
+void get_probs_pauli_qb_1sys(qvec dm,operator op,PetscScalar probs[2]){
+  PetscInt i,j,k,i_evec;
+  PetscScalar this_prob,Mij,rhojk,Mik,total_prob=0;
+  //Assumes [0,1,r] ordering
+  //Calculate tr(M * rho * M^\dag)
+  //These are super, super small (size < 10, probably always), so we do them by hand, in serial
+
+  //We know that the eigenvectors have only 2 nonzeros because we are only allowing pauli operators at the moment
+  for(i_evec=0;i_evec<2;i_evec++){
+    this_prob = 0;
+
+    for(i=0;i<2;i++){//2 is hardcoded because of Pauli matrices
+      for(j=0;j<2;j++){
+        for(k=0;k<2;k++){
+          Mij = op->evecs[i_evec][i]*PetscConjComplex(op->evecs[i_evec][j]);
+          get_dm_element_qvec_local(dm,j,k,&rhojk);
+          Mik = op->evecs[i_evec][i]*PetscConjComplex(op->evecs[i_evec][k]);
+          //Tr(M*rho*M^\dag)_ii = Mij * rhojk * Mik*
+          //          printf("Mij %f %f rhojk %f %f Mik* %f %f \n",Mij,rhojk,PetscConjComplex(Mik));
+          //          printf("prod %f %f\n",Mij * rhojk * PetscConjComplex(Mik));
+          this_prob = this_prob + Mij * rhojk * PetscConjComplex(Mik);
+          //          printf("this prob: %f %f\n",this_prob);
+        }
+      }
+    }
+    //    printf("aaathis prob[ %d ]: %f %f\n",i_evec,this_prob);
+    probs[i_evec] = this_prob;
+    //    printf("probs[ %d ] = %f %f\n",i_evec,probs[i_evec]);
+    total_prob = total_prob + this_prob;
+  }
+
+  return;
+}
+
 //Applies classical measurement error; i.e., p01 => probability of measuring 0 when the state was really 1
 void apply_single_qb_measurement_error_probs(PetscReal *probs,PetscInt n,PetscReal p01,PetscReal p10,PetscInt qubit_num){
   PetscInt n_inc_me, n_bef;
@@ -614,6 +751,81 @@ void _apply_gate2(struct quantum_gate_struct this_gate,qvec state){
   }
 
   PetscLogEventEnd(_apply_gate_event,0,0,0,0);
+  return;
+}
+
+
+/* Apply a specific gate, outside of a circuit */
+void apply_gate2(qvec state,gate_type my_gate_type,...){
+  PetscReal theta,phi,lambda;
+  PetscInt i,num_qubits=0,qubit;
+  void *gate_ctx;
+  struct quantum_gate_struct this_gate;
+  va_list ap;
+  custom_gate_func_type custom_gate_func;
+  _check_gate_type(my_gate_type,&num_qubits);
+
+  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ){
+    va_start(ap,num_qubits+1);
+  } else if (my_gate_type==CUSTOM2QGATE||my_gate_type==CUSTOM1QGATE) {
+    va_start(ap,num_qubits+2);
+  } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
+    va_start(ap,num_qubits+3);
+  } else {
+    va_start(ap,num_qubits);
+  }
+  this_gate.qubit_numbers = malloc(num_qubits*sizeof(PetscInt));
+  this_gate.time = 1;//time is irrelevant here
+  this_gate.run_time = -1;//run_time is irrelevant here
+  this_gate.my_gate_type = my_gate_type;
+  this_gate.num_qubits = num_qubits;
+  this_gate._get_val_j_from_global_i_sys = _get_val_j_functions_gates_sys[my_gate_type+_min_gate_enum];
+  this_gate.gate_func_wf = _get_gate_func_wf(my_gate_type);
+
+  // Loop through and store qubits
+  for (i=0;i<num_qubits;i++){
+    qubit = va_arg(ap,int);
+    if (qubit>=num_subsystems) {
+      if (nid==0){
+        // Disable warning because qasm parser will make the circuit before
+        // the qubits are allocated
+        // In rewrite, this check is not needed, since circuits are independent
+        // of systems.
+        //printf("Warning! Qubit number greater than total systems\n");
+      }
+    }
+    this_gate.qubit_numbers[i] = qubit;
+  }
+
+  //Set parameters to 0
+  this_gate.theta = 0;
+  this_gate.phi = 0;
+  this_gate.lambda = 0;
+  this_gate.gate_ctx = NULL;
+  this_gate.custom_func = NULL;
+
+  if (my_gate_type==RX||my_gate_type==RY||my_gate_type==RZ){
+    //Get the theta parameter from the last argument passed in
+    theta = va_arg(ap,PetscReal);
+    this_gate.theta = theta;
+  } else if (my_gate_type==U3||my_gate_type==U2||my_gate_type==U1){
+    theta = va_arg(ap,PetscReal);
+    this_gate.theta = theta;
+    phi = va_arg(ap,PetscReal);
+    this_gate.phi = phi;
+    lambda = va_arg(ap,PetscReal);
+    this_gate.lambda = lambda;
+  } else if (my_gate_type==CUSTOM2QGATE||my_gate_type==CUSTOM1QGATE){
+    gate_ctx = va_arg(ap,void *);
+    this_gate.gate_ctx = gate_ctx;
+    custom_gate_func = va_arg(ap,custom_gate_func_type);
+    this_gate.custom_func = custom_gate_func;
+  }
+
+  _apply_gate2(this_gate,state);
+
+  free(this_gate.qubit_numbers);
+
   return;
 }
 

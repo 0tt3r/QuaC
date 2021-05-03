@@ -992,6 +992,7 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
   /*
    * Set default options, can be changed at runtime
    */
+  TSAdaptSetStepLimits(ts,0.01,1);
   TSSetTimeStep(ts,dt);
   TSSetMaxSteps(ts,steps_max);
   TSSetMaxTime(ts,time_max);
@@ -1017,13 +1018,15 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
     TSSetEventTolerances(ts,1e-9,NULL);
   }
 
+  PetscBool ts_success;
   //Store a reference to the solution vector in the qsystem
   TSSetFromOptions(ts);
   if(qsys->mcwf_solver){
     for(i=0;i<qsys->num_local_trajs;i++){
-      retry=0;
       VecCopy(x->ens_datas[i],qsys->mcwf_backup_vec);
-      if(retry<10){
+      ts_success = PETSC_FALSE;
+      retry = 0;
+      while(retry<10){
         //Reset some time stepping things
         x->ens_i = i;
         qsys->ens_i = i;
@@ -1051,7 +1054,7 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
         if(PetscRealPart(norm)<qsys->rand_number[qsys->ens_i]){
           //Reset random number, because we overshot the time_max, interpolated back
           //This should not happen because we correctly set tolerances. Left for error checking purposes
-          PetscPrintf("ERROR! There was a reset: %d %f %.20f %.20f\n",i,PetscRealPart(norm),qsys->old_rand,qsys->rand_number[qsys->ens_i]);
+          PetscPrintf(PETSC_COMM_WORLD,"ERROR! There was a reset: %d %f %.20f %.20f\n",i,PetscRealPart(norm),qsys->old_rand,qsys->rand_number[qsys->ens_i]);
           exit(0);
           qsys->rand_number[qsys->ens_i] = qsys->old_rand;
         }
@@ -1062,11 +1065,13 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
           PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Retrying. Reason: %d\n",reason);
           retry=retry+1;
         } else {
-          retry = 100;
+          ts_success=PETSC_TRUE;
+          retry=100;
         }
-      } else {
+      }
+      if(ts_success==PETSC_FALSE){
         PetscPrintf(PETSC_COMM_WORLD,"ERROR! Did not reach final time! Exhausted retries.\n");
-        exit(9);
+        exit(19);
       }
     }
   } else {
@@ -1106,6 +1111,7 @@ PetscErrorCode _sys_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,vo
     event_num = event_num+1;
   }
 
+
   //Check circuit event
   if(qsys->num_circuits>0){
     _sys_QC_EventFunction(qsys,t,&tmp_fvalue);
@@ -1113,7 +1119,7 @@ PetscErrorCode _sys_EventFunction(TS ts,PetscReal t,Vec U,PetscScalar *fvalue,vo
     event_num = event_num+1;
   }
 
-  return(0);
+  PetscFunctionReturn(0);
 }
 
 

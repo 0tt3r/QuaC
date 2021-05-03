@@ -53,6 +53,7 @@ void apply_1q_na_gate_to_qvec(qvec q,gate_type this_gate,operator op){
     free(gate_mat[i]);
   }
   free(gate_mat);
+  destroy_system(&qsys);
   return;
 
 }

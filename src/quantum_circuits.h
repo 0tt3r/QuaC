@@ -35,6 +35,10 @@ void U2_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,
 void U3_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 
+void get_probs_pauli_1sys(qvec,operator,PetscScalar probs[2]);
+void apply_gate2(qvec,gate_type,...);
+void apply_projective_measurement_qubit(qvec,PetscScalar*,PetscInt,...);
+void apply_projective_measurement_qubit_list(qvec,PetscScalar*,PetscInt,operator*);
 
 void apply_single_qb_measurement_error_probs(PetscReal*,PetscInt,PetscReal,PetscReal,PetscInt);
 void apply_single_qb_measurement_error_state(qvec,PetscReal,PetscReal,PetscInt);
