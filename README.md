@@ -15,7 +15,7 @@ For example, to install on a standard Linux system, something along these lines 
 ```
 git clone https://gitlab.com/petsc/petsc.git petsc
 cd petsc
-git checkout v3.13.3
+git checkout main
 
 export PETSC_DIR=${PWD}
 export PETSC_ARCH=linux-gnu-c-complex-int64-sprng
@@ -27,6 +27,7 @@ make PETSC_DIR=${PETSC_DIR} PETSC_ARCH=${PETSC_ARCH} all
 cd ..
 git clone https://gitlab.com/slepc/slepc
 cd slepc
+git checkout main
 
 export SLEPC_DIR=${PWD}
 ./configure
