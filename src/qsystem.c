@@ -944,8 +944,8 @@ void time_step_sys(qsystem qsys,qvec x, PetscReal init_time, PetscReal time_max,
     /* TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_sys,qsys); */
 
     ierr = MatGetLocalSize(qsys->mat_A,&m_local,&n_local);
-    ierr = MatCreateShell(PETSC_COMM_WORLD,m_local,n_local,PETSC_DETERMINE,PETSC_DETERMINE,qsys,&AA);CHKERRQ(ierr);
-    ierr = MatShellSetOperation(AA,MATOP_MULT,(void (*)(void))_time_dep_mat_mult);CHKERRQ(ierr);
+    ierr = MatCreateShell(PETSC_COMM_WORLD,m_local,n_local,PETSC_DETERMINE,PETSC_DETERMINE,qsys,&AA);
+    ierr = MatShellSetOperation(AA,MATOP_MULT,(void (*)(void))_time_dep_mat_mult);
 
     TSSetRHSJacobian(ts,AA,AA,_RHS_time_dep_ham_mf_sys,qsys);
 
