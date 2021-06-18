@@ -6,7 +6,7 @@ SRCDIR=src
 EXAMPLESDIR=examples
 EXAMPLES=$(basename $(notdir $(wildcard $(EXAMPLESDIR)/*.c)))
 TESTDIR=tests
-TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*na*.c)))
+TESTS=$(basename $(notdir $(wildcard $(TESTDIR)/*test*.c)))
 MPI_TESTS=$(addprefix mpi_,$(TESTS))
 CFLAGS += -isystem $(SRCDIR)
 
