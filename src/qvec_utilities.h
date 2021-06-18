@@ -10,7 +10,7 @@
 void create_qvec_sys(qsystem,qvec*);
 void create_dm_sys(qsystem,qvec*);
 void create_wf_sys(qsystem,qvec*);
-void create_wf_ens_sys(qsystem,qvec*);
+void create_wf_ensemble_sys(qsystem,qvec*);
 void create_arb_qvec(qvec*,PetscInt,qvec_type);
 void create_arb_qvec_dims(qvec*,PetscInt,PetscInt*,qvec_type);
 void _create_vec(Vec*,PetscInt,PetscInt);
