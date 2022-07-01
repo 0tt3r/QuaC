@@ -702,7 +702,7 @@ void _apply_gate2(struct quantum_gate_struct this_gate,qvec state){
 
   if(state->my_type==WF_ENSEMBLE && state->ens_spawned==PETSC_TRUE){
     conj_gate = PETSC_FALSE;
-    if(this_gate.my_gate_type==CUSTOM2QGATE){
+    if(this_gate.my_gate_type==CUSTOM2QGATE||this_gate.my_gate_type==CUSTOM1QGATE){
       this_gate.gate_func_wf(state,state->ens_datas[state->ens_i],this_gate.qubit_numbers,this_gate.gate_ctx,conj_gate);
     } else {
       this_gate.gate_func_wf(state,state->ens_datas[state->ens_i],this_gate.qubit_numbers,&this_gate,conj_gate);
@@ -710,7 +710,7 @@ void _apply_gate2(struct quantum_gate_struct this_gate,qvec state){
 
   } else {
     conj_gate = PETSC_FALSE;
-    if(this_gate.my_gate_type==CUSTOM2QGATE){
+    if(this_gate.my_gate_type==CUSTOM2QGATE||this_gate.my_gate_type==CUSTOM1QGATE){
       this_gate.gate_func_wf(state,state->data,this_gate.qubit_numbers,this_gate.gate_ctx,conj_gate);
     } else {
       this_gate.gate_func_wf(state,state->data,this_gate.qubit_numbers,&this_gate,conj_gate);
@@ -743,8 +743,25 @@ void _apply_gate2(struct quantum_gate_struct this_gate,qvec state){
         this_gate.qubit_numbers[1] = this_gate.qubit_numbers[1]-state->ndims_hspace/2;
 
       } else {
+        //One qubit gate
         this_gate.qubit_numbers[0] = this_gate.qubit_numbers[0]+state->ndims_hspace/2;
-        this_gate.gate_func_wf(state,state->data,this_gate.qubit_numbers,&this_gate,conj_gate);
+        if(this_gate.my_gate_type==CUSTOM1QGATE){
+          //conjugate matrix
+          for(i=0;i<2;i++){
+            for(j=0;j<2;j++){
+              cg_data->gate_data[i][j] = PetscConjComplex(cg_data->gate_data[i][j]);
+            }
+          }
+          this_gate.gate_func_wf(state,state->data,this_gate.qubit_numbers,this_gate.gate_ctx,conj_gate);
+          //unconjugate matrix
+          for(i=0;i<2;i++){
+            for(j=0;j<2;j++){
+              cg_data->gate_data[i][j] = PetscConjComplex(cg_data->gate_data[i][j]);
+            }
+          }
+        } else {
+          this_gate.gate_func_wf(state,state->data,this_gate.qubit_numbers,&this_gate,conj_gate);
+        }
         this_gate.qubit_numbers[0] = this_gate.qubit_numbers[0]-state->ndims_hspace/2;
       }
     }
@@ -1751,6 +1768,48 @@ void CUSTOM2Q_get_val_j_from_global_i_sys(qsystem sys,PetscInt i,struct quantum_
   return;
 }
 
+void CZ_ARP_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,PetscBool conj_gate){
+  PetscInt i,ind00,ind01,ind10,ind11;
+  PetscScalar *array,tmp00,tmp01,tmp10,tmp11;
+  custom_gate_data *cg_data = (custom_gate_data*) ctx; /*User defined data structure*/
+
+  /* The controlled-Z - ARP gate comes from https://journals.aps.org/pra/pdf/10.1103/PhysRevA.101.062309
+   * gate has two inputs, a target and a control.
+   * As a matrix, for a two qubit system
+   *     1 0 0 0
+   *     0 -1 0 0
+   *     0 0 -1 0
+   *     0 0 0 -1
+   * Of course, when there are other qubits, tensor products and such
+   * must be applied to get the full basis representation.
+   *
+   * Controlled-z is the same for both possible controls
+   */
+  VecGetArray(state_data,&array);
+  for (i=0; i<state->n/4; i++) { //4 amplitudes at a time
+    /* ind00 = insertZeroBit(insertZeroBit(i,qubit_nums[0]),qubit_nums[1]); */
+    ind00 = insertTwoZeroBits(i,qubit_nums[0],qubit_nums[1]);
+    ind01 = flipBit(ind00,qubit_nums[0]);
+    ind10 = flipBit(ind00,qubit_nums[1]);
+    ind11 = flipBit(ind01,qubit_nums[1]);
+
+    tmp00 = array[ind00];
+    tmp01 = array[ind01];
+    tmp10 = array[ind10];
+    tmp11 = array[ind11];
+
+    array[ind00] = tmp00; //Only one element in first row - g00 = 1.0
+
+    array[ind01] = -tmp01; //g11=-1.0
+
+    array[ind10] = -tmp10;//g22=-1/sqrt(2)
+
+    array[ind11] = -tmp11;//g33 = -1.0
+  }
+  VecRestoreArray(state_data,&array);
+
+  return;
+}
 
 void CNOT_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,PetscBool conj_gate){
   PetscInt qubit_ctrl,qubit_tar;
@@ -1794,6 +1853,48 @@ void CNOT_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,
   return;
 }
 
+void SQiSWP_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,PetscBool conj_gate){
+  PetscInt i,ind00,ind01,ind10,ind11;
+  PetscScalar *array,tmp00,tmp01,tmp10,tmp11;
+  custom_gate_data *cg_data = (custom_gate_data*) ctx; /*User defined data structure*/
+
+  /*
+  * As a matrix, for a two qubit system:
+  *     1     0         0         0
+  *     0     1/sqrt(2) i/sqrt(2) 0
+  *     0     i/sqrt(2) 1/sqrt(2) 0
+  *     0     0         0         1
+  */
+  VecGetArray(state_data,&array);
+  for (i=0; i<state->n/4; i++) { //4 amplitudes at a time
+    /* ind00 = insertZeroBit(insertZeroBit(i,qubit_nums[0]),qubit_nums[1]); */
+    ind00 = insertTwoZeroBits(i,qubit_nums[0],qubit_nums[1]);
+    ind01 = flipBit(ind00,qubit_nums[0]);
+    ind10 = flipBit(ind00,qubit_nums[1]);
+    ind11 = flipBit(ind01,qubit_nums[1]);
+
+    tmp00 = array[ind00];
+    tmp01 = array[ind01];
+    tmp10 = array[ind10];
+    tmp11 = array[ind11];
+
+    array[ind00] = tmp00; //Only one element in first row - g00 = 1.0
+
+    if(conj_gate==PETSC_TRUE){
+      array[ind01] = 1/sqrt(2)*tmp01 - PETSC_i/sqrt(2)*tmp10; //g11=1/sqrt(2),g12=i/sqrt(2)
+      array[ind10] = -PETSC_i/sqrt(2)*tmp01 + 1/sqrt(2)*tmp10;//g21 = i/sqrt(2), g22=1/sqrt(2)
+
+    } else {
+      array[ind01] = 1/sqrt(2)*tmp01 + PETSC_i/sqrt(2)*tmp10; //g11=1/sqrt(2),g12=i/sqrt(2)
+      array[ind10] = PETSC_i/sqrt(2)*tmp01 + 1/sqrt(2)*tmp10;//g21 = i/sqrt(2), g22=1/sqrt(2)
+    }
+    array[ind11] = tmp11;//g33  1.0
+  }
+  VecRestoreArray(state_data,&array);
+
+  return;
+}
+
 PetscInt insertTwoZeroBits(PetscInt number,PetscInt bit1,PetscInt bit2) {
   PetscInt small = (bit1 < bit2)? bit1 : bit2;
   PetscInt big = (bit1 < bit2)? bit2 : bit1;
@@ -1821,7 +1922,7 @@ void CUSTOM2Q_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *
   PetscInt i,ind00,ind01,ind10,ind11;
   PetscScalar *array,tmp00,tmp01,tmp10,tmp11;
   custom_gate_data *cg_data = (custom_gate_data*) ctx; /*User defined data structure*/
-
+  //conj_gate is not used here 0 conjugate is taken in _apply_gate2
   VecGetArray(state_data,&array);
   for (i=0; i<state->n/4; i++) { //4 amplitudes at a time
     /* ind00 = insertZeroBit(insertZeroBit(i,qubit_nums[0]),qubit_nums[1]); */
@@ -1846,6 +1947,41 @@ void CUSTOM2Q_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *
 
     array[ind11] = cg_data->gate_data[3][0]*tmp00 + cg_data->gate_data[3][1]*tmp01
       + cg_data->gate_data[3][2]*tmp10 + cg_data->gate_data[3][3]*tmp11;
+  }
+  VecRestoreArray(state_data,&array);
+
+  return;
+}
+
+void CUSTOM1Q_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,PetscBool conj_gate){
+  PetscInt qubit_num;
+  PetscInt n_inc_me, n_bef;
+  PetscInt i,i1,i0,tmp_i;
+  PetscScalar *array,tmp1,tmp0;
+  custom_gate_data *cg_data = (custom_gate_data*) ctx; /*User defined data structure*/
+  //conj_gate is not used here 0 conjugate is taken in _apply_gate2
+
+  //This, and other gate routines, inspired by QuEST implementation
+
+  qubit_num = qubit_nums[0]; //Only one qubit
+  // set dimensions
+  n_bef = 1;
+  for(i=0;i<qubit_num;i++){
+    n_bef = n_bef * state->hspace_dims[i];
+  }
+
+  n_inc_me = n_bef*2; //2 is hardcoded because qubit
+  VecGetArray(state_data,&array);
+  for (i=0; i<state->n/2; i++) {
+    tmp_i   = i / n_bef; //Necessary for integer division
+    i0     =  tmp_i*n_inc_me + i % n_bef;
+    i1     = i0 + n_bef;
+    tmp0 = array[i0];
+    tmp1 = array[i1];
+
+    array[i0] = cg_data->gate_data[0][0]*tmp0 + cg_data->gate_data[0][1]*tmp1;
+    array[i1] = cg_data->gate_data[1][0]*tmp0 + cg_data->gate_data[1][1]*tmp1;
+
   }
   VecRestoreArray(state_data,&array);
 
@@ -1879,8 +2015,8 @@ void HADAMARD_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *
     tmp0 = array[i0];
     tmp1 = array[i1];
 
-    array[i0] = inv_sqrt2*(tmp0 - tmp1);
-    array[i1] = inv_sqrt2*(tmp0 + tmp1);
+    array[i0] = inv_sqrt2*(tmp0 + tmp1);
+    array[i1] = inv_sqrt2*(tmp0 - tmp1);
   }
   VecRestoreArray(state_data,&array);
 
@@ -1962,7 +2098,7 @@ void U3_gate_func_wf(qvec state,Vec state_data,PetscInt* qubit_nums,void *ctx,Pe
   VecGetArray(state_data,&array);
   for (i=0; i<state->n/2; i++) {
     tmp_i   = i / n_bef; //Necessary for integer division
-    i0     =  tmp_i*n_inc_me + i % n_bef;
+    i0      =  tmp_i*n_inc_me + i % n_bef;
     i1     = i0 + n_bef;
 
     tmp0 = array[i0];
@@ -2874,8 +3010,12 @@ void (*_get_gate_func_wf(gate_type my_gate_type))(qvec,Vec,PetscInt*,void*,Petsc
     return HADAMARD_gate_func_wf;
   } else if(my_gate_type==CNOT){
     return CNOT_gate_func_wf;
+  } else if(my_gate_type==CZ_ARP){
+    return CZ_ARP_gate_func_wf;
   } else if(my_gate_type==CUSTOM2QGATE){
     return CUSTOM2Q_gate_func_wf;
+  } else if(my_gate_type==CUSTOM1QGATE){
+    return CUSTOM1Q_gate_func_wf;
   } else if(my_gate_type==RZ){
     return RZ_gate_func_wf;
   } else if(my_gate_type==U1){
@@ -2886,11 +3026,12 @@ void (*_get_gate_func_wf(gate_type my_gate_type))(qvec,Vec,PetscInt*,void*,Petsc
     return U3_gate_func_wf;
   } else if(my_gate_type==SIGMAX){
     return SIGMAX_gate_func_wf;
+  } else if(my_gate_type==SQiSWP){
+    return SQiSWP_gate_func_wf;
+  } else {
+    PetscPrintf(PETSC_COMM_WORLD,"ERROR! Gate not recognized in get_gate_func_wf!\n");
+    exit(0);
   }
-  /*  else { */
-  /*   PetscPrintf(PETSC_COMM_WORLD,"ERROR! Gate not recognized in get_gate_func_wf!\n"); */
-  /*   exit(0); */
-  /* } */
 
 }
 

@@ -9,6 +9,44 @@
 #include <petscblaslapack.h>
 #include <string.h>
 
+void apply_1q_na_haar_gate_to_qvec(qvec q,custom_gate_data *cg_data,operator op){
+  PetscScalar **gate_mat,op_vals[2];
+  PetscInt i,j,these_js[2],num_js;
+  qsystem qsys;
+  struct quantum_gate_struct gate;
+  operator qb_op;
+
+  gate_mat = (PetscScalar **)malloc(3*sizeof(PetscScalar*));
+  for(i=0;i<3;i++){ //3 is hard coded because of neutral atom 3 lvl system
+    gate_mat[i] = malloc(3*sizeof(PetscScalar));
+  }
+
+
+  //Fill up the gate mat with zeros initially
+  for(i=0;i<3;i++){
+    for(j=0;j<3;j++){
+      gate_mat[i][j] = 0.0;
+    }
+  }
+
+  //Get qubit matrix values
+  for(i=0;i<2;i++){
+    for(j=0;j<2;j++){
+      gate_mat[i][j] = cg_data->gate_data[i][j];
+    }
+  }
+
+  apply_op_to_qvec_mat(q,gate_mat,op);
+
+  for(i=0;i<3;i++){
+    free(gate_mat[i]);
+  }
+  free(gate_mat);
+
+  return;
+
+}
+
 
 
 void apply_1q_na_gate_to_qvec(qvec q,gate_type this_gate,operator op){

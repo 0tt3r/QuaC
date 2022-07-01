@@ -46,6 +46,9 @@ void _apply_single_qb_measurement_error_wf(qvec,PetscReal,PetscReal,PetscInt);
 
 
 void CUSTOM2Q_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);//need to be void?
+void CUSTOM1Q_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);//need to be void?
+void CZ_ARP_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
+void SQiSWP_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
 void HADAMARD_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
 void SIGMAX_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);
 void RZ_gate_func_wf(qvec,Vec,PetscInt*,void*,PetscBool);

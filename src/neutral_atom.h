@@ -23,5 +23,6 @@ PetscScalar omega_arp(PetscReal,void*);
 void apply_projective_measurement_tensor(qvec,PetscScalar*,PetscInt,...);
 void apply_projective_measurement_tensor_list(qvec,PetscScalar*,PetscInt,operator*);
 void apply_1q_na_gate_to_qvec(qvec,gate_type,operator);
+void apply_1q_na_haar_gate_to_qvec(qvec,custom_gate_data*,operator);
 void get_probs_pauli_1sys(qvec,operator,PetscScalar[]);
 #endif

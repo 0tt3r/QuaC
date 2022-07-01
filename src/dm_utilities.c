@@ -72,16 +72,17 @@ void print_mat_sparse_to_file(Mat A,char filename[]){
   int i,j;
   FILE *fp;
 
-  PetscInt          ncols;
+  PetscInt          ncols,dim;
   const PetscInt    *cols;
   const PetscScalar *vals;
 
   fp = fopen(filename,"w");
-  for(i=0;i<total_levels*total_levels;i++){
+  MatGetSize(A,&dim,NULL);
+  for(i=0;i<dim;i++){
     MatGetRow(A,i,&ncols,&cols,&vals);
     for (j=0;j<ncols;j++){
       if (PetscAbsComplex(vals[j])>1e-10){
-        PetscFPrintf(PETSC_COMM_WORLD,fp,"%d %d %e %e\n",i,cols[j],PetscRealPart(vals[j]),PetscImaginaryPart(vals[j]));
+        PetscFPrintf(PETSC_COMM_WORLD,fp,"%d %d %12.24e %12.24e\n",i,cols[j],PetscRealPart(vals[j]),PetscImaginaryPart(vals[j]));
       }
     }
     MatRestoreRow(A,i,&ncols,&cols,&vals);
