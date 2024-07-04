@@ -1,6 +1,6 @@
 # QuaC
 
-QuaC (Quantum in C) is a parallel time dependent open quantum systems solver, written by Matthew Otten (otten@anl.gov). QuaC utilizes PETSc (www.mcs.anl.gov/petsc) for parallelization and linear algebra and features are still regularly being added.
+QuaC (Quantum in C) is a parallel time dependent open quantum systems solver, written by Matthew Otten (mjotten@wisc.edu). QuaC utilizes PETSc (www.mcs.anl.gov/petsc) for parallelization and linear algebra and features are still regularly being added.
 
 QuaC strives to make the process of translating the physics equations into parallel code as simple as possible. QuaC supports both features for both general open quantum systems (such as Jaynes-Cummings models or simulations of physical systems such as neutral atoms, nitrogen vacancies, spin-boson models, etc) as well as specific quantum information features for qubits, such as gates and circuits. 
 
