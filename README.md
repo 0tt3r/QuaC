@@ -53,6 +53,6 @@ plt.tight_layout()
 plt.show()
 ```
 This should look like the figure below
-![][./examples/simple_jc_test.png]
+![](./examples/simple_jc_test.png)
 
 The environmental variables ```PETSC_DIR```, ```PETSC_ARCH```, and ```SLEPC_DIR``` will need to be added to your profile (such as ~/.bashrc file) so that they are automatically loaded whenever you start a new terminal.
