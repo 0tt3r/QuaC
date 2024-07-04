@@ -34,8 +34,25 @@ export SLEPC_DIR=${PWD}
 make SLEPC_DIR=${SLEPC_DIR}
 
 cd ..
-git clone -b diagonalize https://github.com/0tt3r/QuaC
+git clone -b main https://github.com/0tt3r/QuaC
 cd QuaC
-make test
+make simple_jc_test
+./simple_jc_test > out
 ```
-The output of ```make test``` should be a lot of compilation warnings. At the end, it should print all of the errors - if nothing is printed below 'All failures listed below', the tests passed! The full test results can be viewed in the file test_results. The environmental variables ```PETSC_DIR```, ```PETSC_ARCH```, and ```SLEPC_DIR``` will need to be added to your profile (such as ~/.bashrc file) so that they are automatically loaded whenever you start a new terminal.
+The output of `./simple_jc_test` should be a bunch of numbers, showing the populations oscillating between the QD and the oscillator. This can be plotted in python via
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+data = np.loadtxt("out",skiprows=2)
+plt.plot(data[:,1],data[:,2],label="QD Pop")
+plt.plot(data[:,1],data[:,3],label="Cavity Pop")
+plt.xlabel("Time")
+plt.ylabel("Pops")
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+This should look like the figure below
+![][./examples/simple_jc_test.png]
+
+The environmental variables ```PETSC_DIR```, ```PETSC_ARCH```, and ```SLEPC_DIR``` will need to be added to your profile (such as ~/.bashrc file) so that they are automatically loaded whenever you start a new terminal.
