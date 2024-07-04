@@ -92,12 +92,12 @@ void RX_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,Pe
 void RY_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void RZ_get_val_j_from_global_i(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 
-struct quantum_gate_struct _quantum_gate_list[MAX_GATES];
+extern struct quantum_gate_struct _quantum_gate_list[MAX_GATES];
 extern int _num_quantum_gates;
 extern int _min_gate_enum; // Minimum gate enumeration number
 extern int _gate_array_initialized;
-void (*_get_val_j_functions_gates[MAX_GATES])(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
-circuit _circuit_list[MAX_GATES];
+extern void (*_get_val_j_functions_gates[MAX_GATES])(PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+extern circuit _circuit_list[MAX_GATES];
 extern int _num_circuits;
 
 #endif

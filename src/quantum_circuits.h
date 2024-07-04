@@ -33,7 +33,7 @@ void RZ_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,
 void U1_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void U2_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 void U3_get_val_j_from_global_i_sys(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
-void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
+extern void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 
 void get_probs_pauli_1sys(qvec,operator,PetscScalar probs[2]);
 void apply_gate2(qvec,gate_type,...);
@@ -64,7 +64,6 @@ PetscErrorCode _sys_QC_PostEventFunction(TS,PetscInt,PetscInt [],PetscReal,Vec,P
 void _apply_gate_sys(qsystem,struct quantum_gate_struct,Vec);
 
 
-void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 
 void apply_circuit_to_qvec2(circuit,qvec);
 void apply_circuit_to_qvec(qsystem,circuit,qvec);

@@ -10,7 +10,7 @@
 
 //FIXME: This should maybe be accessible by a user to register a new gate?
 
-
+void (*_get_val_j_functions_gates_sys[MAX_GATES])(qsystem,PetscInt,struct quantum_gate_struct,PetscInt*,PetscInt[],PetscScalar[],PetscInt);
 /* EventFunction is one step in Petsc to apply some action at a specific time.
  * This function checks to see if an event has happened.
  */
